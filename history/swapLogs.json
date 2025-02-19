@@ -1,0 +1,106 @@
+[
+  {
+    "inputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "inAmount": "1045523",
+    "outputToken": "So11111111111111111111111111111111111111112",
+    "outAmount": "4907133",
+    "txId": "3gZGzdWAmsSJvNxZKJP3Bmxn7gSsD7isMeP6re8qJVxGRRcdfAV39MfbUvkFGCH2HSWQkdKnoHP3gbzHrYWWUS5t",
+    "timestamp": "2025-02-02T07:03:11.689Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "5000000",
+    "outputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "outAmount": "1073135",
+    "txId": "3qaRzkKqWCLiAsSKQa6dB7Y9u8KDyPe5E8p2sU6ZVKBvkKG6sy9fsWfSC81w1xw9dxNMp699mAwiBQgXVCfDQr6p",
+    "timestamp": "2025-02-02T08:46:20.986Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "5000",
+    "outputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "outAmount": "1073",
+    "txId": "33MRf5cPwkSsWpDzjTuuoAr7xBwo2q68mYd3XgLwm4sR6jQK3Tz2Vf6rmKXrCn63pgskY53gmGERZoemmVmLZMVh",
+    "timestamp": "2025-02-02T09:08:15.604Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "5000",
+    "outputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "outAmount": "1069",
+    "txId": "PgEFnyGn5CGGN9U8fAKSszRpvvm7LhX6mR6cMRLCYMAcJ4ALjegxgZ1XDqhMtBgvsNNxMXqM8iesjWVduMWYBsb",
+    "timestamp": "2025-02-02T09:42:22.278Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "5000",
+    "outputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "outAmount": "1058",
+    "txId": "2twjpFCZDFseBep7z3TzcSe8ETYPg3thWZTP2HnsRDdLiV7wFXWSkCpJRMUYjFYLXxKS2UAdc66xEySpsf3EibQR",
+    "timestamp": "2025-02-02T10:23:55.310Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "5000000",
+    "outputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "outAmount": "1040808",
+    "txId": "2kRm3Z6ENGaZqSLVnHfgbiogGkfho498CzibmbQxxRETKfMsXcFMBWCjzpDnr524t9Rg51gzHWfYxT4K6XTYqkBC",
+    "timestamp": "2025-02-02T12:01:17.078Z"
+  },
+  {
+    "inputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "inAmount": "1000000",
+    "outputToken": "So11111111111111111111111111111111111111112",
+    "outAmount": "5139324",
+    "txId": "2ALDyFzJTZ39U4UKENbEmqJzDPx66HX7JEPiMwZjycBevcMRMwTsci7cbJf67uz1ZmbeV9RK7uPbPPEzJ6APRDg6",
+    "timestamp": "2025-02-03T09:43:06.227Z"
+  },
+  {
+    "inputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "inAmount": "1000000",
+    "outputToken": "So11111111111111111111111111111111111111112",
+    "outAmount": "4999073",
+    "txId": "2bW7iPZZ9vtqUuM6uySXdKG2RosE7xUFNMRBhBnRHh5MYUK3MCpn3bGfTFKKFSFvKzhYjxNHfiPXkaE9qbL2emCX",
+    "timestamp": "2025-02-03T10:35:13.137Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "100000",
+    "outputToken": "Hjw6bEcHtbHGpQr8onG3izfJY5DJiWdt7uk2BfdSpump",
+    "outAmount": "477842",
+    "txId": "5VGrxtAzUVjMX3W6VtQ7nDaBP7iFDD3mjfbdbnt2HCvbuVB18syaNs7XttoDuXcA7YSVdcXK156WFG93FbvBg8WW",
+    "timestamp": "2025-02-04T03:05:31.116Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "100000",
+    "outputToken": "BkYAUVMar1gLwuFLv2n5cmB6HhcNtvd86kU3gqAypump",
+    "outAmount": "143728",
+    "txId": "JRsqhKBNeZwyaocgVCEMwYMWuHbXLVgUo9ha84SiNuxAhhYseu2Ht7W4oRQw6sruCBLo8MxeyXcG3vg9rCYU7uS",
+    "timestamp": "2025-02-05T01:02:50.829Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "100000",
+    "outputToken": "BkYAUVMar1gLwuFLv2n5cmB6HhcNtvd86kU3gqAypump",
+    "outAmount": "143726",
+    "txId": "N3TfzrDnkEWeangMHtCiE1nL1iqoriyZzf9LVkcJZ2qcLG4MP43SiJ5YSsENaSp76MCnPfM795iNf9e64zc5BXX",
+    "timestamp": "2025-02-05T01:04:09.934Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "100000",
+    "outputToken": "Hjw6bEcHtbHGpQr8onG3izfJY5DJiWdt7uk2BfdSpump",
+    "outAmount": "455945",
+    "txId": "2x63tqZNyErXQDUL6oNi3MgqZcNoYZU7uoentqbGcNTWdQqpSWgwtMUwkoiomxohkPBsUC91b4WzCaMpwxuAUq6X",
+    "timestamp": "2025-02-17T16:46:49.035Z"
+  },
+  {
+    "inputToken": "So11111111111111111111111111111111111111112",
+    "inAmount": "100000",
+    "outputToken": "Hjw6bEcHtbHGpQr8onG3izfJY5DJiWdt7uk2BfdSpump",
+    "outAmount": "461182",
+    "txId": "4yhwYeoDHfj2MLdAEprQFtXb3xXRSw31RG882DptiHKiePqn9odbqgq2GZ32Nu9SZ1fDbDtHkeuqzxuTftMskjcR",
+    "timestamp": "2025-02-17T17:31:19.848Z"
+  }
+]
