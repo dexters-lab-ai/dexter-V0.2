@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { ApifyClient } from 'apify-client';
 import { User } from '../../models/User.js';
 import { tradeService } from '../trading/TradeService.js';
+import { intentProcessor } from '../ai/processors/IntentProcessor.js';
 import { ErrorHandler } from '../../core/errors/index.js';
 import { config } from '../../core/config.js';
 import Bull from 'bull';
@@ -217,15 +218,32 @@ class TwitterService extends EventEmitter {
       const monitor = monitorsArray.find((m) => m.handle === handle);
       if (!monitor || !monitor.enabled) return;
   
-      // 2. Figure out how far back to fetch
-      const sinceTime = monitor.lastChecked || new Date(Date.now() - 3600 * 1000);
+      // 2. Compute dates: end is today; start is 1 day ago
+      const now = new Date();
+      const endDate = now.toISOString().split('T')[0];
+      const startDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
   
-      // 3. Fetch tweets
-      const run = await this.apifyClient.actor('danek/twitter-timeline').call({
-        searchTerms: [`from:${handle}`],
-        maxItems: 10,
-        startTime: sinceTime.toISOString(),
-      });
+      const input = {
+        "cookies": [config.apifyCookieToken],
+        "endTime": endDate,
+        "maxItems": 20,
+        "onlyBuleVerifiedUsers": false,
+        "onlyImage": false,
+        "onlyQuote": false,
+        "onlyReply": false,
+        "onlyVerifiedUsers": false,
+        "onlyVideo": false,
+        "searchTerms": [
+            "from:elonmusk"
+        ],
+        "sortBy": "Latest",
+        "startTime": startDate,
+      };
+
+      // 3. Fetch tweets  
+      const run = await this.apifyClient.actor("apidojo/tweet-scraper").call(input);
       const tweets = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
       if (!tweets || !tweets.length) return;
   
@@ -258,32 +276,48 @@ class TwitterService extends EventEmitter {
   }  
 
   /**
-   * Your existing method to process a single tweet (extract token, buy, etc.)
+   * Method to process a single tweet (extract token, buy, etc.)
    */
-  async processTweet(userId, tweet, amount) {
+  async processTweet(userId, tweet, amount, networkOverride) {
     try {
       const tokenInfo = this.extractTokenInfo(tweet.text);
       if (!tokenInfo) return;
-
       const { symbol, address } = tokenInfo;
-
-      // Execute trade
-      await tradeService.executeTrade({
+  
+      // Determine network: use override if provided, else use intentProcessor.
+      const network = networkOverride || (await intentProcessor.getTokenNetwork(address));
+      if (!network) {
+        console.warn(`Could not determine network for token address: ${address}`);
+        return;
+      }
+  
+      // Retrieve the wallet for trade.
+      const walletObj = await getWalletForTrade(userId, network);
+      if (!walletObj) {
+        console.warn(`No valid wallet found for user ${userId} on network ${network}`);
+        return;
+      }
+  
+      // Build trade parameters.
+      const tradeParams = {
         userId,
-        network: 'solana', // or your logic
-        action: 'buy',
+        network,
+        action: 'buy', // Default action for KOL trades.
         tokenAddress: address,
         amount: amount.toString(),
-        options: {
-          slippage: 1,
-          autoApprove: true,
-        },
-      });
-
+        walletAddress: walletObj.address,
+        options: { slippage: 1, autoApprove: true }
+      };
+  
+      // For EVM, tradeService.executeTrade will eventually route to evmQuickNode.startEVMSwap,
+      // which expects the wallet signer. For Solana, it routes to jupiterQuickNode.startJupiterSwap.
+      await tradeService.executeTrade(tradeParams);
+  
       this.emit('kolTrade', {
         userId,
         symbol,
         address,
+        network,
         amount,
         tweet: tweet.url,
       });
@@ -350,9 +384,16 @@ class TwitterService extends EventEmitter {
   
   async getTrenchChatter() {
     try {
+      // Compute dates: end is today; start is 7 days ago
+      const now = new Date();
+      const endDate = now.toISOString().split('T')[0];
+      const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+  
       const input = {
         customMapFunction: "(object) => { return {...object} }",
-        end: "2025-02-15",
+        end: endDate,  // ending date: today
         includeSearchTerms: false,
         maxItems: 100,
         minimumFavorites: 10,
@@ -380,7 +421,7 @@ class TwitterService extends EventEmitter {
           "token watch",
         ],
         sort: "Latest",
-        start: "2025-01-01",
+        start: startDate,  // starting date: 7 days ago
         startUrls: [
           "https://twitter.com/cookiedotfun",
           "https://twitter.com/MindAIAgent/with_replies",
@@ -491,7 +532,7 @@ class TwitterService extends EventEmitter {
           tweet.replyCount >= minReplies
       );
   
-      const limitedTweets = filteredTweets.slice(0, 20);
+      const limitedTweets = filteredTweets.slice(0, 50);
       const formattedTweets = this.formatTweets(limitedTweets);
   
       this.cacheResults(cleanCashtag, formattedTweets);
@@ -504,6 +545,169 @@ class TwitterService extends EventEmitter {
     }
   }
 
+  // Fallback Apify Only multi pattern search
+  /**
+ * searchTwitter
+ * -------------
+ * Perform multi-operator queries using Apify, combining:
+ * - query (cashtag, phrase, address)
+ * - optional date filters (from, to)
+ * - optional class: 'content', 'users', 'geo', 'media'
+ * - advanced operators array
+ * - sortBy: 'Top' or 'Latest'
+ * - maxItems: up to how many tweets to fetch
+ *
+ * Examples:
+ *   - "PS5 for sale near:me filter:images" => class=geo, query="PS5 for sale", operators=["near:me","filter:images"]
+ *   - "nasa OR esa" => class=content, operators=["nasa OR esa"]
+ *   - "pictures from:elonmusk" => class=users, query="pictures", operators=["from:elonmusk","filter:images"] etc.
+ */
+  async searchTwitter({
+    query,
+    from,
+    to,
+    searchClass,      // "content" | "users" | "geo" | "media"
+    operators = [],   // e.g. ["nasa OR esa", "near:\"New York\"", "filter:images"]
+    sortBy = 'Latest',// "Top" or "Latest"
+    maxItems = 100
+  }) {
+    try {
+      // 1) Combine `query` + `operators[]` => baseSearch.
+      //    e.g.: "PS5 for sale" + ["near:me","filter:images"] => "PS5 for sale near:me filter:images"
+      let operatorString = operators.join(' ');
+      const baseSearch = operatorString
+        ? `${query} ${operatorString}`
+        : query;
+
+      // We'll store modifications in `additionalFilter` or do checks
+      let additionalFilter = '';
+
+      // 2) Interpret "class" to auto-add or ensure certain operators if not present
+      switch (searchClass) {
+        case 'content':
+          // content => no default additions
+          break;
+
+        case 'users':
+          // If user didn't specify "from:" or "to:", let's add a minimal placeholder
+          if (
+            !operatorString.toLowerCase().includes('from:') &&
+            !operatorString.toLowerCase().includes('to:')
+          ) {
+            additionalFilter += ' from:someUser';
+          }
+          break;
+
+        case 'geo':
+          // For a geo search we might enforce "near:..." if not found
+          if (
+            !operatorString.toLowerCase().includes('near:') &&
+            !operatorString.toLowerCase().includes('geocode:')
+          ) {
+            additionalFilter += ' near:me';
+          }
+          break;
+
+        case 'media':
+          // If user didn’t specify filter:media/images/videos/spaces, add 'filter:media'
+          const opLower = operatorString.toLowerCase();
+          if (
+            !opLower.includes('filter:media') &&
+            !opLower.includes('filter:images') &&
+            !opLower.includes('filter:videos') &&
+            !opLower.includes('filter:spaces')
+          ) {
+            additionalFilter += ' filter:media';
+          }
+          break;
+
+        default:
+          // unknown or not specified => do nothing
+          break;
+      }
+
+      // 3) Construct final query string (trim in case additionalFilter is empty)
+      const finalQuery = `${baseSearch}${additionalFilter}`.trim();
+
+    //console.log('[searchTwitter] finalQuery =>', finalQuery);
+
+      // 4) Date defaults (7 days ago -> from, current date -> to)
+      const fromDate = from || this._getDefaultFromDate();
+      const toDate = to || this._getDefaultToDate();
+
+    //console.log('[searchTwitter] date range =>', fromDate, 'to', toDate, '| sortBy =>', sortBy, '| maxItems =>', maxItems);
+
+      // 5) Build Apify input. We pass the finalQuery in "searchTerms"
+      const input = {
+        searchTerms: [finalQuery],        
+        cookies: [config.apifyCookieToken],
+        start: fromDate,
+        end: toDate,
+        maxItems: maxItems,
+        sortBy, // "Latest" or "Top"
+        tweetLanguage: "en",
+      };
+
+    //console.log('[searchTwitter] Apify input =>', JSON.stringify(input, null, 2));
+
+      // 6) Call your Apify actor
+      const run = await this.apifyClient.actor("fastcrawler/tweet-fast-scraper").call(input);
+      const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
+
+    //console.log(`[searchTwitter] fetched ${items.length} results. First few raw items:`);
+    //console.log(JSON.stringify(items.slice(0, 3), null, 2));
+
+      // 7) Format results. Example: match your output example
+      const formatted = items.map((tw) => ({
+        type: tw.type || 'tweet',
+        url: tw.url,
+        text: tw.text,
+        retweetCount: tw.retweetCount,
+        replyCount: tw.replyCount,
+        likeCount: tw.likeCount,
+        quoteCount: tw.quoteCount,
+        viewCount: tw.viewCount,
+        createdAt: new Date(tw.createdAt).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }),
+        author: tw.author.username,
+        media: tw.media,        
+      }));      
+
+      console.log('[searchTwitter] formatted results sample =>', JSON.stringify(formatted.slice(0, 3), null, 2));
+
+      return formatted;
+    } catch (error) {
+      console.error('❌ [searchTwitter] Error:', error);
+      await ErrorHandler.handle(error);
+      return [];
+    }
+  }
+
+  /**
+   * _getDefaultFromDate
+   * -------------------
+   * Returns a YYYY-MM-DD string for 7 days ago
+   */
+  _getDefaultFromDate() {
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    const dateObj = new Date(Date.now() - SEVEN_DAYS);
+    return dateObj.toISOString().split('T')[0];
+  }
+
+  /**
+   * _getDefaultToDate
+   * -----------------
+   * Returns a YYYY-MM-DD string for today's date
+   */
+  _getDefaultToDate() {
+    const dateObj = new Date();
+    return dateObj.toISOString().split('T')[0];
+  }
+
+  /**
+   * formatTweets
+   * -----------------
+   * Returns a trimmed cleaned version of a tweet
+   */
   formatTweets(tweets) {
     return tweets.map((tweet) => ({
       id: tweet.id,
@@ -544,7 +748,7 @@ class TwitterService extends EventEmitter {
     const cacheKey = 'trenches:cashtags';
     const cached = this.getFromCache(cacheKey);
     if (cached) {
-      console.log('📦 Returning cached results for discoverTrenches');
+      console.log('📦📦📦📦📦📦Returning cached results for discoverTrenches');
       return cached;
     }
 

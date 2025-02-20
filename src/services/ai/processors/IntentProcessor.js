@@ -35,7 +35,7 @@ import BitrefillService from "../../bitrefill/BitrefillService.js";
 import WormholeBridgeService from '../../Wormhole/WormholeBridgeService.js';
 import cookieFun from '../../cookieDAO/CookieFun.js';
 import ResearchService from '../../research/ResearchService.js';
-import TasksService from '../../tasks/TasksService.js';
+import { tasksService } from '../../tasks/TasksService.js';
 import { searchCoin } from '../../coingecko/CoinGecko.js';
 
 // Quicknode Jupiter
@@ -83,6 +83,7 @@ export class IntentProcessor extends EventEmitter {
         shopifyService.initialize(),
         solanaPayService.initialize(),
         butlerService.initialize(),
+        tasksService.initialize(),
         this.bridgeService.initialize(),
       ]);
 
@@ -859,7 +860,12 @@ export class IntentProcessor extends EventEmitter {
   }
 
   async viewPriceAlerts() {
-    return await priceAlertService.viewAlerts();
+    try {
+      return await priceAlertService.viewAlerts();
+    } catch (error) {
+      console.error("Error fetching price alerts", error.message);
+      throw error;
+    }
   }
 
   async getPriceAlert(alertId) {
@@ -1530,6 +1536,44 @@ export class IntentProcessor extends EventEmitter {
     return await twitterService.getTrenchChatter();
   }  
 
+  //Apify Backup for Muli dimensional twitter searches
+  async processMultiDimensionalTwitterSearch(params) {
+    try {
+      console.log('[processMultiDimensionalTwitterSearch] Received params:', params);
+
+      const {
+        query,
+        from,
+        to,
+        class: searchClass,
+        operators = [],
+        sortBy = 'Latest',
+        maxItems = 100
+      } = params;
+
+      // Basic fallback checks
+      if (!query) {
+        throw new Error("Missing 'query' parameter.");
+      }
+
+      // Call the new search method in TwitterService
+      const results = await twitterService.searchTwitter({
+        query,
+        from,
+        to,
+        searchClass,
+        operators,
+        sortBy,
+        maxItems
+      });
+
+      return results;
+    } catch (error) {
+      console.error('❌ [processMultiDimensionalTwitterSearch] Error:', error);
+      throw error;
+    }
+  }
+
   // Trending
   async getTrendingTokensByChain(chatId, network) {
     const supportedNetworks = ['ethereum', 'base', 'solana', 'avalanche'];
@@ -2075,7 +2119,7 @@ export class IntentProcessor extends EventEmitter {
    */
   async processSaveTaskIntent(userInput, chatId) {
     try {
-      const task = await TasksService.createTask({ telegramId: chatId, ...userInput });
+      const task = await tasksService.createTask({ telegramId: chatId, ...userInput });
       await this.bot.sendMessage(
         chatId,
         `✅ Task saved with ID: ${task._id}\nScheduled for: ${new Date(task.dueTime).toLocaleString()}`
@@ -2095,7 +2139,7 @@ export class IntentProcessor extends EventEmitter {
    */
   async processRetrieveTaskIntent(userInput, chatId) {
     try {
-      const tasks = await TasksService.retrieveTasks({ telegramId: chatId, ...userInput });
+      const tasks = await tasksService.retrieveTasks({ telegramId: chatId, ...userInput });
       await this.bot.sendMessage(chatId, `✅ Retrieved ${Array.isArray(tasks) ? tasks.length : 1} task(s).`);
       return tasks;
     } catch (error) {
@@ -2112,7 +2156,7 @@ export class IntentProcessor extends EventEmitter {
    */
   async processExecuteTaskIntent(userInput, chatId) {
     try {
-      const task = await TasksService.executeTask({ telegramId: chatId, ...userInput });
+      const task = await tasksService.executeTask({ telegramId: chatId, ...userInput });
       await this.bot.sendMessage(chatId, `✅ Task ${task._id} marked as completed.`);
       return task;
     } catch (error) {
@@ -2128,7 +2172,7 @@ export class IntentProcessor extends EventEmitter {
    */
   async processDeleteTaskIntent(userInput, chatId) {
     try {
-      const task = await TasksService.deleteTask({ telegramId: chatId, ...userInput });
+      const task = await tasksService.deleteTask({ telegramId: chatId, ...userInput });
       await this.bot.sendMessage(chatId, `✅ Task ${task._id} has been deleted successfully.`);
       return task;
     } catch (error) {

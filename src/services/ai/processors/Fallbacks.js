@@ -19,12 +19,12 @@ export const fallbackMap = {
     /**
     * Symbol analysis
     * Primary: structured handling analyze_token_by_symbol
-    * Fallbacks: cookiedao search_twitter_by_phrase_or_address symbol search, fetch_tweets_for_symbol Apify actor, structured fetch_tokenaddress_fromsymbol
+    * Fallbacks: cookiedao search_twitter_by_address symbol search, fetch_tweets_for_symbol Apify actor, structured fetch_tokenaddress_fromsymbol
     */
     analyze_token_by_symbol: [
       "fetch_tokenaddress_fromsymbol",
       "fetch_tweets_for_symbol",
-      "search_twitter_by_phrase_or_address",
+      "search_twitter_by_address",
     ],
 
     /**
@@ -35,7 +35,7 @@ export const fallbackMap = {
     token_price_coingecko: [
       "token_price_dexscreener",
       "check_token_mindshare_on_market",
-      "search_twitter_by_phrase_or_address",
+      "search_twitter_by_address",
     ],
   
     /**
@@ -44,7 +44,7 @@ export const fallbackMap = {
     token_price_dexscreener: [
       "token_price_coingecko",
       "check_token_mindshare_on_market",
-      "search_twitter_by_phrase_or_address",
+      "search_twitter_by_address",
     ],
   
     /**
@@ -62,16 +62,22 @@ export const fallbackMap = {
      * fallback to a broad internet search for possible sentiment sources
      */
     fetch_tweets_for_symbol: [
-      //"search_twitter_by_phrase_or_address",
+      //"search_twitter_by_address",
+      "search_twitter_using_multi_parameter_options",
       "search_internet"
     ],
 
-    search_twitter_by_phrase_or_address: [
+    search_twitter_by_address: [
+      "search_twitter_using_multi_parameter_options",
+      "fetch_tweets_for_symbol",
+    ],
+
+    search_twitter_using_multi_parameter_options: [
       "fetch_tweets_for_symbol",
     ],
 
     fetch_trending_tokens_twitter: [
-      "search_twitter_by_phrase_or_address",
+      "search_twitter_by_address",
     ],
   
     /**

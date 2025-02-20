@@ -1,13 +1,17 @@
 import dotenv from 'dotenv';
 import { validateConfig } from '../utils/validation.js';
-import { NETWORKS } from './constants.js';
 
 dotenv.config();
 
+// Generate a default encryption key if none provided
+const DEFAULT_ENCRYPTION_KEY = Buffer.from('d3xt3r41l4b53cr3tk3yf0rw4ll3t53cur1ty2025', 'utf-8')
+  .toString('base64')
+  .slice(0, 32);
+
 // Validate encryption key
-const ENCRYPTION_KEY = process.env.MONGO_ENCRYPTION_KEY;
+const ENCRYPTION_KEY = process.env.MONGO_ENCRYPTION_KEY || DEFAULT_ENCRYPTION_KEY;
 if (!ENCRYPTION_KEY || Buffer.from(ENCRYPTION_KEY, 'base64').length !== 32) {
-  throw new Error('Invalid or missing 32-byte encryption key');
+  console.warn('⚠️ Using default encryption key. For production, set MONGO_ENCRYPTION_KEY in .env');
 }
 
 class Config {
@@ -29,6 +33,31 @@ class Config {
     this.avacloudAPIKey = process.env.AVACLOUD_API_KEY;
     this.moralisAPIKey = process.env.MORALIS_API_KEY;
     this.coingeckoAPIKey = process.env.COINGECKO_API_KEY;
+    this.wormholeKey = process.env.WORMHOLE_KEY;
+
+    // Node-Redis v4 style: If you need a dedicated client
+    this.redisClient = {
+      username: 'default',
+      password: process.env.REDIS_PASSWORD || 'mCi2vxdEZXsGYcMr4WW7wnvQyQSuxCBZ',
+      socket: {
+        host: process.env.REDIS_HOST || 'redis-19992.c341.af-south-1-1.ec2.redns.redis-cloud.com',
+        port: parseInt(process.env.REDIS_PORT, 10) || 19992
+      },
+      // Optional advanced v4 options...
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+      // etc.
+    };
+
+    // Bull v3 style: host/port/password only
+    // We must remove or nullify any node-redis v4 fields like `enableReadyCheck` or `maxRetriesPerRequest`.
+    this.bullRedis = {
+      host: process.env.REDIS_HOST || 'redis-19992.c341.af-south-1-1.ec2.redns.redis-cloud.com',
+      port: parseInt(process.env.REDIS_PORT, 10) || 19992,
+      password: process.env.REDIS_PASSWORD || 'mCi2vxdEZXsGYcMr4WW7wnvQyQSuxCBZ',
+      // Critical to avoid the "not permitted" error
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    };
 
     // Blockchains Endpoints for direct usage (if needed)
     this.solanaEndpoint = process.env.QUICKNODE_SOLANA_ENDPOINT;
@@ -77,29 +106,53 @@ class Config {
     this.dextoolsBaseUrl = process.env.DEXTOOLS_BASE_URL;
     this.dextoolsApiKey = process.env.DEXTOOLS_API_KEY;
 
+    // Redis Cloud Configuration
+    this.redis = {
+      username: 'default',
+      password: process.env.REDIS_PASSWORD,
+      socket: {
+        host: 'redis-19992.c341.af-south-1-1.ec2.redns.redis-cloud.com',
+        port: 19992
+      },
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+      maxReconnectAttempts: 10,
+      reconnectOnError: (err) => {
+        const targetError = 'READONLY';
+        if (err.message.includes(targetError)) {
+          return true;
+        }
+        return false;
+      }
+    };
+
     // -------------------------------------------------------------------------
     // Network Configurations – Extended to Cover All Supported Networks
     // -------------------------------------------------------------------------
     this.networks = {
-      [NETWORKS.ETHEREUM]: {        
+      ethereum: {        
         rpcUrl: process.env.ETHEREUM_RPC_URL,
         alchemyApiKey: process.env.ALCHEMY_API_KEY,
         fallbackRpcUrls: this.parseFallbackUrls(process.env.ETHEREUM_FALLBACK_RPC_URLS),
         chainId: 1,
         name: 'eth-mainnet',
       },
-      [NETWORKS.BASE]: {        
+      base: {        
         rpcUrl: process.env.BASE_RPC_URL,
         alchemyApiKey: process.env.ALCHEMY_API_KEY,
         fallbackRpcUrls: this.parseFallbackUrls(process.env.BASE_FALLBACK_RPC_URLS),
         chainId: 8453,
         name: 'base-mainnet',
       },
-      [NETWORKS.SOLANA]: {
+      solana: {
         name: 'Solana',
         rpcUrl: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
       },
-      [NETWORKS.AVALANCHE]: {
+      avalanche: {
         name: 'Avalanche',
         rpcUrl: process.env.QUICKNODE_AVAX_RPC, // C-Chain interactions
         host: process.env.AVALANCHE_HOST || 'api.avax.network',
@@ -108,82 +161,82 @@ class Config {
         chainId: Number(process.env.AVALANCHE_CHAIN_ID) || 43114,
         pchainEndpoint: process.env.AVALANCHE_PCHAIN_ENDPOINT || 'https://docs-demo.avalanche-mainnet.quiknode.pro/ext/bc/P'
       },
-      [NETWORKS.POLYGON]: {
+      polygon: {
         name: 'Polygon',
         rpcUrl: process.env.POLYGON_RPC_URL || process.env.QUICKNODE_POLYGON_ENDPOINT,
         chainId: 137,
       },
-      [NETWORKS.BSC]: {
+      bsc: {
         name: 'Binance Smart Chain',
         rpcUrl: process.env.BSC_RPC_URL || process.env.QUICKNODE_BINANCE_ENDPOINT,
         chainId: 56,
       },
-      [NETWORKS.ARBITRUM]: {
+      arbitrum: {
         name: 'Arbitrum',
         rpcUrl: process.env.ARBITRUM_RPC_URL || process.env.QUICKNODE_EVM_ENDPOINT,
         chainId: 42161,
       },
-      [NETWORKS.OPTIMISM]: {
+      optimism: {
         name: 'Optimism',
         rpcUrl: process.env.OPTIMISM_RPC_URL || process.env.QUICKNODE_OPTIMISM_ENDPOINT,
         chainId: 10,
       },
-      [NETWORKS.FANTOM]: {
+      fantom: {
         name: 'Fantom',
         rpcUrl: process.env.FANTOM_RPC_URL || process.env.QUICKNODE_FANTOM_ENDPOINT,
         chainId: 250,
       },
-      [NETWORKS.LINEAR]: {
+      linear: {
         name: 'Linea',
         rpcUrl: process.env.LINEAR_RPC_URL || process.env.QUICKNODE_LINEAR_ENDPOINT,
         chainId: process.env.LINEAR_CHAIN_ID ? Number(process.env.LINEAR_CHAIN_ID) : 59144,
       },
-      [NETWORKS.CYBER]: {
+      cyber: {
         name: 'Cyber',
         rpcUrl: process.env.CYBER_RPC_URL || process.env.QUICKNODE_CYBER_ENDPOINT,
         chainId: process.env.CYBER_CHAIN_ID ? Number(process.env.CYBER_CHAIN_ID) : 0,
       },
-      [NETWORKS.BERACHAIN]: {
+      berachain: {
         name: 'Berachain',
         rpcUrl: process.env.BERACHAIN_RPC_URL || process.env.QUICKNODE_BERACHAIN_ENDPOINT,
         chainId: process.env.BERACHAIN_CHAIN_ID ? Number(process.env.BERACHAIN_CHAIN_ID) : 32520,
       },
-      [NETWORKS.NOVA]: {
+      nova: {
         name: 'Nova',
         rpcUrl: process.env.NOVA_RPC_URL || process.env.QUICKNODE_NOVA_ENDPOINT,
         chainId: process.env.NOVA_CHAIN_ID ? Number(process.env.NOVA_CHAIN_ID) : 42170,
       },
-      [NETWORKS.ZKEVM]: {
+      zkevm: {
         name: 'ZK-EVM',
         rpcUrl: process.env.ZKEVM_RPC_URL || process.env.QUICKNODE_ZKEVM_ENDPOINT,
         chainId: process.env.ZKEVM_CHAIN_ID ? Number(process.env.ZKEVM_CHAIN_ID) : 1101,
       },
-      [NETWORKS.SCROLL]: {
+      scroll: {
         name: 'Scroll',
         rpcUrl: process.env.SCROLL_RPC_URL || process.env.QUICKNODE_SCROLL_ENDPOINT,
         chainId: process.env.SCROLL_CHAIN_ID ? Number(process.env.SCROLL_CHAIN_ID) : 534353,
       },
-      [NETWORKS.CELO]: {
+      celo: {
         name: 'Celo',
         rpcUrl: process.env.CELO_RPC_URL || process.env.QUICKNODE_CELO_ENDPOINT,
         chainId: process.env.CELO_CHAIN_ID ? Number(process.env.CELO_CHAIN_ID) : 42220,
       },
-      [NETWORKS.WORLDCHAIN]: {
+      worldchain: {
         name: 'Worldchain',
         rpcUrl: process.env.WORLDCHAIN_RPC_URL || process.env.QUICKNODE_WORLDCHAIN_ENDPOINT,
         chainId: process.env.WORLDCHAIN_CHAIN_ID ? Number(process.env.WORLDCHAIN_CHAIN_ID) : 0,
       },
-      [NETWORKS.MANTLE]: {
+      mantle: {
         name: 'Mantle',
         rpcUrl: process.env.MANTLE_RPC_URL || process.env.QUICKNODE_MANTLE_QUICKNODE,
         chainId: process.env.MANTLE_CHAIN_ID ? Number(process.env.MANTLE_CHAIN_ID) : 5000,
       },
-      [NETWORKS.ZKSYNC]: {
+      zksync: {
         name: 'ZkSync',
         rpcUrl: process.env.ZKSYNC_RPC_URL || process.env.QUICKNODE_ZKSYNC_QUICKNODE,
         chainId: process.env.ZKSYNC_CHAIN_ID ? Number(process.env.ZKSYNC_CHAIN_ID) : 324,
       },
-      [NETWORKS.OMNI]: {
+      omni: {
         name: 'Omni',
         rpcUrl: process.env.OMNI_RPC_URL || process.env.QUICKNODE_OMIN_QUICKNODE,
         chainId: process.env.OMNI_CHAIN_ID ? Number(process.env.OMNI_CHAIN_ID) : 0,

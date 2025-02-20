@@ -441,7 +441,7 @@ export const AIFunctions = [
       },
     
       {
-        name: "search_twitter_by_phrase_or_address",
+        name: "search_twitter_by_address",
         description: "Search social tweets and opinions using phrase or token address. Google using a phrase prompting 'what' you want to know and targeting 'what' e.g., 'snai community growth'. Use fetch_tweets_for_symbol for search using symbol or cashtag only as query.",
         parameters: {
           type: "object",
@@ -525,6 +525,59 @@ export const AIFunctions = [
           required: ["query"]
         }
       },
+
+      // multiDimensionalTwitterSchema 
+      {
+        name: "search_twitter_using_multi_parameter_options",
+        description: "Perform advanced multi-dimensional Twitter queries. Accepts fallback from search_twitter_by_address, plus new parameters for multi-operator searches and sorting. IMPORTANT: If the user statement includes advanced filters or location hints (e.g. 'with pictures', 'near me'), parse them into 'operators' or 'class' instead of putting them all in 'query'.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: `Main search phrase/cashtag/address. E.g. '$SNAI', 'cookie token utility', or '0xc0...' etc.
+      IMPORTANT: Do NOT include advanced operators (like near:city, filter:images) in 'query' if the user mentions them—put those in 'operators' or use 'class'.`
+            },
+            from: {
+              type: "string",
+              description: "Start date (YYYY-MM-DD). Defaults to ~7 days ago if not specified."
+            },
+            to: {
+              type: "string",
+              description: "End date (YYYY-MM-DD). Defaults to the current date if not specified."
+            },
+            class: {
+              type: "string",
+              description: `Which dimension to search:
+      - "content": search tweet text, hashtags, cashtags, etc.
+      - "users": search for tweets "from:user" or "to:user" or mentions, can combine with operators
+      - "geo": search "near:city" or "within:5mi"
+      - "media": search "filter:media", "filter:images", "filter:spaces".`,
+              enum: ["content", "users", "geo", "media"]
+            },
+            operators: {
+              type: "array",
+              description: `Optional array of advanced Twitter operators. E.g. ["nasa OR esa","from:NASA","filter:videos","near:\\"New York\\"","-#asteroid"].
+      Try to parse user hints like 'with pictures' => filter:images, or 'near me' => near:me, here.`,
+              items: {
+                type: "string"
+              }
+            },
+            sortBy: {
+              type: "string",
+              description: "Sort order: 'Top' or 'Latest'. Defaults to 'Latest'.",
+              enum: ["Top", "Latest"],
+              default: "Latest"
+            },
+            maxItems: {
+              type: "integer",
+              description: "Maximum number of tweets to return. Defaults to 100.",
+              default: 100
+            }
+          },
+          required: ["query"]
+        }
+      },     
 
       {
         name: "get_trench_chatter",
@@ -1069,6 +1122,8 @@ export const AIFunctions = [
           required: ["query"]
         }
       },
+
+      // Token Security Scan: score, liquidity locks, volume bots
   
       // Token paste with no instruction
       {

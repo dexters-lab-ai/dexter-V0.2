@@ -18,7 +18,8 @@ import { rateLimiter } from './core/rate-limiting/RateLimiter.js';
 import { circuitBreakers } from './core/circuit-breaker/index.js';
 
 // Service imports
-import { startDueTasksScheduler } from './services/tasks/Scheduler.js';
+import { tasksService } from './services/tasks/TasksService.js';
+import { taskScheduler } from './services/tasks/Scheduler.js';
 import { priceAlertService } from './services/priceAlerts.js';
 import { walletService } from './services/wallet/index.js';
 import { butlerService } from './services/butler/ButlerService.js';
@@ -82,6 +83,14 @@ async function initializeServices() {
     // Initialize Shopify service
     console.log('🛍️ Initializing Shopify service...');
     await shopifyService.initialize();
+
+    // Tasks and Queues
+    await tasksService.initialize();
+
+    // Tasks Scheduler    
+    await taskScheduler.initialize();
+    // Start the scheduler after initialization
+    taskScheduler.start(); 
 
     // Initialize Moralis    
     await Moralis.start({ apiKey: config.moralisAPIKey});
@@ -151,9 +160,6 @@ async function startAgent() {
     }    
     // Price Alerts
     await priceAlertService.initialize();
-
-    // Tasks Scheduler    
-    startDueTasksScheduler();
     
     return bot;
   } catch (error) {

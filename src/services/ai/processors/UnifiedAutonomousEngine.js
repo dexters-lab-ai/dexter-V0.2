@@ -336,7 +336,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
 
           Alternative scenario
           1. First, fecth the token info
-          2. Next, fetch token Tweets using symbol through fetch_tweets_for_symbol and then again through search_twitter_by_phrase_or_address for richer research into a token.
+          2. Next, fetch token Tweets using symbol through fetch_tweets_for_symbol and then again through search_twitter_by_address for richer research into a token.
           3. Next, fetch token combined metrics chages over 7 days with get_token_market_sentiment_changes
           4. Finally combine research results in categories detailed and present.
 
@@ -352,7 +352,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       - **Safe and popular Investment Suggestions:**
           1. Safe NEW tokens are not Stables, ETH, ADA, BNB, BTC. Use suggest_token_investments_dominating CookieDAO API suggestions.
           2. Fetch from both sources Twitter and Trending Tokens Combined unless user specifies chain
-          3. Follow-up action and function call search_twitter_by_phrase_or_address to search from twitter using relevant phrase e.g., 'hottest narrative tokens' or 'trending narrative' or 'trending theme crypto' or 'trending tokens' or 'trenches popular tokens'.
+          3. Follow-up action and function call search_twitter_by_address to search from twitter using relevant phrase e.g., 'hottest narrative tokens' or 'trending narrative' or 'trending theme crypto' or 'trending tokens' or 'trenches popular tokens'.
 
       - **Transaction Preparation:**
         - When preparing transactions, use human readable number formats: 0.02 SOL, 1.23 ETH, 10 USDC, 25000 SNAI for example.
@@ -390,7 +390,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
           *Use other sources and change search appraoch*
           - Consider using different apporach when a search fails to return data or information asked
           - Suggest all tools available, not by actual name, but show user all relevant options available to try get result
-          - Reconstruct steps for user if needed for hard to get research data, such as a new token e.g., instead of searching token info by Address, search by symbol using search_twitter_by_phrase_or_address function
+          - Reconstruct steps for user if needed for hard to get research data, such as a new token e.g., instead of searching token info by Address, search by symbol using search_twitter_by_address function
       - **Followup actions**
           - Ensure there are no follow up actions left on every task. Suggest next steps logically using all resources available
           - Give user options, in a neat concise way for maximum task efficiency. Suggest all options for functions relevant to tasks or user actions or intents
@@ -1063,7 +1063,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
   
         // Check if the result is insufficient.
         if (this.isDataInsufficient(result)) {
-          console.warn(`⚠️ Function '${name}' returned insufficient data on attempt #${attempts + 1}`);
+          console.warn(`⚠️ Function '${name}' returned an error on attempt #${attempts + 1}, ${JSON.stringify(result)}`);
           attempts++;
   
           if (attempts < maxRetries) {
@@ -1199,7 +1199,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         search_token_by_twitterusername: () => this.intentProcessor.processAgentByTwitterQuery(args.twitterUsername, args.interval),
         check_token_mindshare_on_market: () => this.intentProcessor.processAgentByContractQuery(args.contractAddress, args.interval),
         suggest_token_investments_dominating: () => this.intentProcessor.processAgentsPaged(args.interval, args.page, args.pageSize),
-        search_twitter_by_phrase_or_address: () => this.intentProcessor.processSearchTweets(args.query),
+        search_twitter_by_address: () => this.intentProcessor.processSearchTweets(args.query),
         get_token_market_sentiment_changes: () => this.intentProcessor.processSentimentShift(args.queryStr, args.interval),
         get_cookiedao_api_authorization_status: () => this.intentProcessor.processAuthorizationCheck(),// still Cookie.fun
         fetch_trending_tokens_unified: () => this.intentProcessor.getTrendingTokens(),
@@ -1226,6 +1226,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         stop_monitor_kol: () => this.intentProcessor.stopKOLMonitoring(userId, args.handle),
         search_products: () => this.intentProcessor.handleShopifySearch(args.query),
         fetch_tweets_for_symbol: () => this.intentProcessor.search_tweets_for_cashtag(userId, args.query),
+        search_twitter_using_multi_parameter_options: () => this.intentProcessor.processMultiDimensionalTwitterSearch(args),
         get_trench_chatter: () => this.intentProcessor.getTrenchChatterCached(),
         search_internet: () => this.intentProcessor.performInternetSearch(chatId, args.query),
         token_price_dexscreener: () => this.intentProcessor.performTokenPriceCheck(args.query),
