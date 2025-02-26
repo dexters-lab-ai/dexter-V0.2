@@ -1,3 +1,4 @@
+import { bot } from '../core/bot.js';
 import { EventEmitter } from 'events';
 import { PriceAlert } from '../models/PriceAlert.js';
 import { walletService } from './wallet/index.js';
@@ -205,8 +206,10 @@ class PriceAlertService extends EventEmitter {
 
   async executeAlert(alert, currentPrice) {
     try {
+      // Retrieve the wallet for the alert.
       const wallet = await walletService.getWallet(alert.userId, alert.walletAddress);
-
+  
+      // For WalletConnect wallets, ensure token approval if not already pre-approved.
       if (wallet.type === 'walletconnect' && !alert.preApproved) {
         const approvalStatus = await walletService.checkAndRequestApproval(
           alert.tokenAddress,
@@ -220,26 +223,29 @@ class PriceAlertService extends EventEmitter {
           throw new Error('Token approval required');
         }
       }
-
+  
+      // Determine the amount to trade. If expressed as a percentage, compute it.
       let amount = alert.swapAction?.amount || '0';
       if (typeof amount === 'string' && amount.endsWith('%')) {
         const percentage = parseFloat(amount);
         const balance = await walletService.getTokenBalance(alert.userId, alert.tokenAddress);
         amount = String((balance * percentage) / 100);
       }
-
+  
+      // Proceed only if swap action is enabled.
       if (alert.swapAction?.enabled) {
         let tradeSuccess = false;
         let tradeResult = null;
-
-        const inputMint = alert.swapAction.type === 'buy' 
-          ? 'So11111111111111111111111111111111111111112'
+  
+        // Determine input and output mints based on the swap action type.
+        const inputMint = alert.swapAction.type === 'buy'
+          ? 'So11111111111111111111111111111111111111112'  // Native SOL mint
           : alert.tokenAddress;
-
         const outputMint = alert.swapAction.type === 'buy'
           ? alert.tokenAddress
           : 'So11111111111111111111111111111111111111112';
-
+  
+        // Attempt to execute the trade via the primary swap controller route.
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
             tradeResult = await tradeService.executeTrade({
@@ -260,11 +266,12 @@ class PriceAlertService extends EventEmitter {
             console.error(`Trade attempt ${attempt + 1} failed:`, tradeError);
           }
         }
-
+  
+        // Fallback: For Solana, if primary route fails, try JupiterQuickNode.
         if (!tradeSuccess && alert.network === 'solana') {
-          console.log('[PriceAlertService] Retrying via JupiterQuickNode...');
+          console.log('[executeAlert] Retrying via JupiterQuickNode...');
           try {
-            tradeResult = await this.jupiterQuickNode.startJupiterSwap({
+            tradeResult = await tradeService.jupiterQuickNode.startJupiterSwap({
               wallet,
               inputMint,
               outputMint,
@@ -273,23 +280,26 @@ class PriceAlertService extends EventEmitter {
             });
             tradeSuccess = true;
           } catch (jupiterError) {
-            console.error(`[PriceAlertService] JupiterQuickNode swap failed: ${jupiterError.message}`);
+            console.error(`[executeAlert] JupiterQuickNode swap failed: ${jupiterError.message}`);
           }
         }
-
-        if (tradeSuccess) {
+  
+        if (tradeSuccess && tradeResult && tradeResult.txId) {
+          // Update the PriceAlert with the trade result details.
           await PriceAlert.findByIdAndUpdate(alert._id, {
             $set: {
               isActive: false,
               executionResult: {
-                hash: tradeResult?.hash || tradeResult?.signature,
+                hash: tradeResult.txId,
                 executedAt: new Date(),
                 price: currentPrice,
-                gasCost: tradeResult?.gasCost || null,
+                expectedOutput: tradeResult.expectedOutput,
+                slippageBps: tradeResult.slippageBps,
+                dynamicSlippage: tradeResult.dynamicSlippage,
               },
             },
           });
-
+  
           this.emit('alertTriggered', {
             userId: alert.userId,
             alertId: alert._id,
@@ -298,7 +308,38 @@ class PriceAlertService extends EventEmitter {
         } else {
           throw new Error('Trade failed on all attempts.');
         }
+  
+        // Format trade details for a user-friendly message.
+        const formattedInput = parseFloat(amount).toFixed(4) + " SOL";
+        const formattedOutput = (tradeResult.expectedOutput !== undefined)
+          ? parseFloat(tradeResult.expectedOutput).toFixed(4) + " " + (alert.swapAction.type === 'buy' ? alert.tokenAddress : 'SOL')
+          : "N/A";
+        const slippageInfo = tradeResult.slippageBps ? `${tradeResult.slippageBps} bps` : "N/A";
+        const dynamicSlippage = tradeResult.dynamicSlippage
+          ? `${tradeResult.dynamicSlippage.minBps}-${tradeResult.dynamicSlippage.maxBps} bps`
+          : "N/A";
+        const nowFormatted = new Date().toLocaleString();
+  
+        // Craft the final message for the user.
+        function truncateString(str, maxLength = 10) { return str.length > maxLength ? str.slice(0, maxLength) + '...' : str; }
+        const truncatedTokenAddress = truncateString(alert.tokenAddress, 10);
+
+        const message =
+          `📢 **Price Alert Swap Txn**\n\n` +
+          `**Action:** ${alert.swapAction.type}\n` +
+          `**Token:** ${truncatedTokenAddress}\n` +
+          `**Network:** ${alert.network}\n\n` +
+          `**Swap Details:**\n` +
+          `• **Input Amount:** ${formattedInput}\n` +
+          `• **Expected Output:** ${formattedOutput}\n` +
+          `• **Static Slippage:** ${slippageInfo}\n` +
+          `• **Dynamic Slippage:** ${dynamicSlippage}\n\n` +
+          `**Time:** ${nowFormatted}\n\n` +
+          `*This trade was automatically executed based on your price alert set 'action'.*`;
+  
+        await bot.sendMessage(alert.userId, message, { parse_mode: "Markdown" });
       } else {
+        // If swap action is disabled, mark the alert as inactive.
         await PriceAlert.findByIdAndUpdate(alert._id, {
           $set: {
             isActive: false,
@@ -308,7 +349,6 @@ class PriceAlertService extends EventEmitter {
             },
           },
         });
-
         this.emit('alertTriggered', {
           userId: alert.userId,
           alertId: alert._id,
@@ -316,6 +356,7 @@ class PriceAlertService extends EventEmitter {
         });
       }
     } catch (error) {
+      // On error, update the alert document with the error details.
       await PriceAlert.findByIdAndUpdate(alert._id, {
         $set: {
           isActive: false,
@@ -325,7 +366,6 @@ class PriceAlertService extends EventEmitter {
           },
         },
       });
-
       await ErrorHandler.handle(error);
       this.emit('alertFailed', {
         userId: alert.userId,
@@ -334,7 +374,7 @@ class PriceAlertService extends EventEmitter {
       });
     }
   }
-
+  
   // Utility
   /**
    * Returns an array of alerts for a specific user.

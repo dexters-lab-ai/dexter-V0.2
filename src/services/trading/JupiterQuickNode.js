@@ -357,7 +357,7 @@ export class JupiterQuickNode {
             return cachedQuote;
         }
 
-        console.log("⚡ Fetching new quote from Jupiter...");
+        // console.log("⚡ Fetching new quote from Jupiter...");
         const newQuote = await this.getQuote(quoteRequest);
 
         // Store the fresh quote in MongoDB
@@ -396,7 +396,7 @@ export class JupiterQuickNode {
         try {
             const quote = await this.jupiterApi.quoteGet(quoteRequest);
             if (!quote) throw new Error("No quote found");
-            console.log("📜 Jupiter Quote:", quote);
+            //console.log("📜 Jupiter Quote:", quote);
             return quote;
         } catch (error) {
             console.error(`Quote fetch attempt ${attempt} failed: ${error.message}`);
@@ -470,184 +470,196 @@ export class JupiterQuickNode {
      */
     async executeSwap({ route, wallet }) {
         try {
-        const swapInstructions = await this.jupiterApi.swapInstructionsPost({
-            swapRequest: {
-            quoteResponse: route,
-            userPublicKey: wallet.publicKey.toBase58(),
-            prioritizationFeeLamports: {
-                priorityLevelWithMaxLamports: {
-                maxLamports: 150000,
-                global: false,
-                priorityLevel: "veryHigh"
+          const swapInstructions = await this.jupiterApi.swapInstructionsPost({
+              swapRequest: {
+                quoteResponse: route,
+                userPublicKey: wallet.publicKey.toBase58(),
+                prioritizationFeeLamports: {
+                    priorityLevelWithMaxLamports: {
+                      maxLamports: 150000,
+                      global: false,
+                      priorityLevel: "veryHigh"
+                    }
+                },
+                dynamicComputeUnitLimit: true,
+              },
+          });
+          
+          const instructions = [
+              ...swapInstructions.computeBudgetInstructions.map(instr => this.instructionDataToTransactionInstruction(instr)),
+              ...swapInstructions.setupInstructions.map(instr => this.instructionDataToTransactionInstruction(instr)),
+              this.instructionDataToTransactionInstruction(swapInstructions.swapInstruction),
+              this.instructionDataToTransactionInstruction(swapInstructions.cleanupInstruction)
+          ].filter(Boolean);
+          
+          let altAccounts = [];
+          if (swapInstructions.addressLookupTableAddresses && swapInstructions.addressLookupTableAddresses.length > 0) {
+              altAccounts = await this.getAddressLookupTableAccounts(swapInstructions.addressLookupTableAddresses, this.solanaConnection);
+          }
+          
+          const maxRetries = 3;
+          let attempt = 0;
+          let txResult;
+          while (attempt < maxRetries) {
+              attempt++;
+              try {
+                // Get a fresh blockhash.
+                const { blockhash, lastValidBlockHeight } = await this.solanaConnection.getLatestBlockhash();
+                
+                // Build the transaction message (using ALTs if available).
+                const transactionMessage = new TransactionMessage({
+                    payerKey: wallet.publicKey,
+                    recentBlockhash: blockhash,
+                    instructions,
+                }).compileToV0Message(altAccounts);
+                
+                const transaction = new VersionedTransaction(transactionMessage);
+                transaction.sign([wallet]);
+                const rawTransaction = transaction.serialize();
+                
+                // Send the transaction once.
+                let txId = await this.solanaConnection.sendRawTransaction(rawTransaction, { skipPreflight: true, maxRetries: 7 });
+                if (typeof txId !== 'string') {
+                    txId = txId.result;
                 }
-            },
-            dynamicComputeUnitLimit: true,
-            },
-        });
-        
-        const instructions = [
-            ...swapInstructions.computeBudgetInstructions.map(instr => this.instructionDataToTransactionInstruction(instr)),
-            ...swapInstructions.setupInstructions.map(instr => this.instructionDataToTransactionInstruction(instr)),
-            this.instructionDataToTransactionInstruction(swapInstructions.swapInstruction),
-            this.instructionDataToTransactionInstruction(swapInstructions.cleanupInstruction)
-        ].filter(Boolean);
-        
-        let altAccounts = [];
-        if (swapInstructions.addressLookupTableAddresses && swapInstructions.addressLookupTableAddresses.length > 0) {
-            altAccounts = await this.getAddressLookupTableAccounts(swapInstructions.addressLookupTableAddresses, this.solanaConnection);
-        }
-        
-        const maxRetries = 3;
-        let attempt = 0;
-        let txResult;
-        while (attempt < maxRetries) {
-            attempt++;
-            try {
-            // Get a fresh blockhash.
-            const { blockhash, lastValidBlockHeight } = await this.solanaConnection.getLatestBlockhash();
-            
-            // Build the transaction message (using ALTs if available).
-            const transactionMessage = new TransactionMessage({
-                payerKey: wallet.publicKey,
-                recentBlockhash: blockhash,
-                instructions,
-            }).compileToV0Message(altAccounts);
-            
-            const transaction = new VersionedTransaction(transactionMessage);
-            transaction.sign([wallet]);
-            const rawTransaction = transaction.serialize();
-            
-            // Send the transaction once.
-            let txId = await this.solanaConnection.sendRawTransaction(rawTransaction, { skipPreflight: true, maxRetries: 7 });
-            if (typeof txId !== 'string') {
-                txId = txId.result;
-            }
-            
-            // Wait for confirmation using our helper.
-            const confirmation = await confirmTransaction(this.solanaConnection, txId, 'confirmed', 30000, 1000);
-            txResult = { txId, confirmation };
-            break; // Transaction confirmed.
-            } catch (error) {
-            console.warn(`Attempt ${attempt} error: ${error.message}`);
-            const { lastValidBlockHeight } = await this.solanaConnection.getLatestBlockhash();
-            const expired = await isBlockhashExpired(this.solanaConnection, lastValidBlockHeight);
-            if (expired) {
-                console.warn(`Attempt ${attempt} expired due to blockhash expiration. Retrying with fresh blockhash...`);
-                continue;
-            }
-            throw error;
-            }
-        }
-        if (!txResult) {
-            throw new Error("Transaction failed after maximum retries due to blockhash expiration.");
-        }
-        return txResult;
+                
+                // Wait for confirmation using our helper.
+                const confirmation = await confirmTransaction(this.solanaConnection, txId, 'confirmed', 30000, 1000);
+                txResult = { txId, confirmation };
+                break; // Transaction confirmed.
+              } catch (error) {
+                console.warn(`Attempt ${attempt} error: ${error.message}`);
+                const { lastValidBlockHeight } = await this.solanaConnection.getLatestBlockhash();
+                const expired = await isBlockhashExpired(this.solanaConnection, lastValidBlockHeight);
+                if (expired) {
+                    console.warn(`Attempt ${attempt} expired due to blockhash expiration. Retrying with fresh blockhash...`);
+                    continue;
+                }
+                throw error;
+              }
+          }
+          if (!txResult) {
+              throw new Error("Transaction failed after maximum retries due to blockhash expiration.");
+          }
+          return txResult;
         } catch (error) {
-        let detailedMessage = error.message;
-        if (error.response) {
-            console.error("Error response status:", error.response.status);
-            console.error("Error response data:", error.response.data);
-            try {
-            const responseBody = typeof error.response.body === 'string'
-                ? error.response.body
-                : JSON.stringify(error.response.body);
-            detailedMessage += ` | Response: ${responseBody}`;
-            } catch (jsonErr) {
-            detailedMessage += ' | (Additional response details unavailable)';
-            }
-        }
-        console.error('Error during swap execution:', detailedMessage);
-        throw new Error(detailedMessage);
+          let detailedMessage = error.message;
+          if (error.response) {
+              console.error("Error response status:", error.response.status);
+              console.error("Error response data:", error.response.data);
+              try {
+                const responseBody = typeof error.response.body === 'string'
+                    ? error.response.body
+                    : JSON.stringify(error.response.body);
+                detailedMessage += ` | Response: ${responseBody}`;
+              } catch (jsonErr) {
+                detailedMessage += ' | (Additional response details unavailable)';
+              }
+          }
+          console.error('Error during swap execution:', detailedMessage);
+          throw new Error(detailedMessage);
         }
     }
 
     async startJupiterSwap({ wallet, inputMint, outputMint, amount, userId }) {
+        let swapResult = null;
         try {
-        await this.sendSwapUpdate(userId, "fetching_quote", { inputMint, outputMint });
-        console.log('🔄 Fetching swap quote from Jupiter API...');
-        const quote = await this.getQuote({ inputMint, outputMint, amount: amount.toString() });
-        
-        // Send the formatted quote details to the user before proceeding.
-        await sendQuoteDetails(this.bot, this.solanaConnection, userId, quote, inputMint, outputMint);
-        
-        await this.sendSwapUpdate(userId, "executing_swap", { inputMint, outputMint, amount });
-        console.log('🔄 Executing swap transaction...');
-        const swapResult = await this.executeSwap({ route: quote, wallet });
-        console.log('✅ Swap executed:', swapResult);
-        
-        await this.sendSwapUpdate(userId, "swap_success", {
-            inputMint,
-            inAmount: await formatTokenAmount(amount, inputMint, this.solanaConnection),
-            outputMint,
-            outAmount: await formatTokenAmount(quote.outAmount, outputMint, this.solanaConnection),
-            txId: swapResult.txId,
-        });
-        
-        // Optionally: fetch updated balances and send balance update
-        /*
-        const detailedBalances = await getDetailedFormattedBalancesSOL(wallet, this.solanaConnection);
-        await this.sendSwapUpdate(userId, "balance_update", { message: JSON.stringify(detailedBalances, null, 2) });
-        */
-        
-        await this.logSwap({
-            inputToken: inputMint,
-            inAmount: amount,
-            outputToken: outputMint,
-            outAmount: quote.outAmount,
-            txId: swapResult.txId,
-            timestamp: new Date().toISOString(),
-        });
-        
-        const { txId, confirmation } = swapResult;
-        return confirmation;
-
+          await this.sendSwapUpdate(userId, "fetching_quote", { inputMint, outputMint });
+          console.log('🔄 Fetching swap quote from Jupiter API...');
+          const quote = await this.getQuote({ inputMint, outputMint, amount: amount.toString() });
+          
+          // Send the formatted quote details to the user before proceeding.
+          await sendQuoteDetails(this.bot, this.solanaConnection, userId, quote, inputMint, outputMint);
+          
+          await this.sendSwapUpdate(userId, "executing_swap", { inputMint, outputMint, amount });
+          console.log('🔄 Executing swap transaction...');
+          swapResult = await this.executeSwap({ route: quote, wallet });
+          console.log('✅ Swap executed:', swapResult);
+          
+          // Only proceed with success message if we have a valid swapResult
+          if (swapResult && swapResult.txId) {
+            await this.sendSwapUpdate(userId, "swap_success", {
+              inputMint,
+              inAmount: await formatTokenAmount(amount, inputMint, this.solanaConnection),
+              outputMint,
+              outAmount: await formatTokenAmount(quote.outAmount, outputMint, this.solanaConnection),
+              txId: swapResult.txId,
+            });
+            
+            await this.logSwap({
+              inputToken: inputMint,
+              inAmount: amount,
+              outputToken: outputMint,
+              outAmount: quote.outAmount,
+              txId: swapResult.txId,
+              timestamp: new Date().toISOString(),
+            });
+          }
+      
+          // Return a richer result: both the confirmation and the original quote.
+          return {
+            confirmation: swapResult?.confirmation,
+            expectedOutput: quote.outAmount,
+            slippageBps: quote.slippageBps,
+            dynamicSlippage: quote.dynamicSlippage,
+            txId: swapResult?.txId
+          };
+      
         } catch (error) {
-        console.error('❌ Error during swap execution:', error.message);
-        await this.sendSwapUpdate(userId, "swap_failed", { errorMessage: error.message });
-        throw new Error('Failed to complete token swap.');
+          console.error('❌ Error during swap execution:', error.message);
+          await this.sendSwapUpdate(userId, "swap_failed", { errorMessage: error.message });
+          throw error;
         }
-    }
+    }      
 
     async sendSwapUpdate(userId, stage, details = {}) {
         try {
-        let message = "";
-        switch (stage) {
-            case "fetching_quote":
-            message = `🔄 **Fetching Swap Quote...**\n\n💱 **From:** \`${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}\`\n🔹 **To:** \`${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}\`\n\n⏳ Retrieving the best rates...`;
-            break;
-            case "executing_swap":
-            message = `⚡ **Executing Swap Transaction...**\n\n💰 **Amount:** \`${await formatTokenAmount(details.amount, details.inputMint, this.solanaConnection)}\` tokens\n🪙 **Swapping:** [${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}](https://solscan.io/address/${details.inputMint}) → [${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}](https://solscan.io/address/${details.outputMint})\n\n🚀 Processing...`;
-            break;
-            case "quote_details":
-            message = `📜 **Swap Quote Details:**\n${details.message}`;
-            break;
-            case "swap_success":
-            message = `🎉 **Swap Successful!**\n\n🔁 **Swap Summary:**\n🔹 **From:** [${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}](https://solscan.io/address/${details.inputMint})\n💰 **Amount Sent:** \`${details.inAmount}\`\n🔹 **To:** [${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}](https://solscan.io/address/${details.outputMint})\n💎 **Amount Received:** \`${details.outAmount}\`\n\n🔗 **[View Transaction](https://solscan.io/tx/${details.txId})**`;
-            break;
-            case "balance_update": {
-            let balanceMessage = "";
-            try {
-                const balancesArray = typeof details.message === 'string' ? JSON.parse(details.message) : details.message;
-                for (const entry of balancesArray) {
-                balanceMessage += `${entry.symbol}: ${entry.balance}\n\n`;
+          let message = "";
+          switch (stage) {
+              case "fetching_quote":
+                message = `🔄 **Fetching Swap Quote...**\n\n💱 **From:** \`${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}\`\n🔹 **To:** \`${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}\`\n\n⏳ Retrieving the best rates...`;
+                break;
+              case "executing_swap":
+                message = `⚡ **Executing Swap Transaction...**\n\n💰 **Amount:** \`${await formatTokenAmount(details.amount, details.inputMint, this.solanaConnection)}\` tokens\n🪙 **Swapping:** [${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}](https://solscan.io/address/${details.inputMint}) → [${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}](https://solscan.io/address/${details.outputMint})\n\n🚀 Processing...`;
+                break;
+              case "quote_details":
+                message = `📜 **Swap Quote Details:**\n${details.message}`;
+                break;
+              case "swap_success":
+                message = `🎉 **Swap Successful!**\n\n🔁 **Swap Summary:**\n🔹 **From:** [${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}](https://solscan.io/address/${details.inputMint})\n💰 **Amount Sent:** \`${details.inAmount}\`\n🔹 **To:** [${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}](https://solscan.io/address/${details.outputMint})\n💎 **Amount Received:** \`${details.outAmount}\`\n\n🔗 **[View Transaction](https://solscan.io/tx/${details.txId})**`;
+                break;
+              case "balance_update": {
+                let balanceMessage = "";
+                try {
+                    const balancesArray = typeof details.message === 'string' ? JSON.parse(details.message) : details.message;
+                    for (const entry of balancesArray) {
+                      balanceMessage += `${entry.symbol}: ${entry.balance}\n\n`;
+                    }
+                } catch (err) {
+                    balanceMessage = details.message;
                 }
-            } catch (err) {
-                balanceMessage = details.message;
-            }
-            message = `🏦 **Updated Balances:**\n\n${balanceMessage}`;
-            break;
-            }
-            case "swap_failed":
-            // message = `🚨 **Swap Failed!**\n\n❌ Error: ${details.errorMessage}\n\n⚠️ Please check your balance or try again later.`;
-            message = ` ~ Oopsy from JupiterV6...`
-            break;
-            default:
-            message = `ℹ️ **Status Update:** ${stage}`;
-            break;
-        }
-        await this.bot.sendMessage(userId, message, { parse_mode: "Markdown" });
+                message = `🏦 **Updated Balances:**\n\n${balanceMessage}`;
+                break;
+              }
+              case "swap_failed":
+                message = ` ~ Oopsy from JupiterV6...`;
+                break;
+              default:
+                message = `ℹ️ **Status Update:** ${stage}`;
+                break;
+          }
+
+          // Wrap message sending in a try-catch to prevent crashes
+          if (this.bot && typeof this.bot.sendMessage === 'function') {
+              await this.bot.sendMessage(userId, message, { 
+                  parse_mode: "Markdown",
+                  disable_web_page_preview: true 
+              }).catch(err => {
+                  console.error("Failed to send message:", err);
+              });
+          }
         } catch (err) {
-        console.error("❌ Error sending swap update:", err.message);
+          console.error("❌ Error sending swap update:", err.message);
         }
     }
 

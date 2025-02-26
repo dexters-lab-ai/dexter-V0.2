@@ -71,6 +71,29 @@ export class HealthMonitor extends EventEmitter {
     }
   }
 
+  async checkRedisHealth() {
+    try {
+      const redisClient = kolMonitor.client;
+      if (!redisClient || !redisClient.status === 'ready') {
+        return {
+          status: 'unhealthy',
+          error: 'Redis client not connected'
+        };
+      }
+
+      await redisClient.ping();
+      return {
+        status: 'healthy',
+        timestamp: new Date()
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy',
+        error: error.message
+      };
+    }
+  }
+
   async checkHealth() {
     const results = {};
     for (const [name, checkFn] of this.services) {

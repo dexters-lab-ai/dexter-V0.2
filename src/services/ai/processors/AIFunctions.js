@@ -439,16 +439,16 @@ export const AIFunctions = [
           required: []
         }
       },
-    
+    /*
       {
         name: "search_twitter_by_address",
-        description: "Search social tweets and opinions using phrase or token address. Google using a phrase prompting 'what' you want to know and targeting 'what' e.g., 'snai community growth'. Use fetch_tweets_for_symbol for search using symbol or cashtag only as query.",
+        description: "Search social tweets and opinions using token address. Google using a phrase prompting 'what' you want to know and targeting 'what' e.g., 'snai community growth'. Use fetch_tweets_for_symbol for search using symbol or cashtag only as query.",
         parameters: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "Word/phrase to search in tweets. E.g. 'cookie token utility', '$SNAI', or '0xc0041ef357b183448b235a8ea73ce4e4ec8c265f'."
+              description: "contract address to search in tweets. E.g. '0xc0041ef357b183448b235a8ea73ce4e4ec8c265f'."
             },
             from: {
               type: "string",
@@ -464,7 +464,7 @@ export const AIFunctions = [
           required: ["query"]
         }
       },
-    
+    */
       {
         name: "get_token_market_sentiment_changes",
         description: "Deep dive into a token combined data from price to socials to market interest. Combined rich fundamental social & price metrics which influence sentiment on token/symbol/ticker. Aggregates sentiment data for a ticker, cashtag, or token address over a time interval. Merges Agents Paged, Tweet searches, and more.",
@@ -498,13 +498,13 @@ export const AIFunctions = [
       // Twitter Search Integration
       {
         name: "fetch_tweets_for_symbol",
-        description: "Fetch tweets matching token Symbol and returns a list of matching tweets and sentiment for each tweet. Not for trending or mindshare. Used to find sentiment on symbol or token or cashtag",
+        description: "Fetches tweets matching token Symbol or Cashtag and returns a list of matching tweets and sentiment for each tweet. Not for trending or mindshare. Used to find sentiment on symbol or token or cashtag",
         parameters: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "The token symbol to search for (e.g., 'SNAI', or 'BTC', or 'griffain'). Should be lowercase and without $ or spaces"
+              description: "The token symbol or cashtag to search for (e.g., 'SNAI', or 'BTC', or 'griffain'). Should be lowercase and without $ or spaces"
             },
             minLikes: {
               type: "number",
@@ -535,7 +535,7 @@ export const AIFunctions = [
           properties: {
             query: {
               type: "string",
-              description: `Main search phrase/cashtag/address. E.g. '$SNAI', 'cookie token utility', or '0xc0...' etc.
+              description: `Main search phrase/cashtag/token or contract address. E.g. '$SNAI', 'cookie token utility', or 'CA: 0xc0041ef357b183448b235a8ea73ce4e4ec8c265f' etc.
       IMPORTANT: Do NOT include advanced operators (like near:city, filter:images) in 'query' if the user mentions them—put those in 'operators' or use 'class'.`
             },
             from: {
@@ -961,6 +961,38 @@ export const AIFunctions = [
           },
           required: ["query", "amount"]
           }
+      },
+
+      {
+        name: "get_kol_monitor_positions",
+        description: "Retrieves active KOL monitor positions for a user",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: []
+        }
+      },
+
+      {
+        name: "delete_kol_monitor_position",
+        description: "Delete KOL monitor position for a user",
+        parameters: {
+          type: "object",
+          properties: {
+            handle: { type: "string", description: "Twitter handle" },},
+          required: ["handle"]
+        }
+      },
+
+      {
+        name: "delete_kol_monitor_position_by_id",
+        description: "Delete KOL monitor position for a user using the Mangoose DB Id",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Monitoring id" },},
+          required: ["id"]
+        }
       },
   
       {

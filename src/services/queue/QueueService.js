@@ -1,4 +1,3 @@
-// queueService.js
 import Bull from 'bull';
 import { EventEmitter } from 'events';
 import { createClient } from 'redis';
@@ -10,35 +9,36 @@ class QueueService extends EventEmitter {
     super();
     this.queues = new Map();
     this.initialized = false;
-
-    // Node-Redis v4 config for direct usage (if needed)
-    this.redisClientConfig = config.redisClient;
-
-    // Plain config for Bull v3 (host, port, password, no socket)
+    this.redisClientConfig = config.redisClient; 
     this.bullRedisConfig = config.bullRedis;
-
     this.redisClient = null;
+    this.defaultQueueConfig = {
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false
+      }
+    };
   }
 
   async initialize() {
     if (this.initialized) return;
-
     try {
-      // 1) Create Node-Redis v4 client (optional if you need direct Redis ops)
       this.redisClient = createClient(this.redisClientConfig);
-
       this.redisClient.on('error', async (error) => {
         console.error('❌ Redis connection error:', error);
         await ErrorHandler.handle(error);
       });
+      this.redisClient.on('connect', () => {
+        console.log('✅ Redis client connected');
+      });
+      await this.waitForRedis(30000);
 
-      // 2) Wait for readiness
-      await this.waitForRedis();
-
-      // 3) Create some default queues for your app
-      await this.createQueue('tasks');       // default job type
-      await this.createQueue('priceAlerts'); // default job type
-      await this.createQueue('kolMonitor');  // default job type
+      // Create default queues
+      await this.createQueue('tasks');
+      await this.createQueue('priceAlerts');
+      await this.createQueue('kolMonitor');
 
       this.initialized = true;
       console.log('✅ QueueService initialized');
@@ -48,48 +48,54 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Wait up to 60 seconds for Redis to become 'ready'.
-   */
-  async waitForRedis() {
+  async waitForRedis(timeout = 30000) {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      const timer = setTimeout(() => {
         reject(new Error('Redis connection timeout'));
-      }, 60000);
+      }, timeout);
 
       this.redisClient.once('ready', () => {
-        clearTimeout(timeout);
+        clearTimeout(timer);
         console.log('✅ Redis client is ready!');
         resolve();
       });
 
       this.redisClient.connect().catch((err) => {
-        clearTimeout(timeout);
+        clearTimeout(timer);
         reject(err);
       });
     });
   }
 
-  /**
-   * Create (and cache) a Bull queue with bullRedisConfig.
-   */
   async createQueue(name, options = {}) {
     if (this.queues.has(name)) {
       return this.queues.get(name);
     }
-
     try {
       const queue = new Bull(name, {
-        redis: this.bullRedisConfig,
+        redis: {
+          host: config.redis.socket.host,
+          port: config.redis.socket.port,
+          password: config.redis.password,
+          username: config.redis.username,
+          retryStrategy: (times) => {
+            const delay = Math.min(times * 100, 2000);
+            return delay;
+          }
+        },
+        settings: {
+          lockDuration: 300000,      // 5 minutes
+          stalledInterval: 60000,    // checks every 1 min
+          maxStalledCount: 0         // effectively disables stall detection
+        },
+        ...this.defaultQueueConfig,
         ...options
       });
 
-      // Basic logging
       queue.on('error', async (error) => {
         console.error(`❌ Queue "${name}" error:`, error);
         await ErrorHandler.handle(error);
       });
-
       queue.on('failed', async (job, error) => {
         console.error(`❌ Job ${job.id} in queue "${name}" failed:`, error);
         await ErrorHandler.handle(error);
@@ -110,9 +116,6 @@ class QueueService extends EventEmitter {
     return this.queues.get(name);
   }
 
-  /**
-   * Add a job with the default job name (`__default__`).
-   */
   async addJob(queueName, data, options = {}) {
     const queue = this.getQueue(queueName);
     try {
@@ -128,9 +131,6 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Add a job with a custom job name.
-   */
   async addNamedJob(queueName, jobName, data, options = {}) {
     const queue = this.getQueue(queueName);
     try {
@@ -146,19 +146,33 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Add a recurring job (default name).
-   */
-  async addRecurringJob(queueName, data, cronExpression, options = {}) {
+  async addRepeatableJob(queueName, data, repeatOptions, jobId, moreOptions = {}) {
     const queue = this.getQueue(queueName);
     try {
-      return await queue.add(data, {
-        repeat: { cron: cronExpression },
+      const jobOpts = {
+        jobId,
+        repeat: repeatOptions,
         attempts: 3,
         backoff: { type: 'exponential', delay: 1000 },
         removeOnComplete: true,
-        ...options
-      });
+        removeOnFail: false,
+        ...moreOptions
+      };
+      return await queue.add(data, jobOpts);
+    } catch (error) {
+      await ErrorHandler.handle(error);
+      throw error;
+    }
+  }
+
+  async removeRepeatableJobById(queueName, jobId) {
+    const queue = this.getQueue(queueName);
+    try {
+      const repeatableJobs = await queue.getRepeatableJobs();
+      const jobToRemove = repeatableJobs.find(j => j.id === jobId);
+      if (jobToRemove) {
+        await queue.removeRepeatableByKey(jobToRemove.key);
+      }
     } catch (error) {
       await ErrorHandler.handle(error);
       throw error;
@@ -166,28 +180,19 @@ class QueueService extends EventEmitter {
   }
 
   /**
-   * Add a recurring job with a custom job name.
+   * Removes a one-time (non-repeatable) job from the queue by job ID.
+   * For Bull v3, we must get the job, then call job.remove().
    */
-  async addNamedRecurringJob(queueName, jobName, data, cronExpression, options = {}) {
-    const queue = this.getQueue(queueName);
-    try {
-      return await queue.add(jobName, data, {
-        repeat: { cron: cronExpression },
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1000 },
-        removeOnComplete: true,
-        ...options
-      });
-    } catch (error) {
-      await ErrorHandler.handle(error);
-      throw error;
-    }
-  }
-
   async removeJob(queueName, jobId) {
     const queue = this.getQueue(queueName);
     try {
-      await queue.removeJob(jobId);
+      const job = await queue.getJob(jobId);
+      if (job) {
+        await job.remove();
+        console.log(`✅ Removed job ${jobId} from queue "${queueName}"`);
+      } else {
+        console.log(`⚠️ No job found with id ${jobId} in queue "${queueName}"`);
+      }
     } catch (error) {
       await ErrorHandler.handle(error);
       throw error;
@@ -195,11 +200,25 @@ class QueueService extends EventEmitter {
   }
 
   /**
-   * Cleanup queues & Redis client
+   * logQueueContents()
+   * ------------------
+   * Logs the current repeatable and waiting jobs for the specified queue.
    */
+  async logQueueContents(queueName) {
+    try {
+      const queue = this.getQueue(queueName);
+      const repeatableJobs = await queue.getRepeatableJobs();
+      const waitingJobs = await queue.getJobs(['waiting']);
+      console.log(`Queue "${queueName}" contents:`);
+      console.log('Repeatable Jobs:', repeatableJobs);
+      console.log('Waiting Jobs:', waitingJobs);
+    } catch (error) {
+      console.error(`❌ Error logging queue contents for "${queueName}":`, error);
+    }
+  }
+
   async cleanup() {
     try {
-      // Close all Bull queues
       const cleanupPromises = Array.from(this.queues.values()).map(async (queue) => {
         await queue.pause(true);
         await queue.clean(0, 'completed');
@@ -208,15 +227,12 @@ class QueueService extends EventEmitter {
       });
       await Promise.all(cleanupPromises);
 
-      // Quit Redis client
       if (this.redisClient) {
         await this.redisClient.quit();
       }
-
       this.queues.clear();
       this.removeAllListeners();
       this.initialized = false;
-
       console.log('✅ QueueService cleaned up');
     } catch (error) {
       console.error('❌ Error cleaning up QueueService:', error);

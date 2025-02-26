@@ -86,7 +86,7 @@ class NetworkStateManager {
 
       const text =
         `Network switched to *${this.getNetworkDisplay(network)}* 🔄\n\n` +
-        "All blockchain features will now use this network.";
+        "Notice: This has no effect, depracated method.";
 
       const keyboard = {
         inline_keyboard: [
@@ -129,7 +129,7 @@ class NetworkStateManager {
       const text =
         "*Select Network* 🌐\n\n" +
         "Choose the blockchain network to use:\n\n" +
-        "_This will affect all blockchain operations._";
+        "_Deprecated: This wont affect any blockchain operations, the Agent now auto picks chains during tasks_";
 
       // We'll place each network in its own row, plus a "Back" row
       const inline_keyboard = buttons.map((b) => [b]);

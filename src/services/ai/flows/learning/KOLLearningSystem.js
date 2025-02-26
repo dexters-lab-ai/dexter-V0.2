@@ -1,6 +1,4 @@
 import { EventEmitter } from 'events';
-import { twitterService } from '../../../twitter/index.js';
-import { ErrorHandler } from '../../../../core/errors/index.js';
 import { db } from '../../../../core/database.js';
 
 export class KOLLearningSystem extends EventEmitter {

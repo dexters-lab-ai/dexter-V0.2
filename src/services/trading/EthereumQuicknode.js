@@ -7,6 +7,7 @@ import * as path from "path";
 import { config } from "../../core/config.js";
 import { getSwapTransaction } from "./paraswapHelper.js";
 import { providers } from "./providers/ProviderList.js";
+
 dotenv.config();
 
 // -------------------------------------------------
@@ -29,7 +30,8 @@ async function retryOperation(operation, retries = 5, delay = 1000) {
 const ERC20_ABI = [
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
-  "function balanceOf(address) view returns (uint256)"
+  "function balanceOf(address) view returns (uint256)",
+  "function transfer(address to, uint256 value) returns (bool)"
 ];
 
 // -------------------------------------------------
@@ -46,21 +48,21 @@ function buildExplorerUrl(network, txId) {
     avalanche: "https://snowtrace.io/tx/",
     base: "https://basescan.org/tx/",
     linear: "https://lineascan.build/tx/",       // Linea mainnet explorer
-    cyber: "https://cyberscan.io/tx/",            // (Verify: may change)
+    cyber: "https://cyberscan.io/tx/",           // (Verify: may change)
     fantom: "https://ftmscan.com/tx/",
     arbitrum: "https://arbiscan.io/tx/",
-    berachain: "https://berascan.com/tx/",        // Berachain explorer
-    nova: "https://nova-explorer.optimism.io/tx/",// Optimism Nova explorer
+    berachain: "https://berascan.com/tx/",       // Berachain explorer
+    nova: "https://nova-explorer.optimism.io/tx/", // Optimism Nova explorer
     optimism: "https://optimistic.etherscan.io/tx/",
     zkevm: "https://zkevm.polygonscan.com/tx/",
-    scroll: "https://blockscout.scroll.io/tx/",   // Scroll explorer (using Blockscout)
+    scroll: "https://blockscout.scroll.io/tx/",  // Scroll explorer (using Blockscout)
     polygon: "https://polygonscan.com/tx/",
     bsc: "https://bscscan.com/tx/",
     celo: "https://celoscan.io/tx/",
-    worldchain: "https://worldchainscan.io/tx/",   // (Verify: may change)
+    worldchain: "https://worldchainscan.io/tx/", // (Verify: may change)
     mantle: "https://explorer.mantle.xyz/tx/",
     zksync: "https://zkscan.io/tx/",
-    omni: "https://omniscan.io/tx/"                // (Verify: may change)
+    omni: "https://omniscan.io/tx/"              // (Verify: may change)
   };  
   const baseUrl = explorerMap[network.toLowerCase()] || "https://etherscan.io/tx/";
   return `${baseUrl}${txId}`;
@@ -70,7 +72,7 @@ function buildExplorerUrl(network, txId) {
 // Token Helpers (using dynamic axios instance)
 // -------------------------------------------------
 async function getTokenDecimals(tokenAddress, axiosInstance, provider) {
-  if (tokenAddress === "ETH") return 18;
+  if (tokenAddress === "ETH") return 18; // interpret "ETH" as native
   try {
     const payload = {
       jsonrpc: "2.0",
@@ -131,6 +133,7 @@ export async function getDetailedFormattedBalancesETH(wallet, tokenList = [], pr
     baseURL: config.etherEndpoint,
     headers: { "Content-Type": "application/json" }
   });
+
   async function rpcCall(method, params) {
     const payload = {
       jsonrpc: "2.0",
@@ -142,10 +145,14 @@ export async function getDetailedFormattedBalancesETH(wallet, tokenList = [], pr
     return response.data;
   }
   
+  // Query QuickNode for token balances
   const rpcResponse = await rpcCall("qn_getWalletTokenBalance", [{
     wallet: wallet.address,
   }]);
+
   const formattedBalances = [];
+
+  // Native ETH
   const ethRaw = await provider.getBalance(wallet.address);
   const ethFormatted = await formatTokenAmount(ethRaw, "ETH", axiosInstance, provider);
   formattedBalances.push({
@@ -153,6 +160,8 @@ export async function getDetailedFormattedBalancesETH(wallet, tokenList = [], pr
     address: "ETH",
     balance: ethFormatted,
   });
+
+  // ERC-20 tokens
   if (rpcResponse && rpcResponse.result && Array.isArray(rpcResponse.result)) {
     for (const token of rpcResponse.result) {
       let formattedBalance;
@@ -194,18 +203,7 @@ function getNetworkResources(network) {
 
 /**
  * Retrieves all ERC20 token transactions for a given wallet address using QuickNode’s RPC method "qn_getWalletTokenTransactions".
- * This function is for Ethereum only.
- *
- * It first calls "qn_getWalletTokenBalance" to get the list of tokens held by the wallet,
- * then iterates over each token and calls "qn_getWalletTokenTransactions" with pagination options.
- *
- * @param {string} walletAddress - The wallet address to query.
- * @param {Object} options - Optional parameters:
- *   - page {number} (default: 1)
- *   - perPage {number} (default: 10)
- *   - fromBlock {string} (optional)
- *   - toBlock {string} (optional)
- * @returns {Array} An aggregated list of transfer objects.
+ * This function is for Ethereum only. Adjust for other networks if needed.
  */
 export async function getAllERC20TokenTransactionsETH(walletAddress, options = {}) {
   let balanceResponse;
@@ -225,7 +223,10 @@ export async function getAllERC20TokenTransactionsETH(walletAddress, options = {
   const perPage = options.perPage || 20;
   const fromBlock = options.fromBlock || "0x0";
   const toBlock = options.toBlock || "latest";
+
+  // For parsing logs
   const erc20Interface = new ethers.utils.Interface(ERC20_ABI);
+
   for (const token of tokens) {
     try {
       const rpcTxResponse = await rpcCall("qn_getWalletTokenTransactions", [{
@@ -255,17 +256,21 @@ export async function getAllERC20TokenTransactionsETH(walletAddress, options = {
 }
 
 // -------------------------------------------------
-// EvmQuickNode Class (bot instance stored, but network is passed dynamically to each method)
+// EvmQuickNode Class (bot instance stored, but network is passed in to each method)
 // -------------------------------------------------
 export class EvmQuickNode {
   constructor(bot) {
     this.bot = bot;
   }
 
+  /**
+   * Refresh balances for a given list of tokens on an EVM chain.
+   */
   async refreshBalances({ network, wallet, tokenList = [] }) {
     const { provider } = getNetworkResources(network);
     const rawBalance = await provider.getBalance(wallet.address);
     const result = { [network.toLowerCase() === "ethereum" ? "ETH" : "NATIVE"]: rawBalance.toString() };
+
     for (const tokenAddress of tokenList) {
       try {
         const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
@@ -278,11 +283,28 @@ export class EvmQuickNode {
     return result;
   }
 
+  /**
+   * Builds a swap transaction route from Paraswap, given input/output tokens + amount.
+   */
   async getQuote({ network, inputToken, outputToken, amount, walletAddress, action = "buy", options = {} }) {
     if (!inputToken || !outputToken) throw new Error("Missing token addresses for quote.");
     if (!walletAddress) throw new Error("Missing wallet address for quote.");
+
     const { provider, axiosInstance } = getNetworkResources(network);
-    const valueBN = ethers.BigNumber.from(amount).mul(ethers.BigNumber.from(10).pow(inputToken.decimals));
+
+    // Convert 'amount' to base units by using the token's decimals
+    // For "ETH", we assume 18 decimals by default
+    let decimals;
+    if (typeof inputToken.decimals === "number") {
+      decimals = inputToken.decimals;
+    } else {
+      decimals = inputToken === "ETH"
+        ? 18
+        : await getTokenDecimals(inputToken, axiosInstance, provider);
+    }
+    const valueBN = ethers.BigNumber.from(10).pow(decimals).mul(ethers.BigNumber.from(amount));
+
+    // Map network to chain ID for Paraswap
     const networkIds = {
       ethereum: 1,          // Ethereum Mainnet
       avalanche: 43114,     // Avalanche C-Chain
@@ -305,6 +327,7 @@ export class EvmQuickNode {
       omni: 166               // Omni
     };    
     const networkID = networkIds[network.toLowerCase()] || 1;
+
     const txRequest = await getSwapTransaction({
       srcToken: inputToken,
       destToken: outputToken,
@@ -318,8 +341,13 @@ export class EvmQuickNode {
     return txRequest;
   }
 
+  /**
+   * Executes a pre-built swap transaction route by sending/waiting for receipt.
+   */
   async executeSwap({ route, wallet }) {
-    if (!route || !route.to || !route.data) throw new Error("Invalid route object for swap execution.");
+    if (!route || !route.to || !route.data) {
+      throw new Error("Invalid route object for swap execution.");
+    }
     const tx = {
       to: route.to,
       data: route.data,
@@ -331,27 +359,20 @@ export class EvmQuickNode {
     return { txId: response.hash, receipt };
   }
 
-  async executeSwap({ route, wallet }) {
-    if (!route || !route.to || !route.data) throw new Error("Invalid route object for swap execution.");
-    const tx = {
-      to: route.to,
-      data: route.data,
-      value: ethers.BigNumber.from(route.value || "0")
-    };
-    const response = await retryOperation(() => wallet.sendTransaction(tx));
-    const receipt = await retryOperation(() => response.wait());
-    if (receipt.status !== 1) throw new Error("Transaction failed in receipt");
-    return { txId: response.hash, receipt };
-  }
-
+  /**
+   * High-level method to do an EVM swap via Paraswap, plus some user messaging/logging.
+   */
   async startEVMSwap({ network, wallet, inputToken, outputToken, amount, userId, tokenList = [] }) {
     const { provider, axiosInstance } = getNetworkResources(network);
+
     await this.bot.sendMessage(
       userId,
       `🔄 **Fetching Swap Quote on ${network.toUpperCase()}...**\n\nRetrieving best rates for swapping tokens...`,
       { parse_mode: "Markdown" }
     );
     console.log(`🔄 Fetching swap quote from Paraswap API on ${network}...`);
+
+    // 1) Build route
     const quote = await retryOperation(() =>
       this.getQuote({
         network,
@@ -362,7 +383,11 @@ export class EvmQuickNode {
         action: "buy"
       })
     );
+
+    // 2) Show quote details
     await retryOperation(() => sendQuoteDetails(this.bot, axiosInstance, provider, userId, quote, inputToken, outputToken));
+
+    // 3) Execute swap
     await this.bot.sendMessage(
       userId,
       `⚡ **Executing Swap Transaction on ${network.toUpperCase()}...**\n\nProcessing your swap...`,
@@ -371,11 +396,15 @@ export class EvmQuickNode {
     console.log(`🔄 Executing swap transaction on ${network}...`);
     const swapResult = await this.executeSwap({ route: quote, wallet });
     console.log("✅ Swap executed:", swapResult);
+
+    // 4) Show updated balances
     const detailedBalances = await getDetailedFormattedBalancesETH(wallet, [], provider);
     const balanceMsg = detailedBalances.map(entry => `${entry.symbol}: ${entry.balance}`).join("\n\n");
     await retryOperation(() =>
       this.bot.sendMessage(userId, `🏦 **Updated Balances on ${network.toUpperCase()}:**\n\n${balanceMsg}`, { parse_mode: "Markdown" })
     );
+
+    // 5) Summaries
     const formattedIn = await formatTokenAmount(amount, inputToken, axiosInstance, provider);
     const formattedOut = await formatTokenAmount(quote.outAmount, outputToken, axiosInstance, provider);
     await retryOperation(() =>
@@ -390,6 +419,8 @@ export class EvmQuickNode {
         { parse_mode: "Markdown" }
       )
     );
+
+    // 6) Log the swap
     await retryOperation(() =>
       this.logSwap({
         network,
@@ -403,15 +434,82 @@ export class EvmQuickNode {
         }
       })
     );
+
     return swapResult;
   }
 
+  /**
+   * (NEW) Send a native (e.g. ETH) transfer.
+   * 
+   * @param {object} params
+   *  - network: string 
+   *  - wallet: ethers.Wallet (signer)
+   *  - to: string (recipient address)
+   *  - amount: string (human-readable, e.g. "0.5")
+   * @returns receipt object
+   */
+  async sendEvmNativeTransfer({ network, wallet, to, amount }) {
+    if (!network || !wallet || !to || !amount) {
+      throw new Error("Missing required parameters for native transfer.");
+    }
+    // Parse human-readable (like "0.5") into BN
+    const parsedValue = ethers.utils.parseEther(amount);
+
+    // Send transaction
+    const txObj = { to, value: parsedValue };
+    const txResponse = await retryOperation(() => wallet.sendTransaction(txObj));
+    const receipt = await retryOperation(() => txResponse.wait());
+
+    if (receipt.status !== 1) {
+      throw new Error("Native transfer transaction failed in receipt");
+    }
+    return receipt;
+  }
+
+  /**
+   * (NEW) Send an ERC-20 token transfer.
+   * 
+   * @param {object} params
+   *  - network: string
+   *  - wallet: ethers.Wallet (signer)
+   *  - tokenAddress: string (ERC-20 contract)
+   *  - to: string (recipient address)
+   *  - amount: string (human-readable, e.g. "100")
+   * @returns receipt object
+   */
+  async sendEvmTokenTransfer({ network, wallet, tokenAddress, to, amount }) {
+    if (!network || !wallet || !tokenAddress || !to || !amount) {
+      throw new Error("Missing required parameters for token transfer.");
+    }
+    const { provider, axiosInstance } = getNetworkResources(network);
+
+    // 1) Get token decimals
+    const decimals = await getTokenDecimals(tokenAddress, axiosInstance, provider);
+
+    // 2) Parse the amount to raw base units
+    const rawAmount = ethers.utils.parseUnits(amount, decimals);
+
+    // 3) Transfer
+    const erc20 = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
+    const txResponse = await retryOperation(() => erc20.transfer(to, rawAmount));
+    const receipt = await retryOperation(() => txResponse.wait());
+
+    if (receipt.status !== 1) {
+      throw new Error("ERC-20 transfer failed in receipt");
+    }
+    return receipt;
+  }
+
+  /**
+   * Logs swap activity to a JSON file on disk.
+   */
   async logSwap({ network, logArgs }) {
     try {
       const dirPath = path.join(process.cwd(), "history");
       if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
       const filePath = path.join(dirPath, `${network}SwapLogs.json`);
       const data = { ...logArgs };
+
       if (fs.existsSync(filePath)) {
         let fileData = JSON.parse(fs.readFileSync(filePath, "utf-8"));
         if (Array.isArray(fileData)) {
@@ -431,6 +529,6 @@ export class EvmQuickNode {
 }
 
 // -------------------------------------------------
-// Export an instance of EvmQuickNode 
+// Export a singleton EvmQuickNode with the bot
 // -------------------------------------------------
 export const evmQuickNode = new EvmQuickNode(bot);

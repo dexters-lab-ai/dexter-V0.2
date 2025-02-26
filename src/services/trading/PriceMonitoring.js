@@ -121,7 +121,7 @@ export class PriceMonitoringService {
       }, {});
   
       // Log the final prices map for verification
-      console.log('[PriceMonitoring] Fetched token prices (USD):', prices);
+      // console.log('[PriceMonitoring] Fetched token prices (USD):', prices);
   
       return prices;
     } catch (error) {
@@ -156,10 +156,12 @@ export class PriceMonitoringService {
         }
 
         // Log the comparison for debug
+        /*
         console.log(
           `[PriceMonitoring] Checking alert ID ${alert._id} for token ${alert.tokenAddress}:\n` +
           `  targetPrice=${alert.targetPrice}, currentPrice=${currentPrice}, condition=${alert.condition}`
         );
+        */
 
         const meetsAbove =
           alert.condition === 'above' && currentPrice >= alert.targetPrice;

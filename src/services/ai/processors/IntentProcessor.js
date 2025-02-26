@@ -1,17 +1,11 @@
 import { EventEmitter } from 'events';
-import { Telegraf } from 'telegraf';
-import { networkState } from '../../networkState.js';
 import { ErrorHandler } from '../../../core/errors/index.js';
 import { IntentProcessHandler } from '../handlers/IntentProcessHandler.js';
-import { validateParameters, getParameterConfig, formatParameters } from '../config/parameterConfig.js';
 import { User } from "../../../models/User.js";
 import { config } from '../../../core/config.js';
 import { decrypt } from "../../../utils/encryption.js";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58"; // For Base58 decoding
-
-import { getDefaultProvider, Wallet } from "ethers";
-import { BaseQuickNode } from '../../trading/BaseQuickNode.js';
 
 // Service imports
 import { addressBookService } from '../../addressBook/AddressBookService.js';
@@ -1940,8 +1934,86 @@ export class IntentProcessor extends EventEmitter {
     return await twitterService.startKOLMonitoring(userId, parameters.query, amount);
   }
 
+  async getKOLMonitors(userId) {
+    try {
+      // Retrieve monitors from TwitterService.
+      let monitors = await twitterService.getKOLsMonitored(userId);
+      if (!monitors || monitors.length === 0) {
+        return {
+          success: false,
+          message: "No active KOL monitors found."
+        };
+      }
+  
+      // Convert each monitor into a plain object (strip out Mongoose internals)
+      monitors = monitors.map(monitor => (monitor._doc ? monitor._doc : monitor));
+  
+      // Filter duplicates by normalized handle (remove any leading "@" and lowercase).
+      const uniqueMonitorsMap = new Map();
+      monitors.forEach(monitor => {
+        if (monitor.handle) {
+          const normHandle = monitor.handle.replace(/^@+/, "").toLowerCase();
+          if (!uniqueMonitorsMap.has(normHandle)) {
+            uniqueMonitorsMap.set(normHandle, monitor);
+          }
+        }
+      });
+      const uniqueMonitors = Array.from(uniqueMonitorsMap.values());
+  
+      // Format the results.
+      const formattedMonitors = uniqueMonitors.map(monitor => {
+        // Safely get tweet text.
+        let tweetText = "";
+        if (monitor.lastTweet && typeof monitor.lastTweet.text === "string") {
+          tweetText = monitor.lastTweet.text;
+          if (tweetText.length > 100) {
+            tweetText = tweetText.slice(0, 100) + '...';
+          }
+        }
+        return {
+          handle: monitor.handle,
+          status: monitor.enabled ? 'Active' : 'Inactive',
+          amount: monitor.amount,
+          lastChecked: monitor.lastChecked 
+            ? new Date(monitor.lastChecked).toLocaleString() 
+            : 'Never',
+          lastTweet: monitor.lastTweet && typeof monitor.lastTweet.text === "string"
+            ? {
+                text: tweetText,
+                url: monitor.lastTweet.url || '',
+                createdAt: monitor.lastTweet.createdAt 
+                          ? new Date(monitor.lastTweet.createdAt).toLocaleString() 
+                          : 'Unknown'
+              }
+            : null
+        };
+      });
+  
+      return {
+        success: true,
+        message: "KOL monitors retrieved successfully",
+        monitors: formattedMonitors
+      };
+    } catch (error) {
+      console.error('Error getting KOL monitors:', error);
+      await ErrorHandler.handle(error);
+      return {
+        success: false,
+        message: error.message || "Failed to retrieve KOL monitors"
+      };
+    }
+  }  
+
   async stopKOLMonitoring(userId, handle) {
     return await twitterService.stopKOLMonitoring(userId, handle);
+  }
+
+  async deleteKOLMonitoring(userId, handle) {
+    return await twitterService.deleteKOLMonitor(userId, handle);
+  }
+
+  async deleteKOLMonitoringID(userId, handle) {
+    return await twitterService.deleteKOLMonitorID(userId, handle);
   }
 
   async handleShopifySearch(text) {

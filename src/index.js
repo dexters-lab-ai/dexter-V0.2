@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 
 // Core services
 import { bot } from './core/bot.js';
+import { intentProcessor } from './services/ai/processors/IntentProcessor.js';
 import { unifiedMessenger } from './core/UnifiedMessageHandler.js';
 import { db } from './core/database.js';
 import { rateLimiter } from './core/rate-limiting/RateLimiter.js';
@@ -29,6 +30,7 @@ import { ErrorHandler } from './core/errors/index.js';
 // Learning systems
 import { kolLearningSystem } from './services/ai/flows/learning/KOLLearningSystem.js';
 import { strategyManager } from './services/ai/flows/learning/StrategyManager.js';
+import { twitterService } from './services/twitter/index.js';
 
 // Moralis Web3 SDK
 import Moralis from 'moralis';
@@ -56,6 +58,32 @@ async function cleanup(botInstance) {
   }
 }
 
+// Ngrok tunneling for our Google Cloud
+async function startNgrokTunnel() {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const app = express();
+  const options = {
+    key: fs.readFileSync(path.join(__dirname, '../config/openssl/key.pem')),
+    cert: fs.readFileSync(path.join(__dirname, '../config/openssl/cert.pem'))
+  };
+  const port = process.env.NGROK_PORT || 5050;
+  return new Promise((resolve, reject) => {
+    const server = https.createServer(options, app);
+    server.listen(port, () => {
+      console.log(`✅ Ngrok Server running on http://localhost:${port}`);
+      resolve(server);
+    });
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${port} is already in use.`);
+      } else {
+        console.error('❌ Error setting up Ngrok Tunneling:', err);
+      }
+      reject(err);
+    });
+  });
+}
+
 async function initializeServices() {
   console.log('🔧 Initializing core services...');
 
@@ -63,6 +91,11 @@ async function initializeServices() {
     // Initialize database first
     console.log('📡 Connecting to MongoDB...');
     await db.connect();
+
+    await intentProcessor.initialize();
+
+    // Messenger & Command Registry Setup
+    await unifiedMessenger.initialize();
 
     // Initialize wallet service
     console.log('👛 Initializing wallet service...');
@@ -75,6 +108,7 @@ async function initializeServices() {
     // Initialize Butler Google service    
     console.log('☁️ Initializing Google services...');
     await butlerService.initialize();
+    await startNgrokTunnel();
 
     // Initialize circuit breakers
     console.log('🔌 Setting up circuit breakers...');
@@ -89,8 +123,7 @@ async function initializeServices() {
 
     // Tasks Scheduler    
     await taskScheduler.initialize();
-    // Start the scheduler after initialization
-    taskScheduler.start(); 
+    await taskScheduler.start(); 
 
     // Initialize Moralis    
     await Moralis.start({ apiKey: config.moralisAPIKey});
@@ -99,10 +132,16 @@ async function initializeServices() {
     console.log('🧠 Initializing learning systems...');
     await Promise.all([
       kolLearningSystem.initialize(),
-      strategyManager.initialize()
+      strategyManager.initialize(),
     ]);
 
-    console.log('✅ Core services initialized successfully.');
+    // Price Alerts
+    await priceAlertService.initialize();
+
+    // Twitter KOL & Trench Chatter Monitoring
+    await twitterService.initialize();
+
+    console.log('✅ Core services initialized successfully :)');
   } catch (error) {
     console.error('❌ Error initializing core services:', error);
     throw error;
@@ -116,50 +155,11 @@ async function startAgent() {
     // 1. Initialize core services
     await initializeServices();
 
-    // 2. Messenger & Command Registry Setup
-    await unifiedMessenger.initialize();
-
-    // 4. Start Telegram Bot Polling
-    console.log('🤖 Starting Telegram Interface...');
+    // 2. Start Telegram Bot Polling
+    console.log('🤖 Starting KATZ! Telegram Interface...');
     await bot.startPolling();
 
-    console.log('✅ KATZ AI Agent is up and running!');
-
-    // 5. Extras
-    // Ngrok tunneling for our Google Cloud
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-    try {
-      const app = express();
-      
-      // Reading SSL certificate and key files
-      const options = {
-        key: fs.readFileSync(path.join(__dirname, '../config/openssl/key.pem')),
-        cert: fs.readFileSync(path.join(__dirname, '../config/openssl/cert.pem')),
-      };
-
-      const port = process.env.NGROK_PORT || 5050; // Use environment variable or default to 5050
-
-      // Creating an HTTPS server
-      const server = https.createServer(options, app);
-
-      server.listen(port, () => {
-        console.log(`✅ Ngrok Server running on http://localhost:${port}`);
-      });
-
-      server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-          console.error(`❌ Port ${port} is already in use. Please free the port or use a different one.`);
-        } else {
-          console.error('❌ Error setting up Ngrok Tunneling:', err);
-        }
-        process.exit(1);
-      });
-    } catch (error) {
-      console.error('❌ Error setting up Ngrok Tunneling:', error);
-    }    
-    // Price Alerts
-    await priceAlertService.initialize();
+    console.log('✅ D.A.I.L AI Agent is up and running!');
     
     return bot;
   } catch (error) {

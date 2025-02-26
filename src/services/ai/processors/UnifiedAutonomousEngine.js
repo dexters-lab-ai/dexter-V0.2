@@ -10,12 +10,14 @@ import { LLMSwitcher } from './LLMSwitcher.js';
 import { openAIService } from '../openai.js';
 import { deepSeekService } from '../DeepSeek.js';
 import { ErrorHandler } from '../../../core/errors/index.js';
-import { IntentProcessor } from './IntentProcessor.js';
 import { aiMetricsService } from '../../aiMetricsService.js';
 import { contextManager } from '../ContextManager.js';
 import BitrefillService from "../../bitrefill/BitrefillService.js";
 import WormholeBridgeService from '../../Wormhole/WormholeBridgeService.js';
 import { fallbackMap } from './Fallbacks.js';
+
+let IntentProcessor; // Declare but don't import yet. Fixing circular dependency on runTask. UnifiedAutonomousEngine.js imports IntentProcessor
+// Twitter service imports IntentProcessor and intentProcessor imports it, lets dynamically inject IntentProcessor here to fix it
 
 export class UnifiedAutonomousProcessor extends EventEmitter {
   constructor(bot) {
@@ -26,7 +28,11 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
     this.metrics = aiMetricsService;
     this.bridgeService = new WormholeBridgeService();
     this.bitrefillService = new BitrefillService(bot);
-    this.intentProcessor = new IntentProcessor(bot);
+    // Import dynamically to break circular dependency
+    import('./IntentProcessor.js').then(module => {
+      IntentProcessor = module.IntentProcessor;
+      this.intentProcessor = new IntentProcessor(bot);
+    });
     
     // Use a Map keyed by chat id (or user id) to track cancellations.
     this.userCancellations = new Map();
@@ -591,7 +597,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       Feel free to style with cool minimalistic emojis to make list items more nicer
 
       **Link Formatting Examples from returned data that contain a token address, token symbol, token id(coingecko):**
-      1. ** Format examples per blockchain on how to use token address, wallet address, symbol, token id (from dexscreener or coingecko token results)**
+      1. * Format examples per blockchain on how to use token address, wallet address, symbol, token id (from dexscreener or coingecko token results)*
          
           **Use of Token Addresses:**
         - Ethereum: https://etherscan.io/token/{address}
@@ -637,38 +643,36 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         - Omni: https://omniscan.io/address/{wallet}
         - Solana: https://solscan.io/account/{wallet}
 
-         **DEX Aggregators:**
-          Links to Jump to Chart from results Dextools, Dexscreener, Coingecko results:
+         **Trending Tokens Links**
+          Links to Jump to a dex aggregator website for the token address:
           - DexTools: https://dextools.com/{chain}/{address}
           - DexScreener: https://dexscreener.com/{chain}/{address}
           - Coingecko: https://coingecko.com/en/coins/{id}
-            *Dextools is for Ethereum and Base only*
+            *For dexscreener, use chain or chainId from results, format as lowercase e.g., if chain is 'solana' DexScreener: https://dexscreener.com/solana/HLptm5e6rTgh4EKgDpYFrnRHbjpkMyVdEeREEa2G7rf9*
+
+      2. *formatting examples for Twitter or X links*
+          - https://twitter.com/handle
+          - https://x.com/handle
       
-      2. **Token Price Responses:**
+      **Token Price Responses:**
          - Reply price requests with price, currency symbol only
          - Price range checks should mention price changes only with relevant icons for change direction.
       
-      3. **Result Trimming:**
+      **Result Trimming:**
          - Ensure the results are concise & clean & fun to engage. Summarize a lot! get to the point!   
          - Do not trim or limit handle_address_only_pasted results, list everything from every category: token info, symbol, price changes, volume metrics, holders: bubuys/sells - buyers/sellers, snipers & transactions, tweets & text. Then group reasonably and stylish
          - Do not limit number of Twitter results or tweets, list all tweets but with concise text content. Always include a tweets text!
          - Do not limit the portfolio results, wallet balances results, wallet PNL results, wallet transaction - present it all in categories.
-         - Leave out timestamps if they are nor formatted to human form.
+         - Leave out timestamps if they are not formatted to human form.
       
-      4. **Follow up:**
+      **Follow up:**
       - Suggest logical follow up actions after completing task.
       - Suggest alternative function from list of functions available to you, that can achieve same results upon failure on task, or a rety at least.
       - Never suggest a user do a task manually if you fail, suggest alternative route or just prompt for a retry. 
       - Confirm parameters before retry, if functions require parameters. For example for EVM swaps, wallet & token address & chain & amount
   
-      Present final results to user or call next function needed to complete the user ask. Check if last results have complete data requested in user message.
-      5. **Task completion check:**
-      - Check if task is complete.
-      - If a follow-up function call is needed to fetch more data or call more functions to meet user request, dont type anything but simply respond in this format strictly to trigger the function needed(reference definitions to functions and parameters before use):
-
-      NEXT_FUNCTION: {"name": "the_function_name", "arguments": {"param1": "value1", "param2": "value2"}}
-
-      - Otherwise, proceed to present final results to user.
+      **Task completion check:**
+      - Proceed to present final results to user.
 
       // END OF INSTRUCTIONS
       // CONTEXT BEGINS BELOW
@@ -683,7 +687,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         max_tokens: 500,          // Reduce max tokens for cost saving & response time
         temperature: 0.5,         // Moderate creativity
         top_p: 1,               // Probability distribution, variety to responses
-        frequency_penalty: 1,   // his moderate penalty discourages over‑repetition of specific tokens without suppressing useful repeated keywords in a domain like crypto trading.
+        frequency_penalty: 0.3,   // his moderate penalty discourages over‑repetition of specific tokens without suppressing useful repeated keywords in a domain like crypto trading.
         presence_penalty: 0.1,    // nudges the model to introduce new concepts and examples while still staying on topic—useful when we want varied scenarios and examples
         n: 1,                     // Single response
       });
@@ -1223,6 +1227,9 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         start_flipper_mode: () => this.intentProcessor.startFlipperMode(userId, chatId, args),
         stop_flipper_mode: () => this.intentProcessor.stopFlipperMode(this.bot, userId),
         monitor_kol: () => this.intentProcessor.startKOLMonitoring(userId, args),
+        get_kol_monitor_positions: () => this.intentProcessor.getKOLMonitors(userId),
+        delete_kol_monitor_position: () => this.intentProcessor.deleteKOLMonitoring(userId, args.handle),        
+        delete_kol_monitor_position_by_id: () => this.intentProcessor.deleteKOLMonitoringID(userId, args.id),
         stop_monitor_kol: () => this.intentProcessor.stopKOLMonitoring(userId, args.handle),
         search_products: () => this.intentProcessor.handleShopifySearch(args.query),
         fetch_tweets_for_symbol: () => this.intentProcessor.search_tweets_for_cashtag(userId, args.query),
