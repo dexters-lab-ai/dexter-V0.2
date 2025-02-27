@@ -1,3 +1,5 @@
+// src/services/tasks/TasksService.js
+
 import { EventEmitter } from 'events';
 import Task from "../../models/Task.js";
 import { User } from "../../models/User.js";
@@ -6,6 +8,7 @@ import { autonomousProcessor } from '../ai/processors/UnifiedAutonomousEngine.js
 import { contextManager } from "../ai/ContextManager.js";
 import { bot } from "../../core/bot.js";
 import { queueService } from '../queue/QueueService.js';
+import { generateJobId, createJobPattern } from '../../utils/queueUtils.js';
 
 /**
  * The TasksService handles user-created tasks (one-time or recurring).
@@ -26,6 +29,7 @@ class TasksService extends EventEmitter {
     // Autonomous Processor
     this.autonomousProcessor = autonomousProcessor;
     this.BULL_QUEUE_NAME = 'tasks';
+    this.SERVICE_NAME = 'tasks'; // For job ID standardization
   }
 
   async initialize() {
@@ -53,6 +57,7 @@ class TasksService extends EventEmitter {
 
   /**
    * Creates a Task document in MongoDB, then schedules it with the queue.
+   * Uses a transaction-like pattern to ensure both operations succeed or fail together.
    */
   async createTask({ telegramId, content, dueTime, recurrence = "none", heading }) {
     if (!this.initialized) await this.initialize();
@@ -79,36 +84,53 @@ class TasksService extends EventEmitter {
     }
   
     // 2) Now we can safely convert to a Date:
-    const task = await Task.create({
-      user: user._id,
-      telegramId,
-      heading: heading || undefined,
-      content,
-      dueTime: new Date(dueTime),  // If user passed a date-string or we just built one
-      recurrence
-    });
-  
-    // Schedule the task in Bull
-    await this.scheduleTask(task);
-  
-    this.emit('taskCreated', { taskId: task._id, telegramId });
-    return task;
-  }  
+    let task;
+    let schedulingSuccessful = false;
+    
+    try {
+      // Create the task in MongoDB
+      task = await Task.create({
+        user: user._id,
+        telegramId,
+        heading: heading || undefined,
+        content,
+        dueTime: new Date(dueTime),  // If user passed a date-string or we just built one
+        recurrence
+      });
+      
+      // Schedule the task in Bull
+      await this.scheduleTask(task);
+      schedulingSuccessful = true;
+      
+      this.emit('taskCreated', { taskId: task._id, telegramId });
+      return task;
+    } catch (error) {
+      // If scheduling failed but task was created, delete the task
+      if (task && !schedulingSuccessful) {
+        console.error(`❌ Task created but scheduling failed. Deleting task ${task._id}:`, error);
+        await Task.findByIdAndDelete(task._id);
+      }
+      throw error;
+    }
+  }
 
   /**
    * scheduleTask
    * ------------
    * Decides whether this is a one-time task or recurring,
    * then calls queueService with the appropriate method.
+   * Uses standardized job IDs.
    */
   async scheduleTask(task) {
-    // In case it's in the past, use a 0ms delay (exec ASAP).
+    // In case it's in the past, use a 0ms delay (exec ASAP)
     const now = new Date();
     const delayMs = Math.max(0, task.dueTime.getTime() - now.getTime());
 
     // If it's a one-time task
     if (task.recurrence === "none") {
       // Single run => add a delayed job
+      const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'execute');
+      
       await queueService.addJob(
         this.BULL_QUEUE_NAME,
         {
@@ -117,23 +139,21 @@ class TasksService extends EventEmitter {
         },
         {
           delay: delayMs,
-          jobId: `task_${task._id}`
+          jobId
         }
       );
+      
+      console.log(`✅ Scheduled one-time task ${task._id} with job ID ${jobId}`);
 
     // If it's a daily recurring task
     } else if (task.recurrence === "daily") {
-      // Use a cron pattern for midnight every day => "0 0 * * *"
-      // For the first run, we can do a delayed job if the "dueTime" is in the future.
-      // But to keep it simple: we just add a repeatable job with that cron.
-
-      // We'll do "cron: '0 0 * * *'" for midnight. If we want to handle the 'dueTime' offset
-      // (like 9am daily?), we can parse that from 'task.dueTime'.
       const dateObj = new Date(task.dueTime);
       const hour = dateObj.getHours();
       const minute = dateObj.getMinutes();
       // Build a cron string matching that hour/min daily:
       const dailyCron = `${minute} ${hour} * * *`;
+      
+      const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'daily');
 
       await queueService.addRepeatableJob(
         this.BULL_QUEUE_NAME,
@@ -142,13 +162,17 @@ class TasksService extends EventEmitter {
           taskId: task._id
         },
         { cron: dailyCron },
-        `task_${task._id}_daily`
+        jobId
       );
+      
+      console.log(`✅ Scheduled daily task ${task._id} with job ID ${jobId} (cron: ${dailyCron})`);
 
     // If it's a numeric "interval" in minutes
     } else if (typeof task.recurrence === "number" && task.recurrence > 0) {
       // e.g. every X minutes => "*/X * * * *"
       const intervalCron = `*/${task.recurrence} * * * *`;
+      
+      const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'interval');
 
       await queueService.addRepeatableJob(
         this.BULL_QUEUE_NAME,
@@ -157,8 +181,10 @@ class TasksService extends EventEmitter {
           taskId: task._id
         },
         { cron: intervalCron },
-        `task_${task._id}_interval`
+        jobId
       );
+      
+      console.log(`✅ Scheduled interval task ${task._id} with job ID ${jobId} (cron: ${intervalCron})`);
     }
   }
 
@@ -242,7 +268,7 @@ class TasksService extends EventEmitter {
     const truncatedContent = this.truncateText(task.content ?? '', 50);
     const completionCard = `
   <b>        TASK COMPLETED</b>
-  \n“${truncatedHeading}”
+  \n"${truncatedHeading}"
   \n<i>${truncatedContent}</i>
     `;
     try {
@@ -271,7 +297,6 @@ class TasksService extends EventEmitter {
     return task;
   }
   
-
   /**
    * For backward compatibility: checks if any tasks are due right now, then executes them.
    * Some prefer to rely entirely on Bull's scheduling, but this can remain as a "safety net".
@@ -306,38 +331,37 @@ class TasksService extends EventEmitter {
    * deleteTask
    * ----------
    * Removes the Task from MongoDB and cancels any queued or repeatable jobs.
+   * Uses the new removeJobsByPattern method for more thorough cleanup.
    */
   async deleteTask({ telegramId, taskId }) {
     if (!this.initialized) await this.initialize();
-  
+
     // Log current tasks for debugging
     const userTasks = await Task.find({ telegramId }).exec();
     console.log(`📝 Found ${userTasks.length} tasks for user ${telegramId}:`);
     userTasks.forEach(t => {
       console.log(`  - TaskID: ${t._id}, Heading: "${t.heading}", DueTime: ${t.dueTime}, Status: ${t.status}`);
     });
-  
+
     // Delete the task document from MongoDB
     const task = await Task.findOneAndDelete({ telegramId, _id: taskId }).exec();
     if (!task) {
       throw new Error(`Task with id ${taskId} not found for user ${telegramId}.`);
     }
-  
-    // Remove scheduled jobs depending on task recurrence
-    if (task.recurrence === "none") {
-      // One-time task
-      await queueService.removeJob(this.BULL_QUEUE_NAME, `task_${taskId}`);
-    } else if (task.recurrence === "daily") {
-      // Daily recurring task
-      await queueService.removeRepeatableJobById(this.BULL_QUEUE_NAME, `task_${taskId}_daily`);
-    } else if (typeof task.recurrence === "number" && task.recurrence > 0) {
-      // Interval recurring task
-      await queueService.removeRepeatableJobById(this.BULL_QUEUE_NAME, `task_${taskId}_interval`);
+
+    // Remove all associated jobs using the pattern matching
+    try {
+      const jobPattern = createJobPattern(this.SERVICE_NAME, taskId);
+      const removedCount = await queueService.removeJobsByPattern(this.BULL_QUEUE_NAME, jobPattern);
+      console.log(`✅ Removed ${removedCount} jobs matching pattern "${jobPattern}" for task ${taskId}`);
+    } catch (error) {
+      console.error(`Error removing queue jobs for task ${taskId}:`, error);
+      // Continue with deletion even if job removal fails
     }
-  
+
     this.emit('taskDeleted', { taskId, telegramId });
     return task;
-  }  
+  }
 
   /**
    * Cleanup listeners & set back to uninitialized.

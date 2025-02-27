@@ -576,6 +576,16 @@ export class JupiterQuickNode {
           swapResult = await this.executeSwap({ route: quote, wallet });
           console.log('✅ Swap executed:', swapResult);
           
+          // Log values before proceeding with success message
+          console.log('[startJupiterSwap] Before logSwap: ', {
+            inputMint,
+            inAmount: amount,
+            outputMint,
+            outAmount: quote.outAmount,
+            txId: swapResult?.txId,
+            timestamp: new Date().toISOString()
+          });
+          
           // Only proceed with success message if we have a valid swapResult
           if (swapResult && swapResult.txId) {
             await this.sendSwapUpdate(userId, "swap_success", {
@@ -595,22 +605,24 @@ export class JupiterQuickNode {
               timestamp: new Date().toISOString(),
             });
           }
-      
-          // Return a richer result: both the confirmation and the original quote.
-          return {
+          
+          // Log the return object
+          const returnData = {
             confirmation: swapResult?.confirmation,
             expectedOutput: quote.outAmount,
             slippageBps: quote.slippageBps,
             dynamicSlippage: quote.dynamicSlippage,
             txId: swapResult?.txId
           };
-      
+          console.log('[startJupiterSwap] Returning:', returnData);
+          
+          return returnData;
         } catch (error) {
           console.error('❌ Error during swap execution:', error.message);
           await this.sendSwapUpdate(userId, "swap_failed", { errorMessage: error.message });
           throw error;
         }
-    }      
+    }          
 
     async sendSwapUpdate(userId, stage, details = {}) {
         try {

@@ -38,6 +38,15 @@ class TaskScheduler extends EventEmitter {
       this.monitoringQueue.process('checkTasks', async (job) => {
         await this.checkAndScheduleDueTasks();
       });
+      
+      // Monitor job completion and failures
+      this.monitoringQueue.on('completed', (job) => {
+        console.log(`✅ Task monitoring job ${job.id} completed successfully`);
+      });
+
+      this.monitoringQueue.on('failed', (job, error) => {
+        console.error(`❌ Task monitoring job ${job.id} failed:`, error);
+      });
 
       // Initialize tasks service
       await tasksService.initialize();
@@ -66,9 +75,13 @@ class TaskScheduler extends EventEmitter {
         repeat: {
           cron: '* * * * *', // every minute
           tz: 'UTC'
-        }
+        },
+        removeOnComplete: true
       }
     );
+
+    // Clean up stale jobs every hour
+    setInterval(() => this.cleanupStaleJobs(), 20 * 60 * 1000);
 
     console.log('✅ TaskScheduler started with precise minute monitoring');
   }
@@ -159,6 +172,37 @@ class TaskScheduler extends EventEmitter {
       this.monitoringQueue.clean(0, 'completed');
       this.monitoringQueue.clean(0, 'failed');
       console.log('✅ TaskScheduler stopped');
+    }
+  }
+
+  async cleanupStaleJobs() {
+    try {
+      // Get all repeatable jobs
+      const repeatableJobs = await this.monitoringQueue.getRepeatableJobs();
+      
+      // Get current timestamp
+      const now = Date.now();
+      
+      // Find jobs that are more than 1 hour old
+      const staleJobs = repeatableJobs.filter(job => {
+        // Extract timestamp from job key or ID
+        const timestampMatch = job.key.match(/\d{13}/);
+        if (!timestampMatch) return false;
+        
+        const jobTimestamp = parseInt(timestampMatch[0], 10);
+        return now - jobTimestamp > 60 * 60 * 1000; // 1 hour
+      });
+      
+      // Remove stale jobs
+      for (const job of staleJobs) {
+        await this.monitoringQueue.removeRepeatableByKey(job.key);
+        console.log(`🧹 Removed stale job with key: ${job.key}`);
+      }
+      
+      return staleJobs.length;
+    } catch (error) {
+      console.error('❌ Error cleaning up stale jobs:', error);
+      return 0;
     }
   }
 

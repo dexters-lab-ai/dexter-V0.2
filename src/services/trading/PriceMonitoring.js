@@ -18,7 +18,7 @@ export class PriceMonitoringService {
     this.priceAlertService = priceAlertService;
 
     // How often to poll, in milliseconds
-    this.alertCheckInterval = 60000; // 1 minute
+    this.alertCheckInterval = 300000; // 1 minute
 
     // Will hold the setInterval() ID so we can stop monitoring
     this.monitoringIntervalId = null;
@@ -36,14 +36,7 @@ export class PriceMonitoringService {
       return;
     }
 
-    // Optionally run one check immediately on startup
-    this.monitorPrices();
-
-    // Then schedule repeated checks
-    this.monitoringIntervalId = setInterval(() => {
-      this.monitorPrices();
-    }, this.alertCheckInterval);
-
+    
     console.log(`[PriceMonitoring] Started polling every ${this.alertCheckInterval} ms`);
   }
 
@@ -156,12 +149,10 @@ export class PriceMonitoringService {
         }
 
         // Log the comparison for debug
-        /*
         console.log(
           `[PriceMonitoring] Checking alert ID ${alert._id} for token ${alert.tokenAddress}:\n` +
           `  targetPrice=${alert.targetPrice}, currentPrice=${currentPrice}, condition=${alert.condition}`
         );
-        */
 
         const meetsAbove =
           alert.condition === 'above' && currentPrice >= alert.targetPrice;

@@ -4,7 +4,6 @@ import { ApifyClient } from 'apify-client';
 import { User } from '../../models/User.js';
 import { TweetCache } from '../../models/TweetCache.js'; 
 import { tradeService } from '../trading/TradeService.js';
-import { intentProcessor } from '../ai/processors/IntentProcessor.js';
 import { ErrorHandler } from '../../core/errors/index.js';
 import { config } from '../../core/config.js';
 import { queueService } from '../queue/QueueService.js';
@@ -63,6 +62,23 @@ class TwitterService extends EventEmitter {
     this.activeMonitors = new Map();
     this.initialized = false;
     this.swapController = new SwapController(bot);
+
+     // Initialize intentProcessor as null
+    this._intentProcessor = null;
+  }
+
+  get intentProcessor() {
+    if (!this._intentProcessor) {
+      try {
+        // Dynamic import to avoid circular dependency
+        const { intentProcessor } = import('../ai/processors/IntentProcessor.js');
+        this._intentProcessor = intentProcessor;
+      } catch (error) {
+        console.error("Failed to load intentProcessor:", error);
+        throw new Error("Failed to load intentProcessor. This is a critical dependency.");
+      }
+    }
+    return this._intentProcessor;
   }
 
   async initialize() {
@@ -152,7 +168,7 @@ class TwitterService extends EventEmitter {
   async _scheduleKOLMonitorJob(userId, handle, amount) {
     const jobId = `kolMonitor:${userId}:${handle}`;
     try {
-      const intervalMs = 15 * 60 * 1000; // Every 15 minutes
+      const intervalMs = 30 * 60 * 1000; // Every 15 minutes
       await queueService.addRepeatableJob(
         'kolMonitor',
         { userId, handle, amount },
@@ -193,15 +209,37 @@ class TwitterService extends EventEmitter {
   async deleteKOLMonitor(userId, handle) {
     try {
       handle = handle.replace(/^@+/, "").trim();
+      
+      // First, update the user document
       await User.updateOne(
         { telegramId: userId.toString() },
         { $pull: { 'settings.kol.monitors': { handle } } },
         { runValidators: false }
       );
+      
+      // Then, remove the job from the queue
       const jobId = `kolMonitor:${userId}:${handle}`;
-      await queueService.removeRepeatableJobById('kolMonitor', jobId);
-      this.activeMonitors.delete(jobId);
-      console.log(`✅ Deleted KOL monitor => @${handle} (user: ${userId})`);
+      try {
+        // Remove the repeatable job
+        await queueService.removeRepeatableJobById('kolMonitor', jobId);
+        
+        // Also check for any active jobs with this ID pattern
+        const kolQueue = queueService.getQueue('kolMonitor');
+        const activeJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
+        for (const job of activeJobs) {
+          if (job.data && job.data.handle === handle && job.data.userId === userId) {
+            await job.remove();
+            console.log(`Removed additional job ${job.id} for KOL monitor ${handle}`);
+          }
+        }
+        
+        this.activeMonitors.delete(jobId);
+        console.log(`✅ Deleted KOL monitor => @${handle} (user: ${userId})`);
+      } catch (queueError) {
+        console.error(`❌ Error removing queue job for KOL monitor ${handle}:`, queueError);
+        // Continue with deletion even if job removal fails
+      }
+      
       return { success: true, message: `Deleted monitor => @${handle}` };
     } catch (error) {
       console.error(`❌ Error deleting => @${handle}`, error);
@@ -297,7 +335,7 @@ class TwitterService extends EventEmitter {
             if (!latestTweet) {
               const input = {
                 cookies: [config.apifyCookieToken],
-                maxItems: 100,
+                maxItems: 50,
                 searchTerms: [`from:${normalizedHandle}`],
                 sortBy: "Latest"
               };
@@ -346,7 +384,6 @@ class TwitterService extends EventEmitter {
     }
   }
   
-  
   // --- checkNewTweets ---
   async checkNewTweets(userId, handle, amount) {
     try {
@@ -366,53 +403,65 @@ class TwitterService extends EventEmitter {
         return { success: false, message: 'Monitor not found or disabled' };
       }
 
-      // Determine the reference time. Use monitor.lastChecked (if available) or default to 8 hours ago.
-      let sinceTime = monitor.lastChecked ? Date.parse(monitor.lastChecked) : (Date.now() - 1 * 3600 * 1000);      
-      //let sinceTime = (Date.now() - 3 * 3600 * 1000);
-      if (isNaN(sinceTime)) {
-        // Fallback: 8 hours ago if stored lastChecked is invalid.
-        sinceTime = Date.now() - 3 * 3600 * 1000;
+      // Determine the reference time. Use monitor.lastChecked (if available) or default to 1 hour or 30mins ago.
+      // Ensure we're working with UTC time consistently
+      let sinceTime;
+      if (monitor.lastChecked) {
+        // Convert to UTC milliseconds
+        sinceTime = new Date(monitor.lastChecked).getTime();
+        console.warn(' v v v v v System time used')
+      } else {
+        // Default to 1 hour ago in UTC
+        sinceTime = Date.now() - 1 * 3600 * 1000;
       }
+      
+      if (isNaN(sinceTime)) {
+        // Fallback: 30mins ago if stored lastChecked is invalid.
+        sinceTime = Date.now() - (30 * 60 * 1000);
+      }
+      
       console.log(`[checkNewTweets] Reference time (sinceTime): ${new Date(sinceTime).toUTCString()}`);
 
       // First try to use the DB cache.
-      const cached = await this._getCachedTweets(handle, 10);
+      const cached = await this._getCachedTweets(handle, 25);
       let newTweets = [];
       if (cached) {
         newTweets = cached.items.filter(t => {
+          // Parse the tweet date consistently in UTC
           const reordered = reorderTweetDate(t.createdAt);
           const tweetTime = Date.parse(reordered);
-          /*
-          console.log(
-            `[checkNewTweets] (Cache) Tweet id=${t.id} orig="${t.createdAt}" reordered="${reordered}" ` +
-            `parsed=${!isNaN(tweetTime) ? new Date(tweetTime).toUTCString() : 'INVALID'} ` +
-            `sinceTime="${new Date(sinceTime).toUTCString()}"`
-          );
-          */
           return !isNaN(tweetTime) && tweetTime > sinceTime;
         });
+        
         console.log(`Found ${newTweets.length} new tweets in DB cache for handle=${handle}`);
+        
         for (const tweet of newTweets) {
           await this.processTweet(userId, tweet, amount || monitor.amount);
         }
-        // Update lastChecked using the latest tweet from cache.
+        
+        // Update lastChecked using the latest tweet from cache, or current time if no new tweets
         if (newTweets.length > 0) {
+          // Find the most recent tweet time
           const maxTweetTime = newTweets.reduce((max, t) => {
             const tTime = Date.parse(reorderTweetDate(t.createdAt));
             return tTime > max ? tTime : max;
           }, sinceTime);
+          
+          // Store the time in UTC
           await this._updateMonitorLastChecked(userId, handle, new Date(maxTweetTime));
           console.log(`Updated lastChecked to ${new Date(maxTweetTime).toUTCString()}`);
         } else {
+          // If no new tweets, update to current time in UTC
           await this._updateMonitorLastChecked(userId, handle, new Date());
         }
+        
         return { success: true, message: `DB Cache processed ${newTweets.length} tweets` };
       }
 
       // If no valid cache, fetch from Apify.
       const input = {
         cookies: [config.apifyCookieToken],
-        maxItems: 100,
+        maxItems: 50,
         searchTerms: [`from:${handle}`],
         sortBy: 'Latest'
       };
@@ -439,7 +488,7 @@ class TwitterService extends EventEmitter {
       });
       //console.log(`✅ Found ${newTweets.length} new tweets after filtering`);
 
-      // Process each new tweet.
+      // Process each new tweet to find a CA, we could expand this to look for keywords like 'stay away' 'scam' 'rug' 'don't'
       for (const tweet of newTweets) {
         await this.processTweet(userId, tweet, amount || monitor.amount);
       }
@@ -473,52 +522,73 @@ class TwitterService extends EventEmitter {
   async processTweet(userId, tweet, amount, networkOverride) {
     //console.log(`[processTweet] => Processing tweet: ${JSON.stringify(tweet)}`);
     try {
+      // First, check if the tweet contains any negative keywords
+      const negativeKeywords = [
+        "stay away",
+        "scam",
+        "rug",
+        "don't",
+        "fraud",
+        "warning",
+        "sell off",
+        "dump" // add as needed
+      ];
+      const tweetTextLower = tweet.text.toLowerCase();
+      const hasNegativeKeyword = negativeKeywords.some(kw => tweetTextLower.includes(kw));
+      if (hasNegativeKeyword) {
+        console.log(`[processTweet] Negative signal detected in tweet id=${tweet.id}. Skipping trade execution.`);
+        return;
+      }
+  
       const tokenInfo = this.extractTokenInfo(tweet.text);
       if (!tokenInfo) return;
-      
+  
       const { symbol, address } = tokenInfo;
       console.log(`[processTweet] Found token => symbol=${symbol}, address=${address}`);
-      
+  
       const networkObj = networkOverride || (await intentProcessor.getTokenNetwork(address));
       if (!networkObj) {
         console.warn(`No network recognized for token => ${address}`);
         return;
       }
-      const { network, tokenData } = networkObj;
-      
+      const { network } = networkObj;
+  
       const walletObj = await this._getWalletForTrade(userId, network);
       if (!walletObj) {
         console.warn(`No wallet found for user=${userId} on network=${network}`);
         return;
       }
-      
-      // For now we only buy.
+  
+      // For now we only execute a "buy"
       const action = 'buy';
-      // Construct trade parameters. (Modify as needed to match your swap controller.)
       const tradeParams = {
         amount: amount,
-        outputMint: address,  // Token being bought.
+        outputMint: address, // Token being bought.
         inputMint: action === "buy"
           ? "So11111111111111111111111111111111111111112" // Native SOL mint
           : address,
         wallet: walletObj.address
       };
   
-      // Execute the trade using your swap controller.
+      // Execute the swap trade.
       const swapResult = await this.swapController.swapTokens(userId, tradeParams);
       console.log(`[processTweet] Swap result: ${JSON.stringify(swapResult, null, 2)}`);
-      this.emit('kolTrade', { userId, symbol, address, network, amount, tweet: tweet.url });
   
-      // Format numbers and slippage values for the message.
-      // (Adjust these formatting functions or values to your needs.)
+      // (Optional) Log the key parameters before passing to logSwap if needed.
+      console.log(`[processTweet] Logging parameters for logSwap:
+        inputToken: ${address},
+        inAmount: ${amount},
+        outputToken: ${address}, 
+        outAmount: ${swapResult.expectedOutput},
+        txId: ${swapResult.txId},
+        timestamp: ${new Date().toISOString()}
+      `);
+  
+      // Format output details for user message.
       const formattedInput = parseFloat(amount).toFixed(4) + " SOL";
       const formattedOutput = swapResult.expectedOutput ? swapResult.expectedOutput.toFixed(4) + " " + symbol : "N/A";
-      const slippageInfo = swapResult.slippageBps
-        ? `${swapResult.slippageBps} bps`
-        : "N/A";
-      const dynamicSlippage = swapResult.dynamicSlippage
-        ? `${swapResult.dynamicSlippage.minBps}-${swapResult.dynamicSlippage.maxBps} bps`
-        : "N/A";
+      const slippageInfo = swapResult.slippageBps ? `${swapResult.slippageBps} bps` : "N/A";
+      const dynamicSlippage = swapResult.dynamicSlippage ? `${swapResult.dynamicSlippage.minBps}-${swapResult.dynamicSlippage.maxBps} bps` : "N/A";
       const nowFormatted = new Date().toLocaleString();
   
       // Craft the message for the user.
@@ -537,11 +607,11 @@ class TwitterService extends EventEmitter {
   
       // Send the message to the user.
       await bot.sendMessage(userId, message, { parse_mode: "Markdown" });
-      
+  
     } catch (err) {
       await ErrorHandler.handle(err);
     }
-  }
+  }  
   
   /**
    * 
@@ -854,7 +924,7 @@ class TwitterService extends EventEmitter {
       const input = {
         customMapFunction: "(object) => { return {...object} }",
         includeSearchTerms: true,
-        maxItems: 1000,
+        maxItems: 500,
         minimumFavorites: 0,
         minimumReplies: 0,
         minimumRetweets: 0,
