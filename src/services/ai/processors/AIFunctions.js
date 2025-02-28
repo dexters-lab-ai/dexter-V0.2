@@ -233,6 +233,7 @@ export const AIFunctions = [
         description: `
           Swap tokens on Solana using Jupiter. 
           Retrieve User's Solana wallet from get_portfolio function first.
+          Retrieve token address to sell or buy from user wallet balances or context results.
           Provide a valid wallet address, the input SPL mint, the output SPL mint, 
           and the amount in normals decimals for example: 0.01 SOL, 2.45 SOL, 1.23 ETH, 10 USDC, 150000 SNAI
         `,
@@ -867,37 +868,7 @@ export const AIFunctions = [
               required: ["alertId"]
           }
       },  
-  
-      // Timed Orders
-      {
-        name: "create_timed_order",
-        description: "Create a timed or conditional token order.",
-        parameters: {
-          type: "object",
-          properties: {
-            tokenAddress: { type: "string", description: "Token contract address." },
-            action: { type: "string", enum: ["buy", "sell"], description: "Order action." },
-            amount: { type: "string", description: "Amount to order." },
-            executeAt: { type: "string", format: "date-time", description: "Execution time." },
-            orderType: {
-              type: "string",
-              enum: ["standard", "limit", "stop", "trailing", "multi", "chain", "conditional"],
-              description: "Order type."
-            },
-            conditions: {
-              type: "object",
-              properties: {
-                limitPrice: { type: "number", description: "Limit price for the order." },
-                stopPrice: { type: "number", description: "Stop price for the order." },
-                trailAmount: { type: "number", description: "Trailing amount." },
-                targetPrice: { type: "number", description: "Target price to trigger the order." }
-              }
-            }
-          },
-          required: ["tokenAddress", "action", "amount", "executeAt"]
-        }
-      },
-  
+
       // Flipper Mode
       {
           name: "start_flipper_mode",
@@ -983,7 +954,7 @@ export const AIFunctions = [
           required: ["handle"]
         }
       },
-
+      /*
       {
         name: "delete_kol_monitor_position_by_id",
         description: "Delete KOL monitor position for a user using the Mangoose DB Id",
@@ -994,7 +965,7 @@ export const AIFunctions = [
           required: ["id"]
         }
       },
-  
+      */
       {
           name: "stop_monitor_kol",
           description: "Stop monitoring KOL tweets for trading signals",

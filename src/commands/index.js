@@ -6,7 +6,6 @@ import { ProfileCommand } from './profile/ProfileCommand.js';
 import { TrendingCommand } from './trending/TrendingCommand.js';
 import { ScanCommand } from './scan/ScanCommand.js';
 import { GemsCommand } from './scan/GemsCommand.js';
-import { TimedOrdersCommand } from './timedOrders/TimedOrdersCommand.js';
 import { PriceAlertsCommand } from './alerts/PriceAlertsCommand.js';
 import { PumpFunCommand } from './pumpfun/PumpFunCommand.js';
 import { WalletsCommand } from './wallets/WalletsCommand.js';
@@ -25,7 +24,6 @@ export async function setupCommands(bot) {
     new TrendingCommand(bot, eventHandler),
     new ScanCommand(bot, eventHandler),
     new GemsCommand(bot, eventHandler),
-    new TimedOrdersCommand(bot, eventHandler),
     new PriceAlertsCommand(bot, eventHandler),
     new PumpFunCommand(bot, eventHandler),
     new WalletsCommand(bot),

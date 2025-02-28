@@ -51,14 +51,9 @@ export class SwapController {
   
       // 4. Check if already unencrypted (Base58 or hex) or if we need to decrypt
       let needsDecryption = true;
-      // - 44-char base58 typical for Solana
       const isBase58 = (key.length === 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(key));
-      // - 128-char hex
       const isHex128 = (key.length === 128 && /^[0-9a-fA-F]+$/.test(key));
-  
-      if (isBase58 || isHex128) {
-        needsDecryption = false;
-      }
+      if (isBase58 || isHex128) { needsDecryption = false; }
   
       const processedKey = needsDecryption ? decrypt(key) : key;
       if (!processedKey) throw new Error("Failed to decrypt private key.");
@@ -77,8 +72,8 @@ export class SwapController {
       const walletBalance = await this.jupiterQuickNode.solanaConnection.getBalance(wallet.publicKey);
       const readableBalance = (walletBalance / LAMPORTS_PER_SOL).toFixed(5);
       const MIN_BALANCE_THRESHOLD = 0.0008; // in SOL
-  
       if (walletBalance < MIN_BALANCE_THRESHOLD * LAMPORTS_PER_SOL) {
+        console.log(' * * insufficient balance * * ', + walletBalance );
         throw new Error(
           `Insufficient SOL balance to cover transaction fees. ` +
           `At least ${MIN_BALANCE_THRESHOLD.toFixed(5)} SOL required, ` +
@@ -86,7 +81,7 @@ export class SwapController {
         );
       }
   
-      // 8. Convert the human-readable amount (e.g., "0.005") to smallest unit.
+      // 8. Convert the human-readable amount to smallest unit.
       params.amount = await convertToSmallestUnit(
         params.amount,
         params.inputMint,
@@ -109,7 +104,7 @@ export class SwapController {
         userId,
       });
   
-      // 11. On success
+      // 11. On success, send a sticker (which is not deleted) and then a text follow‑up that gets deleted.
       await this.sendTransactionUpdate(userId, "swap_success", {
         amount: params.amount,
         inputMint: params.inputMint,
@@ -117,15 +112,16 @@ export class SwapController {
         explorerLink: swapResult.txId,
       });
       
-      return { swapResult };
+      return swapResult;
     } catch (error) {
       console.error('❌ Error during token swap:', error.message);
       await this.sendTransactionUpdate(userId, "error", { errorMessage: error.message });
-      throw new Error('Failed to complete swap.');
+      throw new Error('Failed to complete swap: Jupiter says, ' + error);
     }
   }
-
+  
   async sendTransactionUpdate(userId, stage, details = {}) {
+    // Define messages for each stage
     const messages = {
       start: "🔄 **Initiating Swap...**\n\n🧑‍💻 Please wait...",
       fetch_wallet: "🔍 **Fetching Wallet Details**\n\n🔑 Retrieving your encrypted private key...",
@@ -133,15 +129,15 @@ export class SwapController {
       wallet_ready: `✅ **Wallet Reconstructed!**\n\n🔹 Public Key: \`${details.publicKey}\``,
       swap_processing: `💱 **Constructing Swap...**\n\n🔄 Swapping **${details.amount}** tokens from **${details.inputMint}** to **${details.outputMint}**.\n\n⏳ Please wait while we execute the transaction.`,
       error: `🚨 **Swap Flopped!**\n\n⚠️ Here's why: ${details.errorMessage}`,
-      // We'll use a sticker for swap_success.
+      // For swap_success, we use a sticker (which we don't delete) and then a follow-up text.
       swap_success: "STICKER",
     };
   
-    let message = messages[stage] || `ℹ️ **Status Update:** ${stage}`;
-  
+    // Determine the message content for non-sticker stages.
+    const messageContent = messages[stage] || `ℹ️ **Status Update:** ${stage}`;
     try {
       if (stage === "swap_success") {
-        // Array of celebration sticker IDs.
+        // Sticker handling: choose a random sticker; if random fails, use the first.
         const stickerIds = [
           "CAACAgEAAxkBAAJDtGegkogm2PoQjRtQikal786JoOQTAAL6AQACjLEgRHhzeIjneBzENgQ",
           "CAACAgIAAxkBAAJDtWegkqYpfviNpH80P3WRZJFEj-QtAAJFCwACyHYZS1547k877Kz7NgQ",
@@ -151,35 +147,39 @@ export class SwapController {
           "CAACAgIAAxkBAAJDwWegl-TkePOwxQtQpyi9XXmwunMqAAI2FgACXEDYS9tGbtLdlXoNNgQ",
           "CAACAgIAAxkBAAJDv2egltGjkwgjBQKUfBQPE3N8VsNYAAICFQACOsFQSbdMkgm_6KgTNgQ",
         ];
-        const randomSticker = stickerIds[Math.floor(Math.random() * stickerIds.length)];
+        let randomIndex = Math.floor(Math.random() * stickerIds.length);
+        if (isNaN(randomIndex) || randomIndex < 0 || randomIndex >= stickerIds.length) {
+          randomIndex = 0;
+        }
+        const chosenSticker = stickerIds[randomIndex];
+        // Send the sticker (do not schedule deletion)
+        const stickerMsg = await this.bot.sendSticker(userId, chosenSticker);
   
-        // 1) Send the sticker
-        const stickerMsg = await this.bot.sendSticker(userId, randomSticker);
-  
-        // 2) Schedule removal after 6s, but CATCH any errors
+        // Now send the follow-up text message.
+        const followUpText =
+          "✅ **Swap Completed!**\n" +
+          "Here’s your transaction link:\n" +
+          (details.explorerLink || "No TX link");
+        const textMsg = await this.bot.sendMessage(userId, followUpText, { parse_mode: "Markdown" });
+        // Schedule deletion of the follow-up text message after 3 seconds.
         setTimeout(() => {
-          this.bot
-            .deleteMessage(userId, stickerMsg.message_id)
-            .catch((err) => {
-              console.error("❌ Error deleting sticker message:", err.message);
-            });
-        }, 6000);
-  
-        // Optionally send a follow-up text to confirm success
-        await this.bot.sendMessage(
-          userId,
-          "✅ **Swap Completed Successfully!**\n" +
-            "Here’s your transaction link:\n" +
-            (details.explorerLink || "No TX link"),
-          { parse_mode: "Markdown" }
-        );
+          this.bot.deleteMessage(userId, textMsg.message_id).catch(err => {
+            console.error("❌ Error deleting follow-up text message:", err.message);
+          });
+        }, 3000);
       } else {
-        // For other stages, send text
-        await this.bot.sendMessage(userId, message, { parse_mode: "Markdown" });
+        // For all other stages, send the text message and schedule its deletion after 3 seconds.
+        const sentMsg = await this.bot.sendMessage(userId, messageContent, { parse_mode: "Markdown" });
+        setTimeout(() => {
+          this.bot.deleteMessage(userId, sentMsg.message_id).catch(err => {
+            console.error("❌ Error deleting message:", err.message);
+          });
+        }, 3000);
       }
     } catch (err) {
       console.error("❌ Error sending transaction update:", err.message);
     }
-  }    
+  }
+  
 }
 

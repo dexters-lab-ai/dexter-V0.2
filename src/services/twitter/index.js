@@ -143,6 +143,7 @@ class TwitterService extends EventEmitter {
         monitor = { handle, amount: amount || 0, enabled: true };
         monitorsArray.push(monitor);
       }
+      // Update monitor values regardless.
       monitor.enabled = true;
       monitor.amount = amount || 0;
       await User.updateOne(
@@ -155,7 +156,14 @@ class TwitterService extends EventEmitter {
         },
         { runValidators: false }
       );
-      await this._scheduleKOLMonitorJob(userId, handle, monitor.amount);
+      // Schedule the monitor job only if one doesn't already exist.
+      const jobId = `kolMonitor:${userId}:${handle}`;
+      if (!this.activeMonitors.has(jobId)) {
+        await this._scheduleKOLMonitorJob(userId, handle, monitor.amount);
+      } else {
+        console.log(`Job ${jobId} already exists. Skipping duplicate scheduling.`);
+      }
+      // Immediately trigger a tweet check.
       await this.checkNewTweets(userId, handle, monitor.amount);
       console.log(`✅ Started monitoring @${handle} for user => ${userId}`);
       return { success: true, message: `Monitoring handle => ${handle}` };
@@ -164,17 +172,24 @@ class TwitterService extends EventEmitter {
       return { success: false, message: error.message || 'Error starting monitoring' };
     }
   }
-
+  
   async _scheduleKOLMonitorJob(userId, handle, amount) {
     const jobId = `kolMonitor:${userId}:${handle}`;
     try {
-      const intervalMs = 30 * 60 * 1000; // Every 15 minutes
+      // Check if the job is already scheduled in our active monitors map.
+      if (this.activeMonitors.has(jobId)) {
+        console.log(`Job ${jobId} already scheduled. Skipping new scheduling.`);
+        return;
+      }
+      // Set the desired interval (e.g., 30 minutes)
+      const intervalMs = 30 * 60 * 1000;
       await queueService.addRepeatableJob(
         'kolMonitor',
         { userId, handle, amount },
         { every: intervalMs },
         jobId
       );
+      // Store the job in our in‑memory map.
       this.activeMonitors.set(jobId, {
         userId,
         handle,
@@ -188,7 +203,7 @@ class TwitterService extends EventEmitter {
       throw error;
     }
   }
-
+  
   async stopKOLMonitoring(userId, handle) {
     try {
       handle = handle.replace(/^@+/, "").trim();
@@ -210,44 +225,141 @@ class TwitterService extends EventEmitter {
     try {
       handle = handle.replace(/^@+/, "").trim();
       
-      // First, update the user document
-      await User.updateOne(
-        { telegramId: userId.toString() },
-        { $pull: { 'settings.kol.monitors': { handle } } },
-        { runValidators: false }
-      );
-      
-      // Then, remove the job from the queue
-      const jobId = `kolMonitor:${userId}:${handle}`;
-      try {
-        // Remove the repeatable job
-        await queueService.removeRepeatableJobById('kolMonitor', jobId);
-        
-        // Also check for any active jobs with this ID pattern
-        const kolQueue = queueService.getQueue('kolMonitor');
-        const activeJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
-        for (const job of activeJobs) {
-          if (job.data && job.data.handle === handle && job.data.userId === userId) {
-            await job.remove();
-            console.log(`Removed additional job ${job.id} for KOL monitor ${handle}`);
-          }
+      // Step 1: Remove the monitor from the user document and verify removal.
+      let user;
+      let attempts = 0;
+      do {
+        await User.updateOne(
+          { telegramId: userId.toString() },
+          { $pull: { 'settings.kol.monitors': { handle } } },
+          { runValidators: false }
+        );
+        user = await User.findOne({ telegramId: userId.toString() });
+        attempts++;
+        if (!user || !user.settings || !user.settings.kol || !user.settings.kol.monitors.find(m => m.handle === handle)) {
+          console.log(`User document: Monitor @${handle} successfully removed after ${attempts} attempt(s).`);
+          break;
         }
-        
-        this.activeMonitors.delete(jobId);
-        console.log(`✅ Deleted KOL monitor => @${handle} (user: ${userId})`);
-      } catch (queueError) {
-        console.error(`❌ Error removing queue job for KOL monitor ${handle}:`, queueError);
-        // Continue with deletion even if job removal fails
+        console.log(`Monitor @${handle} still exists in user document. Retrying deletion...`);
+      } while (attempts < 3);
+      
+      // Step 2: Remove the queue job(s) and verify they are gone.
+      const jobId = `kolMonitor:${userId}:${handle}`;
+      let removalAttempts = 0;
+      let jobsRemaining = true;
+      const kolQueue = queueService.getQueue('kolMonitor');
+      while (jobsRemaining && removalAttempts < 3) {
+        try {
+          // Remove the repeatable job.
+          await queueService.removeRepeatableJobById('kolMonitor', jobId);
+          // Also remove any active/waiting/delayed jobs with matching handle and userId.
+          const activeJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
+          for (const job of activeJobs) {
+            if (job.data && job.data.handle === handle && job.data.userId === userId) {
+              await job.remove();
+              console.log(`Removed additional job ${job.id} for KOL monitor @${handle}`);
+            }
+          }
+        } catch (queueError) {
+          console.error(`Error during removal attempt ${removalAttempts + 1} for queue job @${handle}:`, queueError);
+        }
+        // Verify that no matching job remains.
+        const remainingJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
+        jobsRemaining = remainingJobs.some(job => job.data && job.data.handle === handle && job.data.userId === userId);
+        removalAttempts++;
+        if (jobsRemaining) {
+          console.log(`Queue jobs for @${handle} still exist. Retrying removal...`);
+        }
+      }
+      if (jobsRemaining) {
+        console.warn(`Some queue jobs for @${handle} still remain after ${removalAttempts} attempts.`);
+      } else {
+        console.log(`Queue: All jobs for @${handle} have been removed after ${removalAttempts} attempt(s).`);
       }
       
+      // Step 3: Clean up the active monitors record.
+      this.activeMonitors.delete(jobId);
+      console.log(`✅ Deleted KOL monitor => @${handle} (user: ${userId})`);
       return { success: true, message: `Deleted monitor => @${handle}` };
     } catch (error) {
-      console.error(`❌ Error deleting => @${handle}`, error);
+      console.error(`❌ Error deleting monitor => @${handle}:`, error);
       await ErrorHandler.handle(error);
       return { success: false, message: error.message || 'Error deleting KOL monitor' };
     }
   }
 
+  /*
+  async deleteKOLMonitor(userId, handle) {
+    try {
+      handle = handle.replace(/^@+/, "").trim();
+      
+      // Step 1: Remove the monitor from the user document and verify removal.
+      let user;
+      let attempts = 0;
+      do {
+        await User.updateOne(
+          { telegramId: userId.toString() },
+          { $pull: { 'settings.kol.monitors': { handle } } },
+          { runValidators: false }
+        );
+        user = await User.findOne({ telegramId: userId.toString() });
+        attempts++;
+        if (!user || !user.settings || !user.settings.kol || !user.settings.kol.monitors.find(m => m.handle === handle)) {
+          console.log(`User document: Monitor @${handle} successfully removed after ${attempts} attempt(s).`);
+          break;
+        }
+        console.log(`Monitor @${handle} still exists in user document. Retrying deletion...`);
+      } while (attempts < 3);
+  
+      // Step 2: Remove the queue job(s) and verify they are gone.
+      const jobId = `kolMonitor:${userId}:${handle}`;
+      let removalAttempts = 0;
+      let jobsRemaining = true;
+      const kolQueue = queueService.getQueue('kolMonitor');
+      while (jobsRemaining && removalAttempts < 3) {
+        try {
+          // Remove the repeatable job.
+          await queueService.removeRepeatableJobById('kolMonitor', jobId);
+          
+          // Also remove any active/waiting/delayed jobs with matching handle/userId.
+          const activeJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
+          for (const job of activeJobs) {
+            if (job.data && job.data.handle === handle && job.data.userId === userId) {
+              await job.remove();
+              console.log(`Removed additional job ${job.id} for KOL monitor @${handle}`);
+            }
+          }
+        } catch (queueError) {
+          console.error(`Error during removal attempt ${removalAttempts + 1} for queue job @${handle}:`, queueError);
+        }
+        
+        // Verify that no matching job remains.
+        const remainingJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
+        jobsRemaining = remainingJobs.some(job => job.data && job.data.handle === handle && job.data.userId === userId);
+        removalAttempts++;
+        if (jobsRemaining) {
+          console.log(`Queue jobs for @${handle} still exist. Retrying removal...`);
+        }
+      }
+  
+      if (jobsRemaining) {
+        console.warn(`Some queue jobs for @${handle} still remain after ${removalAttempts} attempts.`);
+      } else {
+        console.log(`Queue: All jobs for @${handle} have been removed after ${removalAttempts} attempt(s).`);
+      }
+      
+      // Clean up the active monitors record.
+      this.activeMonitors.delete(jobId);
+      console.log(`✅ Deleted KOL monitor => @${handle} (user: ${userId})`);
+      return { success: true, message: `Deleted monitor => @${handle}` };
+    } catch (error) {
+      console.error(`❌ Error deleting monitor => @${handle}:`, error);
+      await ErrorHandler.handle(error);
+      return { success: false, message: error.message || 'Error deleting KOL monitor' };
+    }
+  }
+    */  
+/*
   async deleteKOLMonitorID(userId, monitorId) {
     try {
       const user = await User.findOne({ telegramId: userId.toString() });
@@ -272,7 +384,7 @@ class TwitterService extends EventEmitter {
       return { success: false, message: error.message || 'Error deleting KOL monitor by ID' };
     }
   }
-
+*/
   async getKOLsMonitored(userId) {
     try {
       console.log(`[getKOLsMonitored] Starting for userId => ${userId}`);
@@ -588,7 +700,7 @@ class TwitterService extends EventEmitter {
       const formattedInput = parseFloat(amount).toFixed(4) + " SOL";
       const formattedOutput = swapResult.expectedOutput ? swapResult.expectedOutput.toFixed(4) + " " + symbol : "N/A";
       const slippageInfo = swapResult.slippageBps ? `${swapResult.slippageBps} bps` : "N/A";
-      const dynamicSlippage = swapResult.dynamicSlippage ? `${swapResult.dynamicSlippage.minBps}-${swapResult.dynamicSlippage.maxBps} bps` : "N/A";
+      const timeTaken = swapResult.timeTaken ? `${swapResult.timeTaken} sec` : "2 sec";
       const nowFormatted = new Date().toLocaleString();
   
       // Craft the message for the user.
@@ -601,7 +713,7 @@ class TwitterService extends EventEmitter {
         `• **Input Amount:** ${formattedInput}\n` +
         `• **Expected Output:** ${formattedOutput}\n` +
         `• **Static Slippage:** ${slippageInfo}\n` +
-        `• **Dynamic Slippage Range:** ${dynamicSlippage}\n\n` +
+        `• **Swap Speed:** ${timeTaken}\n\n` +
         `**Time:** ${nowFormatted}\n\n` +
         `*This trade was automatically executed based on the KOL signal.*`;
   
@@ -920,11 +1032,11 @@ class TwitterService extends EventEmitter {
   async getTrenchChatter() {
     try {
       const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const sevenDaysAgo = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
       const input = {
         customMapFunction: "(object) => { return {...object} }",
         includeSearchTerms: true,
-        maxItems: 500,
+        maxItems: 300,
         minimumFavorites: 0,
         minimumReplies: 0,
         minimumRetweets: 0,

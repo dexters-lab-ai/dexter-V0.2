@@ -16,7 +16,6 @@ import { gemsService } from '../../gems/GemsService.js';
 import { twitterService } from '../../twitter/index.js';
 import { flipperMode } from '../../pumpfun/FlipperMode.js';
 import { priceAlertService } from '../../priceAlerts.js';
-import { timedOrderService } from '../../timedOrders.js';
 import { walletService } from '../../wallet/index.js';
 import { tokenApprovalService } from '../../tokens/TokenApprovalService.js';
 import { solanaPayService } from '../../solanaPay/SolanaPayService.js';
@@ -635,13 +634,12 @@ export class IntentProcessor extends EventEmitter {
 
   async sendTokensOnEvm(userId, params) {
     try {
-      console.log("[Transfer] Starting process...");
       const user = await User.findOne({ telegramId: userId });
-      if (!user || !user.wallets || !user.wallets.ethereum)
-        throw new Error("Ethereum wallet not found.");
-      const wallet = user.wallets.ethereum[0];
-      if (!wallet || !wallet.encryptedPrivateKey)
-        throw new Error("Encrypted private key missing.");
+      if (!user || !user.wallets) throw new Error("User wallet not found.");
+      const networkKey = params.network.toLowerCase();
+      const walletData = user.wallets[networkKey]?.[0];
+      if (!walletData || !walletData.encryptedPrivateKey) throw new Error("Encrypted private key missing for network: " + params.network);
+      
       await this.safeSendMessage(
         this.bot,
         userId,
@@ -650,21 +648,25 @@ export class IntentProcessor extends EventEmitter {
       );      
       let privateKey;
       try {
-        privateKey = decrypt(wallet.encryptedPrivateKey);
+        privateKey = decrypt(walletData.encryptedPrivateKey);
       } catch (decryptionError) {
         console.error("Decryption Error:", decryptionError.message);
       }
       if (!privateKey) {
-        if (/^(0x)?[0-9a-fA-F]{64}$/.test(wallet.encryptedPrivateKey)) {
+        if (/^(0x)?[0-9a-fA-F]{64}$/.test(walletData.encryptedPrivateKey)) {
           console.warn("Private key appears unencrypted, using as-is.");
-          privateKey = wallet.encryptedPrivateKey;
+          privateKey = walletData.encryptedPrivateKey;
         } else {
           throw new Error("Failed to decrypt or retrieve valid private key.");
         }
       }
+      const providerForNetwork = providers[net.toLowerCase()];
+          if (!providerForNetwork)
+            throw new Error(`Provider for network "${net}" is not configured.`);
+          
       let walletSigner;
       try {
-        walletSigner = new ethers.Wallet(privateKey);
+        walletSigner = new Wallet(privateKey, providerForNetwork);
       } catch (error) {
         throw new Error("Invalid private key format for signing transactions.");
       }
@@ -998,16 +1000,6 @@ export class IntentProcessor extends EventEmitter {
 
     console.warn(`⚠️ Unrecognized address format: ${tokenAddress}`);
     return { error: "Unrecognized wallet address format." };
-  }
-
-  async createTimedOrder(params, network) {
-    return await timedOrderService.createOrder(params.userId, {
-      tokenAddress: params.tokenAddress,
-      action: params.action,
-      amount: params.amount,
-      executeAt: params.timing,
-      network
-    });
   }
 
   async handleTokenApproval(params, network) {
@@ -2012,9 +2004,11 @@ export class IntentProcessor extends EventEmitter {
     return await twitterService.deleteKOLMonitor(userId, handle);
   }
 
+  /*
   async deleteKOLMonitoringID(userId, handle) {
     return await twitterService.deleteKOLMonitorID(userId, handle);
   }
+    */
 
   async handleShopifySearch(text) {
     const products = await shopifyService.searchProducts(text);

@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events';
 import { ErrorHandler } from '../../core/errors/index.js';
 import { dextools } from '../../services/dextools/index.js';
-import { timedOrderService } from '../../services/timedOrders.js';
 import { priceAlertService } from '../../services/priceAlerts.js';
 import { networkState } from '../../services/networkState.js';
 import { db } from '../database.js';
@@ -11,7 +10,6 @@ class MonitoringSystem extends EventEmitter {
   constructor() {
     super();
     this.metrics = {
-      orders: new Map(),
       alerts: new Map(),
       websockets: new Map(),
       errors: new Map(),
@@ -90,14 +88,6 @@ class MonitoringSystem extends EventEmitter {
       return healthy
         ? { status: 'healthy' }
         : { status: 'unhealthy', message: 'WebSocket connection issue' };
-    });
-
-    // Health check for timed orders
-    this.healthChecks.set('timedOrders', async () => {
-      const orderMetrics = await timedOrderService.getMetrics();
-      return orderMetrics
-        ? { status: 'healthy' }
-        : { status: 'unhealthy', message: 'Timed orders service issue' };
     });
 
     // Health check for price alerts
@@ -273,10 +263,6 @@ class MonitoringSystem extends EventEmitter {
   startMetricsCollection() {
     setInterval(async () => {
       try {
-        const orders = await timedOrderService.getMetrics();
-        console.log('Timed Orders Metrics:', JSON.stringify(orders, null, 2));
-        this.metrics.orders = orders;
-  
         const alerts = await priceAlertService.getMetrics();
         console.log('Price Alerts Metrics:', JSON.stringify(alerts, null, 2));
         this.metrics.alerts = alerts;
@@ -319,7 +305,6 @@ class MonitoringSystem extends EventEmitter {
           cpu: process.cpuUsage(),
           uptime: process.uptime(),
           websocketLatency: this.calculateWebSocketLatency(),
-          orderExecutionTimes: this.calculateOrderExecutionTimes(),
           alertProcessingTimes: this.calculateAlertProcessingTimes(),
         };
 
@@ -340,14 +325,6 @@ class MonitoringSystem extends EventEmitter {
       latencies.set(key, ws.latency || 0); // Fallback to 0 if latency undefined
     }
     return latencies;
-  }
-
-  calculateOrderExecutionTimes() {
-    return {
-      average: this.metrics.orders.get('averageExecutionTime') || 0,
-      max: this.metrics.orders.get('maxExecutionTime') || 0,
-      min: this.metrics.orders.get('minExecutionTime') || 0,
-    };
   }
 
   calculateAlertProcessingTimes() {
@@ -378,14 +355,6 @@ class MonitoringSystem extends EventEmitter {
         });
       }
     }
-
-    if (metrics.orderExecutionTimes.average > 30000) {
-      this.emit('performanceWarning', {
-        type: 'orderExecution',
-        value: metrics.orderExecutionTimes.average,
-        threshold: 30000,
-      });
-    }
   }
 
   cleanup() {
@@ -397,7 +366,6 @@ class MonitoringSystem extends EventEmitter {
     this.batchBuffer = [];
     this.healthChecks.clear();
     this.metrics = {
-      orders: new Map(),
       alerts: new Map(),
       websockets: new Map(),
       errors: new Map(),

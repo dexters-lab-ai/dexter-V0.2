@@ -182,7 +182,8 @@ class QueueService extends EventEmitter {
     const queue = this.getQueue(queueName);
     try {
       // Add timestamp to jobId to ensure uniqueness
-      const uniqueJobId = `${jobId}_${Date.now()}`;
+      //const uniqueJobId = `${jobId}_${Date.now()}`;
+      const uniqueJobId = jobId;
       
       const jobOpts = {
         jobId: uniqueJobId,

@@ -125,12 +125,26 @@ class TasksService extends EventEmitter {
     // In case it's in the past, use a 0ms delay (exec ASAP)
     const now = new Date();
     const delayMs = Math.max(0, task.dueTime.getTime() - now.getTime());
-
+    const queue = queueService.getQueue(this.BULL_QUEUE_NAME);
+  
+    // Helper function to check for duplicate job by ID.
+    async function jobExists(jobId, isRepeatable = false) {
+      if (isRepeatable) {
+        const repeatableJobs = await queue.getRepeatableJobs();
+        return repeatableJobs.some(j => j.id === jobId);
+      } else {
+        const job = await queue.getJob(jobId);
+        return !!job;
+      }
+    }
+  
     // If it's a one-time task
     if (task.recurrence === "none") {
-      // Single run => add a delayed job
       const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'execute');
-      
+      if (await jobExists(jobId)) {
+        console.log(`Job ${jobId} already exists for one-time task ${task._id}. Skipping scheduling.`);
+        return;
+      }
       await queueService.addJob(
         this.BULL_QUEUE_NAME,
         {
@@ -142,19 +156,19 @@ class TasksService extends EventEmitter {
           jobId
         }
       );
-      
       console.log(`✅ Scheduled one-time task ${task._id} with job ID ${jobId}`);
-
+  
     // If it's a daily recurring task
     } else if (task.recurrence === "daily") {
       const dateObj = new Date(task.dueTime);
       const hour = dateObj.getHours();
       const minute = dateObj.getMinutes();
-      // Build a cron string matching that hour/min daily:
       const dailyCron = `${minute} ${hour} * * *`;
-      
       const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'daily');
-
+      if (await jobExists(jobId, true)) {
+        console.log(`Job ${jobId} already exists for daily task ${task._id}. Skipping scheduling.`);
+        return;
+      }
       await queueService.addRepeatableJob(
         this.BULL_QUEUE_NAME,
         {
@@ -164,16 +178,16 @@ class TasksService extends EventEmitter {
         { cron: dailyCron },
         jobId
       );
-      
       console.log(`✅ Scheduled daily task ${task._id} with job ID ${jobId} (cron: ${dailyCron})`);
-
-    // If it's a numeric "interval" in minutes
+  
+    // If it's an interval task (numeric recurrence in minutes)
     } else if (typeof task.recurrence === "number" && task.recurrence > 0) {
-      // e.g. every X minutes => "*/X * * * *"
       const intervalCron = `*/${task.recurrence} * * * *`;
-      
       const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'interval');
-
+      if (await jobExists(jobId, true)) {
+        console.log(`Job ${jobId} already exists for interval task ${task._id}. Skipping scheduling.`);
+        return;
+      }
       await queueService.addRepeatableJob(
         this.BULL_QUEUE_NAME,
         {
@@ -183,10 +197,9 @@ class TasksService extends EventEmitter {
         { cron: intervalCron },
         jobId
       );
-      
       console.log(`✅ Scheduled interval task ${task._id} with job ID ${jobId} (cron: ${intervalCron})`);
     }
-  }
+  }  
 
   /**
    * Retrieves tasks. If "taskId" is provided, returns just that one. Otherwise returns all tasks for the user.

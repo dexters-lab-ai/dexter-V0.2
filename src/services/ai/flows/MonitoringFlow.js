@@ -1,6 +1,9 @@
+/**
+ * DEPRECATED
+ */
+
 import { BaseFlow } from './BaseFlow.js';
 import { priceAlertService } from '../../priceAlerts.js';
-import { timedOrderService } from '../../timedOrders.js';
 import { flipperMode } from '../../pumpfun/FlipperMode.js';
 import { dextools } from '../../dextools/index.js';
 import { ErrorHandler } from '../../../core/errors/index.js';

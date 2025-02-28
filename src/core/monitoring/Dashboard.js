@@ -7,7 +7,6 @@ import { walletService } from '../../services/wallet/index.js';
 import { pumpFunService } from '../../services/pumpfun/index.js';
 import { gemsService } from '../../services/gems/GemsService.js';
 import { priceAlertService } from '../../services/priceAlerts.js';
-import { timedOrderService } from '../../services/timedOrders.js';
 import { aiMetricsService } from '../../services/aiMetricsService.js';
 import { flipperMode } from '../../services/pumpfun/FlipperMode.js';
 import { config } from '../config.js';
@@ -57,13 +56,11 @@ async function fetchMetrics() {
     const [
       pumpFunMetrics,
       priceAlertMetrics,
-      timedOrderMetrics,
       aiMetrics,
       flipperMetrics,
     ] = await Promise.allSettled([
       pumpFunService.checkHealth(),
       priceAlertService.getMetrics(),
-      timedOrderService.getMetrics(),
       aiMetricsService.fetchLiveMetrics(),
       flipperMode.fetchMetrics(),
     ]);
@@ -78,7 +75,6 @@ async function fetchMetrics() {
       pumpFun: pumpFunMetrics.status === 'fulfilled' ? pumpFunMetrics.value : 'Error',
       gemsToday: await gemsService.scanGems(),
       priceAlerts: priceAlertMetrics.status === 'fulfilled' ? priceAlertMetrics.value : 'Error',
-      timedOrders: timedOrderMetrics.status === 'fulfilled' ? timedOrderMetrics.value : 'Error',
       aiMetrics: aiMetrics.status === 'fulfilled' ? aiMetrics.value : 'Error',
       flipperMetrics: flipperMetrics.status === 'fulfilled' ? flipperMetrics.value : 'Error',
     };

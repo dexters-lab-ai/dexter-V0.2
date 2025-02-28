@@ -26,6 +26,7 @@ import { SolanaTokenDecimal } from "../../models/SolanaTokenDecimal.js";
     };
     const mintDecimalsCache = {}; // Global Decimals Cache
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    const userMessages = {};
     
     /**
      * Safely converts a base64 string to a Buffer.
@@ -380,9 +381,9 @@ export class JupiterQuickNode {
     async getQuote(quoteRequest) {
         const request = {
         ...quoteRequest,
-        restrictIntermediateTokens: true,
+        restrictIntermediateTokens: false,
         slippageBps: 5,
-        dynamicSlippage: { minBps: 50, maxBps: 1500 }
+        dynamicSlippage: { minBps: 50, maxBps: 2000 }
         };
 
         return await this.getQuoteWithRetries(request);
@@ -396,7 +397,7 @@ export class JupiterQuickNode {
         try {
             const quote = await this.jupiterApi.quoteGet(quoteRequest);
             if (!quote) throw new Error("No quote found");
-            //console.log("📜 Jupiter Quote:", quote);
+            console.log("📜 Jupiter Quote:", quote);
             return quote;
         } catch (error) {
             console.error(`Quote fetch attempt ${attempt} failed: ${error.message}`);
@@ -497,7 +498,7 @@ export class JupiterQuickNode {
               altAccounts = await this.getAddressLookupTableAccounts(swapInstructions.addressLookupTableAddresses, this.solanaConnection);
           }
           
-          const maxRetries = 3;
+          const maxRetries = 5;
           let attempt = 0;
           let txResult;
           while (attempt < maxRetries) {
@@ -518,7 +519,7 @@ export class JupiterQuickNode {
                 const rawTransaction = transaction.serialize();
                 
                 // Send the transaction once.
-                let txId = await this.solanaConnection.sendRawTransaction(rawTransaction, { skipPreflight: true, maxRetries: 7 });
+                let txId = await this.solanaConnection.sendRawTransaction(rawTransaction, { skipPreflight: true, maxRetries: 5 });
                 if (typeof txId !== 'string') {
                     txId = txId.result;
                 }
@@ -561,118 +562,168 @@ export class JupiterQuickNode {
         }
     }
 
+    /**
+     * Initiates the Jupiter swap process:
+     *  1. Sends "fetching_quote" status
+     *  2. Fetches a quote
+     *  3. Sends quote details (if needed)
+     *  4. Executes the swap
+     *  5. Sends "executing_swap" status
+     *  6. (On success) Sends "swap_success"
+     *  7. (On failure) Sends "swap_failed"
+     *  8. Finally, always deletes all messages
+     */
     async startJupiterSwap({ wallet, inputMint, outputMint, amount, userId }) {
-        let swapResult = null;
-        try {
-          await this.sendSwapUpdate(userId, "fetching_quote", { inputMint, outputMint });
-          console.log('🔄 Fetching swap quote from Jupiter API...');
-          const quote = await this.getQuote({ inputMint, outputMint, amount: amount.toString() });
-          
-          // Send the formatted quote details to the user before proceeding.
-          await sendQuoteDetails(this.bot, this.solanaConnection, userId, quote, inputMint, outputMint);
-          
-          await this.sendSwapUpdate(userId, "executing_swap", { inputMint, outputMint, amount });
-          console.log('🔄 Executing swap transaction...');
-          swapResult = await this.executeSwap({ route: quote, wallet });
-          console.log('✅ Swap executed:', swapResult);
-          
-          // Log values before proceeding with success message
-          console.log('[startJupiterSwap] Before logSwap: ', {
-            inputMint,
-            inAmount: amount,
-            outputMint,
-            outAmount: quote.outAmount,
-            txId: swapResult?.txId,
-            timestamp: new Date().toISOString()
-          });
-          
-          // Only proceed with success message if we have a valid swapResult
-          if (swapResult && swapResult.txId) {
-            await this.sendSwapUpdate(userId, "swap_success", {
-              inputMint,
-              inAmount: await formatTokenAmount(amount, inputMint, this.solanaConnection),
-              outputMint,
-              outAmount: await formatTokenAmount(quote.outAmount, outputMint, this.solanaConnection),
-              txId: swapResult.txId,
-            });
-            
-            await this.logSwap({
-              inputToken: inputMint,
-              inAmount: amount,
-              outputToken: outputMint,
-              outAmount: quote.outAmount,
-              txId: swapResult.txId,
-              timestamp: new Date().toISOString(),
-            });
-          }
-          
-          // Log the return object
-          const returnData = {
-            confirmation: swapResult?.confirmation,
-            expectedOutput: quote.outAmount,
-            slippageBps: quote.slippageBps,
-            dynamicSlippage: quote.dynamicSlippage,
-            txId: swapResult?.txId
-          };
-          console.log('[startJupiterSwap] Returning:', returnData);
-          
-          return returnData;
-        } catch (error) {
-          console.error('❌ Error during swap execution:', error.message);
-          await this.sendSwapUpdate(userId, "swap_failed", { errorMessage: error.message });
-          throw error;
-        }
-    }          
+    let swapResult = null;
+    let returnData = null;
 
+    try {
+        // 1. Let user know we are fetching the quote
+        await this.sendSwapUpdate(userId, "fetching_quote", { inputMint, outputMint });
+
+        // 2. Fetch the quote (implement getQuote yourself)
+        const quote = await this.getQuote({
+        inputMint,
+        outputMint,
+        amount: amount.toString()
+        });
+
+        // 3. Send optional quote details (implement sendQuoteDetails yourself)
+        await sendQuoteDetails(this.bot, this.solanaConnection, userId, quote, inputMint, outputMint);
+
+        // 4. Execute the swap (implement executeSwap yourself)
+        swapResult = await this.executeSwap({ route: quote, wallet });
+
+        // 5. Let user know the swap is being executed
+        await this.sendSwapUpdate(userId, "executing_swap", { inputMint, outputMint, amount });
+
+        // 6. Build the final return data
+        returnData = {
+        confirmation: swapResult?.confirmation,
+        expectedOutput: quote.outAmount,
+        slippageBps: quote.slippageBps,
+        timeTaken: quote.timeTaken,
+        txId: swapResult?.txId
+        };
+
+        // 7. Indicate swap success
+        await this.sendSwapUpdate(userId, "swap_success", {
+        ...returnData,
+        inputMint,
+        outputMint,
+        inAmount: amount
+        });
+
+        return returnData;
+    } catch (error) {
+        console.error("❌ Error during swap execution:", error.message);
+
+        // On failure, send a "swap_failed" update
+        await this.sendSwapUpdate(userId, "swap_failed", { errorMessage: error.message });
+
+        throw error; // Rethrow to let caller handle the error as well
+    } finally {
+        // 8. ALWAYS delete all messages (on success or failure)
+        await this.deleteAllMessages.call(this, userId);
+    }
+    }
+
+    /**
+     * Sends Telegram updates for each stage used by `startJupiterSwap`.
+     * Tracks message IDs in `userMessages[userId]`.
+     *
+     * Stages handled:
+     *  - "fetching_quote"
+     *  - "executing_swap"
+     *  - "swap_success"
+     *  - "swap_failed"
+     *
+     * Note: `formatTokenAmount` must be implemented or imported.
+     */
     async sendSwapUpdate(userId, stage, details = {}) {
         try {
-          let message = "";
-          switch (stage) {
-              case "fetching_quote":
-                message = `🔄 **Fetching Swap Quote...**\n\n💱 **From:** \`${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}\`\n🔹 **To:** \`${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}\`\n\n⏳ Retrieving the best rates...`;
+            let message = "";
+
+            switch (stage) {
+            case "fetching_quote":
+                message = `🔄 **Fetching Swap Quote...**\n\n` +
+                        `💱 **From:** \`${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}\`\n` +
+                        `🔹 **To:** \`${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}\`\n\n` +
+                        `⏳ Retrieving the best rates...`;
                 break;
-              case "executing_swap":
-                message = `⚡ **Executing Swap Transaction...**\n\n💰 **Amount:** \`${await formatTokenAmount(details.amount, details.inputMint, this.solanaConnection)}\` tokens\n🪙 **Swapping:** [${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}](https://solscan.io/address/${details.inputMint}) → [${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}](https://solscan.io/address/${details.outputMint})\n\n🚀 Processing...`;
+
+            case "executing_swap":
+                message = `⚡ **Executing Swap Transaction...**\n\n` +
+                        `💰 **Amount:** \`${await formatTokenAmount(details.amount, details.inputMint, this.solanaConnection)}\` tokens\n` +
+                        `🪙 **Swapping:** [${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}](https://solscan.io/address/${details.inputMint}) → ` +
+                        `[${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}](https://solscan.io/address/${details.outputMint})\n\n` +
+                        `🚀 Processing...`;
                 break;
-              case "quote_details":
-                message = `📜 **Swap Quote Details:**\n${details.message}`;
+
+            case "swap_success":
+                message = `🎉 **Swap Successful!**\n\n` +
+                        `🔁 **Swap Summary:**\n` +
+                        `🔹 **From:** [${details.inputMint?.slice(0, 4)}...${details.inputMint?.slice(-4)}](https://solscan.io/address/${details.inputMint})\n` +
+                        `💰 **Amount Sent:** \`${details.inAmount}\`\n` +
+                        `🔹 **To:** [${details.outputMint?.slice(0, 4)}...${details.outputMint?.slice(-4)}](https://solscan.io/address/${details.outputMint})\n` +
+                        `💎 **Amount Received:** \`${details.expectedOutput}\`\n\n` +
+                        `🔗 **[View Transaction](https://solscan.io/tx/${details.txId})**`;
                 break;
-              case "swap_success":
-                message = `🎉 **Swap Successful!**\n\n🔁 **Swap Summary:**\n🔹 **From:** [${details.inputMint.slice(0, 4)}...${details.inputMint.slice(-4)}](https://solscan.io/address/${details.inputMint})\n💰 **Amount Sent:** \`${details.inAmount}\`\n🔹 **To:** [${details.outputMint.slice(0, 4)}...${details.outputMint.slice(-4)}](https://solscan.io/address/${details.outputMint})\n💎 **Amount Received:** \`${details.outAmount}\`\n\n🔗 **[View Transaction](https://solscan.io/tx/${details.txId})**`;
+
+            case "swap_failed":
+                message = ` ~ Oopsy from JupiterV6...\n\nError: ${details.errorMessage || "Unknown Error"}`;
                 break;
-              case "balance_update": {
-                let balanceMessage = "";
-                try {
-                    const balancesArray = typeof details.message === 'string' ? JSON.parse(details.message) : details.message;
-                    for (const entry of balancesArray) {
-                      balanceMessage += `${entry.symbol}: ${entry.balance}\n\n`;
-                    }
-                } catch (err) {
-                    balanceMessage = details.message;
-                }
-                message = `🏦 **Updated Balances:**\n\n${balanceMessage}`;
-                break;
-              }
-              case "swap_failed":
-                message = ` ~ Oopsy from JupiterV6...`;
-                break;
-              default:
+
+            default:
+                // If you need more statuses, add them here
                 message = `ℹ️ **Status Update:** ${stage}`;
                 break;
-          }
+            }
 
-          // Wrap message sending in a try-catch to prevent crashes
-          if (this.bot && typeof this.bot.sendMessage === 'function') {
-              await this.bot.sendMessage(userId, message, { 
-                  parse_mode: "Markdown",
-                  disable_web_page_preview: true 
-              }).catch(err => {
-                  console.error("Failed to send message:", err);
-              });
-          }
+            // Send the message and store its ID
+            if (this.bot && typeof this.bot.sendMessage === 'function') {
+            const sentMsg = await this.bot.sendMessage(userId, message, {
+                parse_mode: "Markdown",
+                disable_web_page_preview: true
+            }).catch(err => {
+                console.error("Failed to send message:", err);
+                return null;
+            });
+
+            if (sentMsg && sentMsg.message_id) {
+                if (!userMessages[userId]) {
+                userMessages[userId] = [];
+                }
+                userMessages[userId].push(sentMsg.message_id);
+            }
+            }
         } catch (err) {
-          console.error("❌ Error sending swap update:", err.message);
+            console.error("❌ Error sending swap update:", err.message);
         }
+    }
+
+    /**
+     * Deletes all stored Telegram messages for a user.
+     * Called in the `finally` block of `startJupiterSwap`, so it runs
+     * on both success and failure.
+     */
+    async deleteAllMessages(userId) {
+        try {
+            // If no messages are tracked or no bot instance, nothing to delete
+            if (!userMessages[userId] || !this.bot) return;
+
+            for (const msgId of userMessages[userId]) {
+            await this.bot.deleteMessage(userId, msgId).catch(err => {
+                console.error("Failed to delete message:", err);
+            });
+            }
+
+            // Clear the array after deleting
+            delete userMessages[userId];
+
+        } catch (err) {
+            console.error("❌ Error deleting messages:", err.message);
+    }
     }
 
     formatNumber(num, options = {}) {

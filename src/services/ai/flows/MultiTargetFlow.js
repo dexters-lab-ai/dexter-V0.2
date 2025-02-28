@@ -1,6 +1,5 @@
 import { BaseFlow } from './BaseFlow.js';
 import { walletService } from '../../wallet/index.js';
-import { timedOrderService } from '../../timedOrders.js';
 import { tokenInfoService } from '../../tokens/TokenInfoService.js';
 import { ErrorHandler } from '../../../core/errors/index.js';
 import { networkState } from '../../networkState.js';
@@ -117,9 +116,11 @@ export class MultiTargetFlow extends BaseFlow {
     if (!confirmed) {
       return this.cancel(state, 'Order cancelled. If you want to start over, type `/start`.');
     }
-
+    
+    let orders;
     try {
-      const orders = await Promise.all(
+      /*
+      orders = await Promise.all(
         state.targets.map(target =>
           timedOrderService.createOrder(state.userId, {
             tokenAddress: state.token.address,
@@ -132,6 +133,7 @@ export class MultiTargetFlow extends BaseFlow {
           })
         )
       );
+      */
 
       return this.complete({
         ...state,

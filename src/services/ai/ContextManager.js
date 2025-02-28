@@ -8,7 +8,7 @@ export class AIContextManager extends EventEmitter {
     this.conversations = new Map(); // In-memory storage for active contexts
     this.contextCache = new Map(); // Cached summaries
     this.referenceMap = new Map(); // References for quick lookups
-    this.maxMessagesForAI = 14; // Limit in-memory context to 10 messages for AI
+    this.maxMessagesForAI = 30; // Limit in-memory context to 10 messages for AI
     this.initialized = false; // Initialization flag
   }
 
@@ -65,7 +65,7 @@ export class AIContextManager extends EventEmitter {
         context = fullHistory;
       }
 
-      // Return the last 10 messages for processing
+      // Return the last x messages for processing set above
       return context.slice(-this.maxMessagesForAI);
     } catch (error) {
       await ErrorHandler.handle(error);

@@ -9,10 +9,10 @@ export const fallbackMap = {
     /**
     * Address Input Handling, 
     * Primary: start of by structured handling handle_address_only_pasted
-    * Fallbacks: cookiedao check_token_mindshare_on_market, structured analyze_token_by_address
+    * Fallbacks: token_price_dexscreener, analyze_token_by_address
     */
     handle_address_only_pasted: [
-      "check_token_mindshare_on_market",
+      "token_price_dexscreener",
       "analyze_token_by_address",
     ],
 

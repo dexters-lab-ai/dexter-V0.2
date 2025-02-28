@@ -307,6 +307,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
 - FOMO means user is missing out Buy instantly
 
 **Task Guidelines:**
+- Schedule a task when user asks to do something in future. e.g., user says 'check the price of SOL in 30mins time' or 'sell 100 SNAI in 6 hours time' you schedule a task. 
 - Process crypto transactions and searches using human-readable numbers (e.g., "0.005 SOL", "1.23 ETH").
 - Confirm user actions before execution. Always use original parameters for retries.
 - Batch independent tasks and execute dependent tasks sequentially.
@@ -356,7 +357,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
           2. Fetch from both sources Twitter and Trending Tokens Combined unless user specifies chain
 
       - **Safe and popular Investment Suggestions:**
-          1. Safe NEW tokens are not Stables, ETH, ADA, BNB, BTC. Use suggest_token_investments_dominating CookieDAO API suggestions.
+          1. Safe NEW tokens are not Stables, ETH, ADA, BNB, BTC. Use fetch_trending_tokens_twitter suggestions.
           2. Fetch from both sources Twitter and Trending Tokens Combined unless user specifies chain
           3. Follow-up action and function call search_twitter_by_address to search from twitter using relevant phrase e.g., 'hottest narrative tokens' or 'trending narrative' or 'trending theme crypto' or 'trending tokens' or 'trenches popular tokens'.
 
@@ -545,8 +546,8 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
 
         // Execute the multi-step task
         const taskResult = await this.executeMultiStepTask(functionCall, messages, userId, msg);
-        const trimmedResult = this.formatResults([taskResult.text]);
-        const cleanResult = this.cleanJSONText(trimmedResult, name, functionCall.arguments);
+        const parsedResults = this.formatResults([taskResult.text]);
+        const cleanResult = this.cleanJSONText(parsedResults, name, functionCall.arguments);
         
         messages.push({
             role: "assistant",
@@ -591,7 +592,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       - For token results, identify each token's matching symbol, address, exchange/dex link, website, telegram,twitter and list the links grouped per relevant item for rish data.
       - For address URLS/links, truncate them for clean looks with the full link embedded in the text.
       - Format all news articles and internet searches with: heading, truncated introduction text, link to article. Spaced in that order and clean with news icons.
-      - Format for Telegram HTML output not Markdown, e.g., use <b> Text </b> instead of ** Text **
+      - Format for HTML output not Markdown, e.g., use <b> Text </b> instead of ** Text ** to style results text
       - Do not add link icon to any links during formmating. 
       - Never share private keys or wallet keys.
       Feel free to style with cool minimalistic emojis to make list items more nicer
@@ -684,11 +685,11 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       const aiResponse = await openAIService.createChatCompletion({
         model: "gpt-4o-mini",
         messages: finalPrompt,
-        max_tokens: 500,          // Reduce max tokens for cost saving & response time
-        temperature: 0.5,         // Moderate creativity
+        max_tokens: 700,          // Reduce max tokens for cost saving & response time
+        temperature: 0.6,         // Moderate creativity
         top_p: 1,               // Probability distribution, variety to responses
         frequency_penalty: 0.3,   // his moderate penalty discourages over‑repetition of specific tokens without suppressing useful repeated keywords in a domain like crypto trading.
-        presence_penalty: 0.1,    // nudges the model to introduce new concepts and examples while still staying on topic—useful when we want varied scenarios and examples
+        presence_penalty: 0.2,    // nudges the model to introduce new concepts and examples while still staying on topic—useful when we want varied scenarios and examples
         n: 1,                     // Single response
       });
 
@@ -772,7 +773,6 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
     const sensitiveFunctions = [
       "execute_solana_swap",
       "create_price_alert",
-      "create_timed_order",
       "approve_token",
       "create_solana_payment",
       "monitor_kol",
@@ -790,83 +790,118 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
    */
   async askForConfirmation(msg, functionName, argumentos) {
     try {
+      // Unique ID for this confirmation request
+      const confirmationId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+  
+      // Build a formatted list of arguments
       const formattedParams = Object.entries(JSON.parse(argumentos || "{}"))
         .map(([key, value]) => `- ${key}: ${value}`)
         .join("\n");
   
-      const confirmationMessage = `🛑 Confirmation required:\n\nAre you sure you want to execute **'${functionName}'** with the following parameters?\n\n${formattedParams}`;
+      const confirmationMessage = `🛑 Confirmation required:\n\n` +
+        `Are you sure you want to execute **'${functionName}'** with the following parameters?\n\n` +
+        `${formattedParams}`;
   
-      // Send the confirmation message with inline keyboard
+      // Send the initial confirmation message
       const sentMessage = await this.bot.sendMessage(msg.chat.id, confirmationMessage, {
         parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
             [
-              { text: "✅ Yes", callback_data: `confirm_${msg.chat.id}` },
-              { text: "❌ No", callback_data: `cancel_${msg.chat.id}` },
-            ],
-          ],
-        },
+              { text: "✅ Yes", callback_data: `confirm_${confirmationId}` },
+              { text: "❌ No",  callback_data: `cancel_${confirmationId}` }
+            ]
+          ]
+        }
       });
   
+      // Return a promise that resolves when user confirms or cancels (or times out)
       return new Promise((resolve) => {
+        // 1) Timeout logic (60 seconds)
         const timeout = setTimeout(async () => {
+          // Remove the callback listener
           this.bot.removeListener("callback_query", listener);
-          // Remove the inline keyboard to disable further callbacks
-          await this.bot.editMessageReplyMarkup(
-            { inline_keyboard: [] },
-            { chat_id: msg.chat.id, message_id: sentMessage.message_id }
-          );
-          resolve(false); // Auto reject after timeout
-        }, 60000); // 60 seconds timeout
   
-        const listener = async (callbackQuery) => {
-          // Only handle callback queries for this confirmation message.
-          if (
-            !callbackQuery.data ||
-            (!callbackQuery.data.startsWith("confirm_") &&
-              !callbackQuery.data.startsWith("cancel_"))
-          ) {
-            return; // Ignore unrelated callback queries
+          // Remove the inline keyboard
+          try {
+            await this.bot.editMessageReplyMarkup(
+              { inline_keyboard: [] },
+              { chat_id: msg.chat.id, message_id: sentMessage.message_id }
+            );
+            await this.bot.sendMessage(
+              msg.chat.id,
+              "⏱ Confirmation timed out. Please try again.",
+              { parse_mode: "HTML" }
+            );
+          } catch (err) {
+            console.error("Error updating message after timeout:", err);
           }
   
-          if (callbackQuery.message.chat.id === msg.chat.id) {
-            clearTimeout(timeout);
-            this.bot.removeListener("callback_query", listener);
+          resolve(false);
+        }, 60000);
   
-            // Remove the inline keyboard from the message to prevent further callbacks
+        // 2) Listener for callback queries
+        const listener = async (callbackQuery) => {
+          if (
+            !callbackQuery.data ||
+            (
+              !callbackQuery.data.startsWith(`confirm_${confirmationId}`) &&
+              !callbackQuery.data.startsWith(`cancel_${confirmationId}`)
+            )
+          ) {
+            return; // Not our confirmation, ignore
+          }
+  
+          // Clear the 60-second timeout
+          clearTimeout(timeout);
+          // Stop listening for other callbacks
+          this.bot.removeListener("callback_query", listener);
+  
+          // Remove the inline keyboard
+          try {
             await this.bot.editMessageReplyMarkup(
               { inline_keyboard: [] },
               {
                 chat_id: msg.chat.id,
-                message_id: callbackQuery.message.message_id,
+                message_id: callbackQuery.message.message_id
               }
             );
+          } catch (err) {
+            console.error("Error removing inline keyboard:", err);
+          }
   
-            const confirmed = callbackQuery.data === `confirm_${msg.chat.id}`;
+          // Decide which button was pressed
+          const confirmed = callbackQuery.data === `confirm_${confirmationId}`;
   
-            // Acknowledge the callback silently (this prevents Telegram errors)
+          // Acknowledge the callback silently
+          try {
             await this.bot.answerCallbackQuery(callbackQuery.id, {
               text: confirmed ? "✅ Confirmed!" : "❌ Cancelled",
-              show_alert: false,
+              show_alert: false
             });
-
-            if (!confirmed) {              
-              // Record user-specific cancellation.
-              this.userCancellations.set(msg.chat.id, true);
-            }
-
-            // Simply resolve with true/false – no callback data is passed on
-            resolve(confirmed);
+          } catch (err) {
+            console.error("Error answering callback query:", err);
           }
+  
+          // Wait 3 seconds, then delete the entire message
+          setTimeout(async () => {
+            try {
+              await this.bot.deleteMessage(msg.chat.id, callbackQuery.message.message_id);
+            } catch (err) {
+              console.error("Error deleting confirmation message:", err);
+            }
+          }, 3000);
+  
+          // Resolve promise with true (confirmed) or false (cancelled)
+          resolve(confirmed);
         };
   
-        // Add the listener for callback queries
+        // Attach the callback query listener
         this.bot.on("callback_query", listener);
       });
     } catch (error) {
       console.error("❌ Error in askForConfirmation:", error.message);
-      return false;
+      return false; // Return false if something fails outright
     }
   }   
 
@@ -914,16 +949,16 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       // Declare userCleanResult in the outer scope for this task.
       let userCleanResult = "";
   
-      let stepResult = null;
+      let stepResult;
       try {
-        stepResult = await this.executeFunctionWithLimitedRetry(task.name, parsedArguments, userId, msg.chat.id, 3);
-        const trimmedResult = this.formatResults([stepResult]);
+        stepResult = await this.executeFunctionWithLimitedRetry(task.name, parsedArguments, userId, msg.chat.id, 2);
+        const parsedResults = this.formatResults([stepResult]);
   
         // Full clean output for AI processing (with timestamp and metadata)
-        const fullCleanResult = this.cleanJSONText(trimmedResult, task.name, task.arguments);
+        const fullCleanResult = this.cleanJSONText(parsedResults, task.name, task.arguments);
 
         // User output: remove markdown symbols and extra whitespace, then trim to 200 characters.
-        const userNoodle = this.cleanTextForTelegram(trimmedResult);
+        const userNoodle = this.cleanTextForTelegram(parsedResults);
 
         userCleanResult = userNoodle
           .replace(/[*_~`#{}\[\]]/g, "")
@@ -936,7 +971,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         console.log("✅ Updated Results on last Task:", {
           taskName: task.name,
           arguments: parsedArguments,
-          result: trimmedResult,
+          result: parsedResults,
           timestamp: new Date().toISOString(),
         });
       } catch (error) {
@@ -1005,6 +1040,8 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       }
     }
     const summary = this.formatResults(results.map((r) => r.text));
+    
+    //console.log("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^:", JSON.stringify(summary, null, 2));
     return { text: summary };
   }  
 
@@ -1218,7 +1255,6 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         edit_price_alert: () => this.intentProcessor.editPriceAlert(args.alertId),
         view_price_alert: () => this.intentProcessor.getPriceAlert(args.alertId),
         delete_price_alert: () => this.intentProcessor.deletePriceAlert(args.alertId),
-        create_timed_order: () => this.intentProcessor.createTimedOrder(args),
         get_portfolio: () => this.intentProcessor.getPortfolio(userId, args.network),
         get_wallet_balances: () => this.intentProcessor.getBalances(chatId, userId, args),
         get_wallet_token_transactions: () => this.intentProcessor.getWalletTransactions(chatId, args),
@@ -1229,7 +1265,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         monitor_kol: () => this.intentProcessor.startKOLMonitoring(userId, args),
         get_kol_monitor_positions: () => this.intentProcessor.getKOLMonitors(userId),
         delete_kol_monitor_position: () => this.intentProcessor.deleteKOLMonitoring(userId, args.handle),        
-        delete_kol_monitor_position_by_id: () => this.intentProcessor.deleteKOLMonitoringID(userId, args.id),
+        /*delete_kol_monitor_position_by_id: () => this.intentProcessor.deleteKOLMonitoringID(userId, args.id),*/
         stop_monitor_kol: () => this.intentProcessor.stopKOLMonitoring(userId, args.handle),
         search_products: () => this.intentProcessor.handleShopifySearch(args.query),
         fetch_tweets_for_symbol: () => this.intentProcessor.search_tweets_for_cashtag(userId, args.query),

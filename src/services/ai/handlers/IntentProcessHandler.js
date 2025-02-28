@@ -10,16 +10,8 @@ import { FlowManager } from '../flows/FlowManager.js';
 // External Services
 import { braveSearch } from '../../brave/BraveSearchService.js';
 import { shopifyService } from '../../shopify/ShopifyService.js';
-import { dextools } from '../../dextools/index.js';
-import { timedOrderService } from '../../timedOrders.js';
-import { priceAlertService } from '../../priceAlerts.js';
 import { walletService } from '../../wallet/index.js';
 import { twitterService } from '../../twitter/index.js';
-import { solanaPayService } from '../../solanaPay/SolanaPayService.js';
-import { butlerService } from '../../butler/ButlerService.js';
-import { dbAIInterface } from '../../db/DBAIInterface.js';
-import { gemsService } from '../../gems/GemsService.js';
-import { flipperMode } from '../../pumpfun/FlipperMode.js';
 import { dexscreener } from '../../dexscreener/index.js';
 
 export class IntentProcessHandler {

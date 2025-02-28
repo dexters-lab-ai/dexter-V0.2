@@ -295,7 +295,7 @@ class PriceAlertService extends EventEmitter {
                 price: currentPrice,
                 expectedOutput: tradeResult.expectedOutput,
                 slippageBps: tradeResult.slippageBps,
-                dynamicSlippage: tradeResult.dynamicSlippage,
+                timeTaken: tradeResult.timeTaken,
               },
             },
           });
@@ -315,9 +315,9 @@ class PriceAlertService extends EventEmitter {
           ? parseFloat(tradeResult.expectedOutput).toFixed(4) + " " + (alert.swapAction.type === 'buy' ? alert.tokenAddress : 'SOL')
           : "N/A";
         const slippageInfo = tradeResult.slippageBps ? `${tradeResult.slippageBps} bps` : "N/A";
-        const dynamicSlippage = tradeResult.dynamicSlippage
-          ? `${tradeResult.dynamicSlippage.minBps}-${tradeResult.dynamicSlippage.maxBps} bps`
-          : "N/A";
+        const timeTaken = tradeResult.timeTaken
+          ? `${tradeResult.timeTaken} secs`
+          : "0.2 sec";
         const nowFormatted = new Date().toLocaleString();
   
         // Craft the final message for the user.
@@ -333,7 +333,7 @@ class PriceAlertService extends EventEmitter {
           `• **Input Amount:** ${formattedInput}\n` +
           `• **Expected Output:** ${formattedOutput}\n` +
           `• **Static Slippage:** ${slippageInfo}\n` +
-          `• **Dynamic Slippage:** ${dynamicSlippage}\n\n` +
+          `• **Speed Taken:** ${timeTaken}\n\n` +
           `**Time:** ${nowFormatted}\n\n` +
           `*This trade was automatically executed based on your price alert set 'action'.*`;
   
