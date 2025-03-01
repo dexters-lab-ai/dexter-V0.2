@@ -11,6 +11,14 @@ const ResearchSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const EmailThreadSchema = new mongoose.Schema({
+  threadId: { type: String, required: true },
+  snippet: String,        // short snippet from the email
+  historyId: String,      // used for subsequent sync
+  subject: String,
+  lastUpdated: { type: Date, default: Date.now }
+});
+
 // Wallet Schema Definition
 const WalletSchema = new mongoose.Schema({
   address: {
@@ -96,10 +104,27 @@ const UserSchema = new mongoose.Schema(
       index: true
     },
     wallets: {
+      sonic: [WalletSchema],      
       ethereum: [WalletSchema],
       base: [WalletSchema],
       solana: [WalletSchema],
-      avalanche: [WalletSchema] 
+      avalanche: [WalletSchema],
+      bsc: [WalletSchema]
+    },
+    googleAuth: {
+      encryptedAccessToken: { type: String, default: "" },
+      encryptedRefreshToken: { type: String, default: "" },
+      scope: { type: String, default: "" },
+      tokenType: { type: String, default: "" },
+      expiryDate: { type: Number },  // in ms since epoch
+    },
+    emailThreads: {
+      type: [EmailThreadSchema],
+      default: []
+    },
+    phoneNumbers: {
+      type: [String],
+      default: []
     },
     bridgingRecords: {
       type: [BridgingRecordSchema],
@@ -151,10 +176,6 @@ const UserSchema = new mongoose.Schema(
         refreshToken: String,
         expiryDate: Date
       },
-      butler: {
-        enabled: { type: Boolean, default: false },
-        monitors: [MonitorSchema]  // <-- uses the Monitor sub-schema
-      },
       kol: {
         enabled: { type: Boolean, default: false },
         monitors: [MonitorSchema]  // <-- uses the same sub-schema
@@ -188,6 +209,49 @@ UserSchema.pre("save", function (next) {
 
 // Instance Methods
 UserSchema.methods = {
+  setGoogleTokens: async function(tokens) {
+    if (tokens.access_token) {
+      this.googleAuth.encryptedAccessToken = encrypt(tokens.access_token);
+    }
+    if (tokens.refresh_token) {
+      this.googleAuth.encryptedRefreshToken = encrypt(tokens.refresh_token);
+    }
+    if (tokens.scope) this.googleAuth.scope = tokens.scope;
+    if (tokens.token_type) this.googleAuth.tokenType = tokens.token_type;
+    if (tokens.expiry_date) this.googleAuth.expiryDate = tokens.expiry_date;
+    await this.save();
+  },
+
+  getDecryptedGoogleTokens: function() {
+    return {
+      access_token: this.googleAuth.encryptedAccessToken
+        ? decrypt(this.googleAuth.encryptedAccessToken)
+        : "",
+      refresh_token: this.googleAuth.encryptedRefreshToken
+        ? decrypt(this.googleAuth.encryptedRefreshToken)
+        : "",
+      scope: this.googleAuth.scope,
+      token_type: this.googleAuth.tokenType,
+      expiry_date: this.googleAuth.expiryDate
+    };
+  },
+
+  // Optionally, store an email thread reference
+  addEmailThread: async function(threadId, snippet, subject, historyId) {
+    // If we want to avoid duplicates, we can check:
+    const existing = this.emailThreads.find(t => t.threadId === threadId);
+    if (!existing) {
+      this.emailThreads.push({ threadId, snippet, subject, historyId });
+    } else {
+      // update existing
+      existing.snippet = snippet || existing.snippet;
+      existing.subject = subject || existing.subject;
+      existing.historyId = historyId || existing.historyId;
+      existing.lastUpdated = new Date();
+    }
+    return this.save();
+  },
+
   // Get active wallet with proper error handling and validation
   getActiveWallet: function(network) {
     if (!network || !Object.values(NETWORKS).includes(network)) {

@@ -39,6 +39,10 @@ export class PaymentSessionManager extends EventEmitter {
     }
   }
 
+  async getSession(sessionId) {
+    return this.sessions.get(sessionId);
+  }
+
   generateSessionId() {
     return `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }

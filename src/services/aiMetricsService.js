@@ -1,5 +1,4 @@
 import { EventEmitter } from 'events';
-import { TRADING_INTENTS } from './ai/intents.js';
 import { ErrorHandler } from '../core/errors/index.js';
 import { cleanupManager } from '../core/cleanup.js';
 
@@ -50,6 +49,7 @@ class AIMetricsService extends EventEmitter {
 
   initializeMetrics() {
     // Initialize intent metrics
+    /*
     Object.values(TRADING_INTENTS).forEach(intent => {
       this.metrics.intents.set(intent, {
         total: 0,
@@ -59,6 +59,7 @@ class AIMetricsService extends EventEmitter {
         lastUsed: null
       });
     });
+    */
   }
 
   startMetricsCollection() {

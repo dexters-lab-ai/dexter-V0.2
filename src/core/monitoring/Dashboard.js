@@ -14,7 +14,20 @@ import { User } from '../../models/User.js';
 import { ErrorHandler } from '../errors/index.js';
 import os from 'os';
 
+// Google Router
+import bodyParser from 'body-parser'; 
+import googleRoutes from '../../routes/googleRoutes.js';
+import merchantRoutes from '../../routes/merchantRoutes.js';
+
+// Start Express Server, lets run stuff
 const app = express();
+app.use(bodyParser.json());
+app.use('/api', googleRoutes);
+app.use('/api/merchants', merchantRoutes);
+
+app.listen(3000, () => {
+  console.log("Express Server listening on 3000...");
+});
 
 // WebSocket setup
 const wsServer = new WebSocketServer({ noServer: true });
@@ -71,7 +84,7 @@ async function fetchMetrics() {
       cpu: process.cpuUsage(),
       osLoadAvg: os.loadavg(),
       activeUsers,
-      wallets: await walletService.fetchWalletMetrics(),
+      wallets: await walletService.checkHealth(),
       pumpFun: pumpFunMetrics.status === 'fulfilled' ? pumpFunMetrics.value : 'Error',
       gemsToday: await gemsService.scanGems(),
       priceAlerts: priceAlertMetrics.status === 'fulfilled' ? priceAlertMetrics.value : 'Error',

@@ -27,10 +27,10 @@ export class WebSocketManager extends EventEmitter {
     return true;
   }
 
-  notifyClient(sessionId, data) {
-    const ws = this.clients.get(sessionId);
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(data));
+  notifyClient(sessionId, message) {
+    const client = this.clients.get(sessionId);
+    if (client) {
+      client.send(JSON.stringify(message));
     }
   }
 

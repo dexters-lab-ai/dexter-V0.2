@@ -3,7 +3,7 @@ import { ErrorHandler } from '../../../core/errors/index.js';
 import { IntentProcessHandler } from '../handlers/IntentProcessHandler.js';
 import { User } from "../../../models/User.js";
 import { config } from '../../../core/config.js';
-import { decrypt } from "../../../utils/encryption.js";
+import { decrypt, encrypt } from "../../../utils/encryption.js";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58"; // For Base58 decoding
 
@@ -20,7 +20,6 @@ import { walletService } from '../../wallet/index.js';
 import { tokenApprovalService } from '../../tokens/TokenApprovalService.js';
 import { solanaPayService } from '../../solanaPay/SolanaPayService.js';
 import { shopifyService } from '../../shopify/ShopifyService.js';
-import { butlerService } from '../../butler/ButlerService.js';
 import { dbAIInterface } from '../../db/DBAIInterface.js';
 import { contextManager } from '../ContextManager.js';
 import { dexscreener } from '../../dexscreener/index.js';
@@ -30,6 +29,13 @@ import cookieFun from '../../cookieDAO/CookieFun.js';
 import ResearchService from '../../research/ResearchService.js';
 import { tasksService } from '../../tasks/TasksService.js';
 import { searchCoin } from '../../coingecko/CoinGecko.js';
+
+// Google & SolanaPay
+import { gmailController } from '../../../controllers/gmailController.js';
+import { calendarController } from '../../../controllers/calendarController.js';
+import { solanaPayService } from '../../solanaPay/SolanaPayService.js';
+import { recurringPaymentService } from '../../recurringPayments/RecurringPayments.js';
+import { paymentHistoryService } from '../../paymentHistory/PaymentHistory.js';
 
 // Quicknode Jupiter
 import { JupiterQuickNode, getDetailedFormattedBalancesSOL, getAllSPLTokenTransactions} from '../../trading/JupiterQuickNode.js';
@@ -75,7 +81,6 @@ export class IntentProcessor extends EventEmitter {
         tradeService.initialize(),
         shopifyService.initialize(),
         solanaPayService.initialize(),
-        butlerService.initialize(),
         tasksService.initialize(),
         this.bridgeService.initialize(),
       ]);
@@ -646,30 +651,19 @@ export class IntentProcessor extends EventEmitter {
         "Decrypting Wallet...",
         { parse_mode: "Markdown" }
       );      
-      let privateKey;
-      try {
-        privateKey = decrypt(walletData.encryptedPrivateKey);
-      } catch (decryptionError) {
-        console.error("Decryption Error:", decryptionError.message);
-      }
+      // Decrypt the private key (or use it directly if already valid)
+      let privateKey = decrypt(walletData.encryptedPrivateKey);
       if (!privateKey) {
-        if (/^(0x)?[0-9a-fA-F]{64}$/.test(walletData.encryptedPrivateKey)) {
-          console.warn("Private key appears unencrypted, using as-is.");
+        if (/^(0x)?[0-9a-fA-F]{64}$/.test(walletData.encryptedPrivateKey))
           privateKey = walletData.encryptedPrivateKey;
-        } else {
-          throw new Error("Failed to decrypt or retrieve valid private key.");
-        }
+        else throw new Error("Failed to decrypt or retrieve a valid private key.");
       }
-      const providerForNetwork = providers[net.toLowerCase()];
-          if (!providerForNetwork)
-            throw new Error(`Provider for network "${net}" is not configured.`);
-          
-      let walletSigner;
-      try {
-        walletSigner = new Wallet(privateKey, providerForNetwork);
-      } catch (error) {
-        throw new Error("Invalid private key format for signing transactions.");
-      }
+       // Get the provider from our unified providers list.
+       const provider = providers[networkKey];
+       if (!provider) throw new Error(`No provider configured for network: ${params.network}`);
+   
+       // Create a wallet signer using the decrypted private key and provider.
+       const walletSigner = new Wallet(privateKey, provider);
 
       await this.safeSendMessage(
         this.bot, 
@@ -677,15 +671,7 @@ export class IntentProcessor extends EventEmitter {
         `Sending Tokens: Sending ${params.amount} of ${params.tokenAddress} to ${params.recipient} on ${params.network}...`, 
         { parse_mode: "Markdown" });
 
-      const txResult = await tradeService.executeTrade({
-        network: params.network,
-        action: "transfer",
-        tokenAddress: params.tokenAddress,
-        amount: params.amount,
-        walletAddress: wallet.address,
-        recipient: params.recipient,
-        signer: walletSigner
-      });
+      const txResult = await evmQuickNode.sendEvmTokenTransfer({ network: params.network, wallet: walletSigner, tokenAddress: params.tokenAddress, to: params.recipient, amount: params.amount });
 
       await this.safeSendMessage(
         this.bot, 
@@ -1667,16 +1653,171 @@ export class IntentProcessor extends EventEmitter {
     };
   }
 
-  async saveButlerReminderEmails(userId, text) {
-    return await butlerService.setReminder(userId, text);
+  // Google, TWilio, Nodemailer
+  async manageUserGmailSettings({ userId, action, username, password }) {
+    // Load user
+    const user = await User.findOne({ telegramId: userId });
+    if (!user) {
+      throw new Error(`User not found for user = ${userId}`);
+    }
+
+    switch (action) {
+      case 'create':
+      case 'update':
+        if (!username || !password) {
+          throw new Error("username/password required for create/update");
+        }
+        // Encrypt
+        
+      let passwordHashed = encrypt(password);
+        user.gmailSettings.username = username;
+        user.gmailSettings.password = passwordHashed;
+        await user.save();
+        return { success: true, action, message: "Gmail settings saved/updated." };
+
+      case 'delete':
+        user.gmailSettings.username = "";
+        user.gmailSettings.password = "";
+        await user.save();
+        return { success: true, action, message: "Gmail settings removed." };
+
+      default:
+        throw new Error(`Unsupported action: ${action}`);
+    }
   }
 
-  async monitorButlerReminderEmails(userId, text) {
-    return await butlerService.startMonitoring(userId, text);
+  // Google API Methods
+  async manageUserGmailSettings(userId, args) {
+    try {
+      const { action, username, password } = args;
+      const user = await User.findOne({ telegramId: userId });
+      if (!user) throw new Error('User not found');
+
+      return await gmailController.manageSettings({ body: { telegramId: userId, action, username, password } });
+    } catch (error) {
+      console.error('Error managing Gmail settings:', error);
+      throw error;
+    }
   }
 
-  async generateGoogleReport(userId) {
-    return await butlerService.generateReport(userId);
+  async manageCalendarEvent(userId, args) {
+    try {
+      const { action, eventId, title, startTime, endTime, description } = args;
+      const user = await User.findOne({ telegramId: userId });
+      if (!user) throw new Error('User not found');
+
+      return await calendarController.manageCalendarEvent({ body: { telegramId: userId, action, eventId, title, startTime, endTime, description } });
+    } catch (error) {
+      console.error('Error managing calendar event:', error);
+      throw error;
+    }
+  }
+
+  async sendEmail(userId, args) {
+    try {
+      const { to, subject, text, html } = args;
+      const user = await User.findOne({ telegramId: userId });
+      if (!user) throw new Error('User not found');
+
+      return await gmailController.sendEmail({ body: { telegramId: userId, to, subject, text, html } });
+    } catch (error) {
+      console.error('Error sending email:', error);
+      throw error;
+    }
+  }
+
+  async searchEmails(userId, args) {
+    try {
+      const { query, maxResults } = args;
+      const user = await User.findOne({ telegramId: userId });
+      if (!user) throw new Error('User not found');
+
+      return await gmailController.searchEmails({ body: { telegramId: userId, query, maxResults } });
+    } catch (error) {
+      console.error('Error searching emails:', error);
+      throw error;
+    }
+  }
+
+  async readEmail(userId, args) {
+    try {
+      const { messageId, format } = args;
+      const user = await User.findOne({ telegramId: userId });
+      if (!user) throw new Error('User not found');
+
+      return await gmailController.readEmail({ body: { telegramId: userId, messageId, format } });
+    } catch (error) {
+      console.error('Error reading email:', error);
+      throw error;
+    }
+  }
+
+  async replyEmail(userId, args) {
+    try {
+      const { threadId, messageId, body } = args;
+      const user = await User.findOne({ telegramId: userId });
+      if (!user) throw new Error('User not found');
+
+      return await gmailController.replyEmail({ body: { telegramId: userId, threadId, messageId, body } });
+    } catch (error) {
+      console.error('Error replying to email:', error);
+      throw error;
+    }
+  }
+  
+  // SolanaPay Methods
+  async createSolanaPayment(args) {
+    try {
+      const { amount, recipient, reference, label } = args;
+      return await solanaPayService.createPayment(amount, recipient, label, reference);
+    } catch (error) {
+      console.error('Error creating Solana payment:', error);
+      throw error;
+    }
+  }
+
+  async getPaymentStatus(args) {
+    try {
+      const { sessionId } = args;
+      return await solanaPayService.getPaymentStatus(sessionId);
+    } catch (error) {
+      console.error('Error getting payment status:', error);
+      throw error;
+    }
+  }
+
+  async validatePayment(args) {
+    try {
+      const { signature } = args;
+      return await solanaPayService.validatePayment(signature);
+    } catch (error) {
+      console.error('Error validating payment:', error);
+      throw error;
+    }
+  }
+
+  async createRecurringPayment(userId, args) {
+    try {
+      const { merchantEmail, amount, interval } = args;
+      return await recurringPaymentService.createRecurringPayment(
+        userId,
+        merchantEmail,
+        amount,
+        interval
+      );
+    } catch (error) {
+      console.error('Error creating recurring payment:', error);
+      throw error;
+    }
+  }
+
+  async getPaymentHistory(userId) {
+    try {
+      return await paymentHistoryService.getPaymentHistory(userId);
+    } catch (error) {
+      console.error('Error getting payment history:', error);
+      throw error;
+    }
   }
 
   async performTokenPriceCheck(token) {

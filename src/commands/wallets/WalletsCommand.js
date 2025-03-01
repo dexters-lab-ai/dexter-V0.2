@@ -54,8 +54,6 @@ export class WalletsCommand extends Command {
       ["notification_settings", this.handleShowNotificationSettings.bind(this)],
       ["slippage_settings", this.handleSlippageSettings.bind(this)],
       ["toggle_autonomous", this.handleToggleAutonomous.bind(this)],
-      ["butler_assistant", this.handleButlerToggle.bind(this)],
-      ["toggle_butler", this.handleButlerToggle.bind(this)],
 
       // Slippage adjustments
       ["adjust_eth_slippage", (q) => this.handleSlippageAdjustment(q, "ethereum")],
@@ -267,12 +265,7 @@ export class WalletsCommand extends Command {
     const { message, from } = query;
     return this.settingsHandler.toggleAutonomousTrading(message.chat.id, from);
   }
-
-  async handleButlerToggle(query) {
-    const { message, from } = query;
-    return this.settingsHandler.toggleButlerAssistant(message.chat.id, from);
-  }
-
+  
   /**
    * The user tapped "switch_network"
    */

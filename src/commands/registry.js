@@ -81,7 +81,6 @@ export class CommandRegistry extends EventEmitter {
         "llm_settings", "switch_llm_openai", "switch_llm_deepseek",
         "autonomous_settings", "toggle_autonomous",
         "notification_settings", "toggle_notifications",
-        "butler_assistant", "toggle_butler",
         "slippage_settings", "adjust_eth_slippage",
         "adjust_base_slippage", "adjust_sol_slippage",
         "switch_network", "back_to_settings", "back_to_wallets"

@@ -1,33 +1,30 @@
 import dotenv from 'dotenv';
 dotenv.config();
+
 import axios from 'axios';
+import https from 'https';
+import fs from 'fs';
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import ngrok from 'ngrok'
+
 import { config } from './core/config.js';
 
-// OpenSSL & Ngrok Tunneling 
-import https from "https";
-import fs from "fs";
-import express from "express";
-import path from 'path'; // Added import for 'path' module
-import { fileURLToPath } from "url";
-
-// Core services
+// Core services (Telegram bot, DB, etc.)
 import { bot } from './core/bot.js';
+import { db } from './core/database.js';
 import { intentProcessor } from './services/ai/processors/IntentProcessor.js';
 import { unifiedMessenger } from './core/UnifiedMessageHandler.js';
-import { db } from './core/database.js';
 import { rateLimiter } from './core/rate-limiting/RateLimiter.js';
 import { circuitBreakers } from './core/circuit-breaker/index.js';
-
-// Service imports
+import { startMonitoringDashboard } from './core/monitoring/Dashboard.js';
 import { tasksService } from './services/tasks/TasksService.js';
 import { taskScheduler } from './services/tasks/Scheduler.js';
 import { priceAlertService } from './services/priceAlerts.js';
 import { walletService } from './services/wallet/index.js';
-import { butlerService } from './services/butler/ButlerService.js';
 import { shopifyService } from './services/shopify/ShopifyService.js';
 import { ErrorHandler } from './core/errors/index.js';
-
-// Learning systems
 import { kolLearningSystem } from './services/ai/flows/learning/KOLLearningSystem.js';
 import { strategyManager } from './services/ai/flows/learning/StrategyManager.js';
 import { twitterService } from './services/twitter/index.js';
@@ -37,6 +34,9 @@ import Moralis from 'moralis';
 
 let isShuttingDown = false;
 
+/**
+ * Graceful Cleanup
+ */
 async function cleanup(botInstance) {
   if (isShuttingDown) return;
   isShuttingDown = true;
@@ -45,11 +45,9 @@ async function cleanup(botInstance) {
   try {
     await db.disconnect();
     await walletService.cleanup();
-    
     if (botInstance) {
       await botInstance.stopPolling();
     }
-
     console.log('✅ Cleanup completed.');
   } catch (error) {
     console.error('❌ Error during cleanup:', error);
@@ -58,87 +56,108 @@ async function cleanup(botInstance) {
   }
 }
 
-// Ngrok tunneling for our Google Cloud
-async function startNgrokTunnel() {
+/**
+ * Start an HTTPS server on local port 3000,
+ * 
+ */
+async function startLocalHttpsAndNgrok() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const app = express();
-  const options = {
-    key: fs.readFileSync(path.join(__dirname, '../config/openssl/key.pem')),
-    cert: fs.readFileSync(path.join(__dirname, '../config/openssl/cert.pem'))
-  };
-  const port = process.env.NGROK_PORT || 5050;
-  return new Promise((resolve, reject) => {
-    const server = https.createServer(options, app);
-    server.listen(port, () => {
-      console.log(`✅ Ngrok Server running on http://localhost:${port}`);
-      resolve(server);
-    });
-    server.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${port} is already in use.`);
-      } else {
-        console.error('❌ Error setting up Ngrok Tunneling:', err);
-      }
-      reject(err);
-    });
+  
+  // 1) Create an Express app if you want to mount routes, etc.
+  app.get('/', (req, res) => {
+    res.send('Hello from local HTTPS server + ngrok!');
   });
-}
 
-async function initializeServices() {
-  console.log('🔧 Initializing core services...');
+  // 2) Create local HTTPS server
+  const keyPath = path.join(__dirname, '../config/openssl/key.pem');
+  const certPath = path.join(__dirname, '../config/openssl/cert.pem');
+  const options = {
+    key: fs.readFileSync(keyPath),
+    cert: fs.readFileSync(certPath)
+  };
+
+  const localPort = config.ngrokPort || 3000;
+  const server = https.createServer(options, app);
+
+  await new Promise((resolve, reject) => {
+    server.listen(localPort, () => {
+      console.log(`✅ HTTPS server running on https://localhost:${localPort}`);
+      resolve();
+    });
+    server.on('error', reject);
+  });
+
+  // 3) Start ngrok tunnel
+  const authtoken = config.ngrokAuthToken;
 
   try {
-    // Initialize database first
+    const publicUrl = await ngrok.connect({
+      addr: localPort,
+      authtoken,
+      region: 'us',
+      hostname: 'molly-humane-flea.ngrok-free.app',
+      onStatusChange: status => console.log('ngrok status ->', status),
+      onLogEvent: data => console.log('ngrok event ->', data)
+    });
+
+    console.log(`🔗 Ngrok tunnel established at: ${publicUrl}`);
+    console.log('In use for Google OAuth callbacks:', `${publicUrl}/api/google/callback`);
+
+    return { server, publicUrl };
+  } catch (err) {
+    console.error('❌ Error starting ngrok tunnel:', err);
+    throw err;
+  }
+}
+
+/**
+ * Initialize all your core services
+ */
+async function initializeServices() {
+  console.log('🔧 Initializing core services...');
+  try {
     console.log('📡 Connecting to MongoDB...');
     await db.connect();
 
     await intentProcessor.initialize();
-
-    // Messenger & Command Registry Setup
     await unifiedMessenger.initialize();
 
-    // Initialize wallet service
     console.log('👛 Initializing wallet service...');
     await walletService.initialize();
 
-    // Initialize rate limiter
     console.log('⚡ Initializing rate limiter...');
     await rateLimiter.initialize();
 
-    // Initialize Butler Google service    
-    console.log('☁️ Initializing Google services...');
-    await butlerService.initialize();
-    await startNgrokTunnel();
+    console.log('📊 Starting Express Server & monitoring dashboard...');
+    await startMonitoringDashboard();
 
-    // Initialize circuit breakers
+    console.log('☁️ Initializing Google API & Ngrok service...');
+    await startLocalHttpsAndNgrok();
+
     console.log('🔌 Setting up circuit breakers...');
     await circuitBreakers.initialize();
 
-    // Initialize Shopify service
     console.log('🛍️ Initializing Shopify service...');
     await shopifyService.initialize();
 
-    // Tasks and Queues
+    console.log('⚙️ Initializing tasks and scheduler...');
     await tasksService.initialize();
-
-    // Tasks Scheduler    
     await taskScheduler.initialize();
-    await taskScheduler.start(); 
+    await taskScheduler.start();
 
-    // Initialize Moralis    
-    await Moralis.start({ apiKey: config.moralisAPIKey});
+    console.log('⚙️ Initializing Moralis...');
+    await Moralis.start({ apiKey: config.moralisAPIKey });
 
-    // Initialize learning systems
     console.log('🧠 Initializing learning systems...');
     await Promise.all([
       kolLearningSystem.initialize(),
       strategyManager.initialize(),
     ]);
 
-    // Price Alerts
+    console.log('💲 Initializing price alerts...');
     await priceAlertService.initialize();
 
-    // Twitter KOL & Trench Chatter Monitoring
+    console.log('🐦 Initializing Twitter service...');
     await twitterService.initialize();
 
     console.log('✅ Core services initialized successfully :)');
@@ -148,19 +167,18 @@ async function initializeServices() {
   }
 }
 
+/**
+ * Main startup function
+ */
 async function startAgent() {
   try {
     console.log('🚀 Starting KATZ AI Agent...');
-
-    // 1. Initialize core services
     await initializeServices();
 
-    // 2. Start Telegram Bot Polling
-    console.log('🤖 Starting KATZ! Telegram Interface...');
+    console.log('🤖 Starting Telegram Bot polling...');
     await bot.startPolling();
 
     console.log('✅ D.A.I.L AI Agent is up and running!');
-    
     return bot;
   } catch (error) {
     console.error('❌ Error during agent startup:', error);
@@ -169,7 +187,9 @@ async function startAgent() {
   }
 }
 
-// Error Handlers
+/**
+ * Error Handlers
+ */
 function setupErrorHandlers(botInstance) {
   process.on('SIGINT', async () => {
     console.log('🛑 SIGINT received. Shutting down...');
@@ -194,7 +214,9 @@ function setupErrorHandlers(botInstance) {
   });
 }
 
-// Start the Agent
+/**
+ * Run it all
+ */
 (async () => {
   const botInstance = await startAgent();
   setupErrorHandlers(botInstance);

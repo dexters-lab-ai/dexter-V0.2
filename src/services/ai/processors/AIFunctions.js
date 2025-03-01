@@ -1194,32 +1194,156 @@ export const AIFunctions = [
         }
       },    
   
-      // Butler Assistant
+      // SolanaPay
       {
-          name: "set_reminder",
-          description: "Connect User Google Email, Google Drive, Google Calender services. Save Email, Pictures and Calender reminders to User Google accounts",
-          parameters: {
+        name: "create_solana_payment",
+        description: "Create a Solana Pay payment request",
+        parameters: {
           type: "object",
           properties: {
-              text: { type: "string" },
-              time: { type: "string", format: "date-time" },
-              recurring: { type: "boolean" }
+            amount: { type: "number", description: "Payment amount" },
+            recipient: { type: "string", description: "Recipient address" },
+            reference: { type: "string", description: "Payment reference" },
+            label: { type: "string", description: "Payment label" }
           },
-          required: ["text"]
-          }
+          required: ["amount", "recipient"]
+        }
       },
-  
+
       {
-          name: "start_monitoring_reminders",
-          description: "Start monitoring user's Google Services Email and Calender reminders",
-          parameters: {
+        name: "get_payment_status",
+        description: "Check status of a Solana Pay payment",
+        parameters: {
+          type: "object", 
+          properties: {
+            sessionId: { type: "string", description: "Payment session ID" }
+          },
+          required: ["sessionId"]
+        }
+      },
+
+      {
+        name: "validate_payment",
+        description: "Validate a completed Solana Pay payment",
+        parameters: {
           type: "object",
           properties: {
-              text: { type: "string" }
+            signature: { type: "string", description: "Transaction signature" }
           },
-          required: ["text"]
-          }
+          required: ["signature"]
+        }
       },
+
+      {
+        name: "create_recurring_payment",
+        description: "Set up a recurring Solana Pay payment",
+        parameters: {
+          type: "object",
+          properties: {
+            merchantEmail: { type: "string", description: "Merchant email" },
+            amount: { type: "number", description: "Payment amount" },
+            interval: { type: "string", enum: ["daily", "weekly", "monthly"] }
+          },
+          required: ["merchantEmail", "amount", "interval"]
+        }
+      },
+
+      {
+        name: "get_payment_history",
+        description: "Get payment history for a user",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: []
+        }
+      },
+
+      // Google API 
+      {
+        name: "manage_user_google_settings",
+        description: "Manage user's Gmail settings",
+        parameters: {
+          type: "object",
+          properties: {
+            action: { type: "string", enum: ["create", "update", "delete"] },
+            username: { type: "string", description: "Gmail username" },
+            password: { type: "string", description: "Gmail password" }
+          },
+          required: ["action"]
+        }
+      },
+
+      {
+        name: "manage_calendar_event",
+        description: "Manage Google Calendar events",
+        parameters: {
+          type: "object",
+          properties: {
+            action: { type: "string", enum: ["create", "update", "delete"] },
+            eventId: { type: "string", description: "Event ID (for update/delete)" },
+            title: { type: "string", description: "Event title" },
+            startTime: { type: "string", description: "Event start time" },
+            endTime: { type: "string", description: "Event end time" },
+            description: { type: "string", description: "Event description" }
+          },
+          required: ["action"]
+        }
+      },
+
+      {
+        name: "send_email",
+        description: "Send an email via Gmail",
+        parameters: {
+          type: "object",
+          properties: {
+            to: { type: "string", description: "Recipient email" },
+            subject: { type: "string", description: "Email subject" },
+            text: { type: "string", description: "Email body text" },
+            html: { type: "string", description: "Optional HTML body" }
+          },
+          required: ["to", "subject"]
+        }
+      },
+
+      {
+        name: "search_emails",
+        description: "Search a user's Gmail by text or labels using OAuth credentials",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query (e.g. 'label:unread from:boss@example.com')" },
+            maxResults: { type: "number", description: "Max number of results to return, default 10" }
+          },
+          required: []
+        }
+      },
+
+      {
+        name: "read_email",
+        description: "Retrieve a specific email by messageId or threadId from the user's Gmail",
+        parameters: {
+          type: "object",
+          properties: {
+            messageId: { type: "string", description: "The Gmail message ID" },
+            format: { type: "string", enum: ["metadata", "full", "raw"], description: "How much detail do we want from the email" }
+          },
+          required: ["messageId"]
+        }
+      },
+
+      {
+        name: "reply_email",
+        description: "Reply to an existing email thread using the user's Gmail OAuth credentials",
+        parameters: {
+          type: "object",
+          properties: {
+            threadId: { type: "string", description: "The Gmail thread ID" },
+            messageId: { type: "string", description: "The Gmail message ID to reply to" },
+            body: { type: "string", description: "Reply text" }
+          },
+          required: ["threadId", "messageId", "body"]
+        }
+      },    
   
       {
           name: "generate_google_report",

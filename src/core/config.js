@@ -18,6 +18,8 @@ class Config {
   constructor() {
     // Basic Application Settings
     this.botToken = process.env.BOT_TOKEN;
+    this.ngrokAuthToken = process.env.NGROK_AUTHTOKEN;
+    this.ngrokPort = process.env.NGROK_PORT;
     this.deepseekApiKey = process.env.DEEP_SEEK_API_KEY;
     this.openaiApiKey = process.env.OPENAI_API_KEY;
     this.smartContractAddress = process.env.SMART_CONTRACT_ADDRESS;
@@ -87,6 +89,16 @@ class Config {
     // Google Cloud Speech-to-Text Configuration
     this.googleApiKeyFile = process.env.GOOGLE_API_KEY_FILE; // JSON key file path
     this.googleVertexAIKeyFile = process.env.GOOGLE_VERTEXAI_KEY_FILE;
+
+    // Google but OAuth
+    this.googleClientID = process.env.GOOGLE_CLIENT_ID;
+    this.googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    this.googleClientRedirect = process.env.GOOGLE_REDIRECT_URI;
+
+    // Twilio
+    this.twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+    this.twilioSID = process.env.TWILIO_SID;
+    this.twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
 
     // QuickNode Configuration (if needed)
     this.quickNode = {

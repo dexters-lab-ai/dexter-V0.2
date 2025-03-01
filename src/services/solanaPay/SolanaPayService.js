@@ -7,6 +7,8 @@ import { WebSocketManager } from './WebSocketManager.js';
 import { QRCodeGenerator } from './QRCodeGenerator.js';
 import { ReferenceTracker } from './ReferenceTracker.js';
 import { cleanupManager } from '../../core/cleanup.js';
+import { merchantService } from '../../services/merchant/MerchantService.js';
+import { notificationService } from '../../services/notification/NotificationService.js';
 
 export const PaymentStatus = {
   INITIALIZED: 'initialized',
@@ -59,8 +61,13 @@ class SolanaPayService extends EventEmitter {
 
   setupEventHandlers() {
     // Handle payment status updates
-    this.sessions.on('statusUpdate', ({ sessionId, status }) => {
+    this.sessions.on('statusUpdate', async ({ sessionId, status }) => {
       this.websocket.notifyClient(sessionId, { type: 'status', status });
+      const session = await this.sessions.getSession(sessionId);
+      const merchant = await merchantService.getMerchantByEmail(session.merchantEmail);
+      if (merchant) {
+        await notificationService.sendEmail(merchant.email, 'Payment Status Update', `Your payment status is now ${status}`);
+      }
     });
 
     // Handle transaction confirmations
@@ -70,6 +77,11 @@ class SolanaPayService extends EventEmitter {
         type: 'complete',
         signature 
       });
+      const session = await this.sessions.getSession(sessionId);
+      const merchant = await merchantService.getMerchantByEmail(session.merchantEmail);
+      if (merchant) {
+        await notificationService.sendEmail(merchant.email, 'Payment Completed', `Your payment has been completed. Transaction ID: ${signature}`);
+      }
     });
 
     // Handle errors
@@ -79,19 +91,28 @@ class SolanaPayService extends EventEmitter {
         type: 'error',
         error: error.message
       });
+      const session = await this.sessions.getSession(sessionId);
+      const merchant = await merchantService.getMerchantByEmail(session.merchantEmail);
+      if (merchant) {
+        await notificationService.sendEmail(merchant.email, 'Payment Failed', `Your payment has failed. Error: ${error.message}`);
+      }
     });
   }
 
-  async createPayment(amount, recipient, label = 'KATZ Payment', message = 'Thanks for your payment!') {
-    // Pending Merchant Reg - takes some work
-    return "Merchant offline, cant process Solana Payments right now. Contact support/dev guy";
+  async createPayment(amount, recipientEmail, label = 'KATZ Payment', message = 'Thanks for your payment!') {
     try {
+      // Fetch merchant details
+      const merchant = await merchantService.getMerchantByEmail(recipientEmail);
+      if (!merchant) {
+        throw new Error('Merchant not found');
+      }
+
       // Create payment session
       const session = await this.sessions.create({ amount });
 
       // Generate payment URL and QR code
       const { url, qrCode } = await this.qrGenerator.generate({
-        recipient: new PublicKey(process.env.MERCHANT_WALLET), //change to recipient in future, so users point to merchants they wnt to pay to.
+        recipient: new PublicKey(merchant.walletAddress),
         amount,
         reference: new PublicKey(session.id),
         label,

@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { User } from '../../models/User.js';
 import { ErrorHandler } from '../../core/errors/index.js';
 import { db } from '../../core/database.js';
+import { config } from '../../core/config.js';
 
 export class AddressBookService extends EventEmitter {
   constructor() {
@@ -38,45 +39,52 @@ export class AddressBookService extends EventEmitter {
   async saveAddress(userId, data) {
     try {
       const { address, keyword, network, type = 'token' } = data;
-
-      // Validate network
-      if (!['ethereum', 'base', 'solana', 'avalanche'].includes(network)) {
-        throw new Error('Invalid network');
+  
+      // 1) Basic validation
+      if (type === 'phone') {
+        // Possibly do phone number validation here
+        if (!address.match(/^\+\d{1,15}$/)) {
+          throw new Error('Invalid phone number format. Must be E.164 style, e.g. +123456789');
+        }
+      } else {
+        if (!config.networks[network]) {
+          throw new Error(`Unsupported network: ${network}`);
+        }
       }
-
-      // Check if keyword already exists for user
+  
+      // 2) Check if keyword already exists for user
       const existing = await this.addressCollection.findOne({
         userId: userId.toString(),
         keyword: keyword.toLowerCase()
       });
-
       if (existing) {
         throw new Error(`Keyword "${keyword}" already exists`);
       }
-
-      // Save address
+  
+      // 3) Insert record
       const result = await this.addressCollection.insertOne({
         userId: userId.toString(),
         address,
         keyword: keyword.toLowerCase(),
-        network,
+        network: network || null,  // might be null if type=phone
         type,
         createdAt: new Date()
       });
-
+  
       this.emit('addressSaved', {
         userId,
         address,
         keyword,
-        network
+        network,
+        type
       });
-
+  
       return result;
     } catch (error) {
       await ErrorHandler.handle(error);
       throw error;
     }
-  }
+  }  
 
   async getAddress(userId, keyword) {
     try {

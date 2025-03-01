@@ -166,17 +166,6 @@ export const parameterConfig = new Map([
     }
   }],
 
-  // Butler Commands
-  [TRADING_INTENTS.BUTLER_REMINDER, {
-    required: ['text', 'time'],
-    optional: ['email', 'repeat'],
-    validation: {
-      text: (value) => typeof value === 'string' && value.length > 0,
-      time: validators.time,
-      email: validators.email
-    }
-  }],
-
   // Solana Pay
   [TRADING_INTENTS.SOLANA_PAY, {
     required: ['amount', 'recipient'],

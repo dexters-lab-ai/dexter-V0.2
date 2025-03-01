@@ -1274,9 +1274,23 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         search_internet: () => this.intentProcessor.performInternetSearch(chatId, args.query),
         token_price_dexscreener: () => this.intentProcessor.performTokenPriceCheck(args.query),
         token_price_coingecko: () => this.intentProcessor.getTokenInfoFromCoinGecko(args.query),
-        set_reminder: () => this.intentProcessor.saveButlerReminderEmails(userId, args),
-        start_monitoring_reminders: () => this.intentProcessor.monitorButlerReminderEmails(userId, args.text),
-        generate_google_report: () => this.intentProcessor.generateGoogleReport(userId),
+        
+        // Google API Functions
+        manage_user_google_settings: () => this.intentProcessor.manageUserGmailSettings(userId, args),
+        manage_calendar_event: () => this.intentProcessor.manageCalendarEvent(userId, args),
+        send_email: () => this.intentProcessor.sendEmail(userId, args),
+        search_emails: () => this.intentProcessor.searchEmails(userId, args),
+        read_email: () => this.intentProcessor.readEmail(userId, args),
+        reply_email: () => this.intentProcessor.replyEmail(userId, args),
+
+        // SolanaPay Functions
+        create_solana_payment: () => this.intentProcessor.createSolanaPayment(args),
+        get_payment_status: () => this.intentProcessor.getPaymentStatus(args),
+        validate_payment: () => this.intentProcessor.validatePayment(args),
+        create_recurring_payment: () => this.intentProcessor.createRecurringPayment(userId, args),
+        get_payment_history: () => this.intentProcessor.getPaymentHistory(userId),
+
+        // Savings
         save_strategy: () => this.intentProcessor.saveStrategy(userId, args),
         set_guidelines_manners_rules: ()=> this.intentProcessor.saveGuidelines(userId, args.query),
         get_guidelines_manners_rules: ()=> this.intentProcessor.getGuidelines(userId),
@@ -1285,7 +1299,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         check_bitrefill_payment_status: ()=> this.intentProcessor.startBitrefillShoppingFlow(chatId, args.invoiceId),
         bridge_tokens: () => this.intentProcessor.handleBridgeTokens(args, chatId),
         fetch_bridge_receipts: () => this.intentProcessor.handleFetchBridgeReceipts(args),
-        //wallet creation
+        // Wallet creation
         create_avalanche_wallet: () => this.intentProcessor.createAvalancheWallet(),
         // Research and Tasks
         save_research: () => this.intentProcessor.processSaveResearchIntent(args, chatId),

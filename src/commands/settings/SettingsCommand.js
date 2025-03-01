@@ -9,7 +9,7 @@ import { LLMSwitcher } from "../../services/ai/processors/LLMSwitcher.js";
 /**
  * A self-contained SettingsCommand that handles:
  *  1) /settings or "⚙️ Settings" text command
- *  2) All inline keyboard callbacks (slippage, notifications, butler, etc.)
+ *  2) All inline keyboard callbacks (slippage, notifications, etc.)
  */
 export class SettingsCommand extends Command {
   constructor(bot) {
@@ -102,14 +102,6 @@ export class SettingsCommand extends Command {
           await this.toggleAutonomousTrading(chatId, from);
           break;
 
-        case "butler_assistant":
-          await this.showButlerSettings(chatId, from);
-          break;
-
-        case "toggle_butler":
-          await this.toggleButlerAssistant(chatId, from);
-          break;
-
         case "back_to_menu":
           await this.handleBackToMenu(chatId, from);
           break;
@@ -160,7 +152,6 @@ export class SettingsCommand extends Command {
       `Notifications: ${
         user?.settings?.notifications?.enabled ? "✅ Enabled" : "❌ Disabled"
       }\n` +
-      `Butler: ${user?.settings?.butler?.enabled ? "✅ Enabled" : "❌ Disabled"}\n` +
       `AI Model: <b>${user?.settings?.defaultLLM === "deepseek" ? "🔍 DeepSeek AI" : "🧠 OpenAI (GPT)"}</b>\n\n` +
       `Configure your preferences:`;
 
@@ -170,7 +161,6 @@ export class SettingsCommand extends Command {
           [{ text: "⚙️ Slippage Settings", callback_data: "slippage_settings" }],
           [{ text: "🤖 Autonomous Trading", callback_data: "autonomous_settings" }],
           [{ text: "🔔 Notification Settings", callback_data: "notification_settings" }],
-          [{ text: "🫅 Butler Assistant", callback_data: "butler_assistant" }],
           [{ text: "🤖 AI Model Selection", callback_data: "llm_settings" }],
           [{ text: "↩️ Back to Menu", callback_data: "back_to_wallets" }],
         ],
@@ -360,76 +350,6 @@ export class SettingsCommand extends Command {
       const keyboard = {
         inline_keyboard: [
           [{ text: "↩️ Back", callback_data: "notification_settings" }]
-        ]
-      };
-
-      await this.bot.sendMessage(chatId, text, {
-        parse_mode: "HTML",
-        reply_markup: keyboard
-      });
-    } catch (error) {
-      await ErrorHandler.handle(error, this.bot, chatId);
-    }
-  }
-
-  /**
-   * Show Butler (AI Assistant) settings
-   */
-  async showButlerSettings(chatId, from) {
-    try {
-      const user = await User.findOne({ telegramId: from.id.toString() }).lean();
-      const isEnabled = !!user?.settings?.butler?.enabled;
-      const isConnected = !!user?.googleAuth?.accessToken;
-
-      const text =
-        `<b>Butler Assistant Settings 🫅</b>\n\n` +
-        `Status: ${isEnabled ? "✅ Enabled" : "❌ Disabled"}\n` +
-        `Google Account: ${isConnected ? "✅ Connected" : "❌ Not Connected"}\n\n` +
-        `Butler can:\n` +
-        `• Set reminders and calendar events\n` +
-        `• Monitor and send emails\n` +
-        `• Generate activity reports`;
-
-      const keyboard = {
-        inline_keyboard: [
-          [{
-            text: isEnabled ? "🔴 Disable Butler" : "🟢 Enable Butler",
-            callback_data: "toggle_butler"
-          }],
-          [{
-            text: isConnected ? "🔄 Reconnect Google" : "🔗 Connect Google",
-            callback_data: "connect_google"
-          }],
-          [{ text: "↩️ Back", callback_data: "back_to_settings" }]
-        ]
-      };
-
-      await this.bot.sendMessage(chatId, text, {
-        parse_mode: "HTML",
-        reply_markup: keyboard
-      });
-    } catch (error) {
-      await ErrorHandler.handle(error, this.bot, chatId);
-    }
-  }
-
-  /**
-   * Toggle the Butler assistant
-   */
-  async toggleButlerAssistant(chatId, from) {
-    try {
-      const user = await User.findOne({ telegramId: from.id.toString() }).lean();
-      const newState = !user?.settings?.butler?.enabled;
-
-      await User.updateOne(
-        { telegramId: from.id.toString() },
-        { $set: { "settings.butler.enabled": newState } }
-      );
-
-      const text = `✅ Butler Assistant has been <b>${newState ? "enabled" : "disabled"}</b>.`;
-      const keyboard = {
-        inline_keyboard: [
-          [{ text: "↩️ Back", callback_data: "back_to_settings" }]
         ]
       };
 

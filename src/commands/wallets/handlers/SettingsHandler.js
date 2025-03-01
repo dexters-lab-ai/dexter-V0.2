@@ -33,7 +33,6 @@ export class WalletSettingsHandler {
           ],
           [{ text: "⚙️ Adjust Slippage", callback_data: "slippage_settings" }],
           [{ text: "🔔 Notification Settings", callback_data: "notification_settings" }],
-          [{ text: "🫅 Butler Assistant", callback_data: "butler_assistant" }],
           [{ text: "↩️ Back", callback_data: "back_to_wallets" }]
         ]
       };
@@ -183,33 +182,6 @@ export class WalletSettingsHandler {
       const text = `✅ Notifications have been *${newState ? "enabled" : "disabled"}*.`;
       const keyboard = {
         inline_keyboard: [[{ text: "↩️ Back", callback_data: "notification_settings" }]]
-      };
-
-      await this.bot.sendMessage(chatId, text, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard
-      });
-      return true;
-    } catch (error) {
-      await ErrorHandler.handle(error, this.bot, chatId);
-      return true;
-    }
-  }
-
-  /** Toggle Butler Assistant on/off */
-  async toggleButlerAssistant(chatId, userInfo) {
-    try {
-      const user = await User.findOne({ telegramId: userInfo.id.toString() }).lean();
-      const newState = !user?.settings?.butler?.enabled;
-
-      await User.updateOne(
-        { telegramId: userInfo.id.toString() },
-        { $set: { "settings.butler.enabled": newState } }
-      );
-
-      const text = `✅ Butler Assistant has been *${newState ? "enabled" : "disabled"}*.`;
-      const keyboard = {
-        inline_keyboard: [[{ text: "↩️ Back", callback_data: "wallet_settings" }]]
       };
 
       await this.bot.sendMessage(chatId, text, {
