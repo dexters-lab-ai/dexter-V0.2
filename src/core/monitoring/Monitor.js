@@ -16,6 +16,7 @@ class MonitoringSystem extends EventEmitter {
       performance: new Map(),
     };
     this.healthChecks = new Map();
+    this.components = new Map(); // To hold registered components
     this.initialized = false;
 
     // WebSocket-specific properties
@@ -38,17 +39,24 @@ class MonitoringSystem extends EventEmitter {
     this.startBatchProcessing(); // Start batch message processing
   }
 
+  // Register a component with its metrics and health check
+  registerComponent(componentName, { getMetrics, getHealth }) {
+    if (!this.components.has(componentName)) {
+      this.components.set(componentName, { getMetrics, getHealth });
+      console.log(`Component ${componentName} registered for monitoring`);
+    }
+  }
+
   async initialize() {
     if (this.initialized) return;
 
     try {
       // Set up health checks
-      //this.setupHealthChecks();
+      this.setupHealthChecks();
 
       // Start monitoring loops
       this.startMetricsCollection();
       this.startHealthMonitoring();
-      //this.startPerformanceMonitoring();
 
       // Establish WebSocket connection
       await this.connectWebSocket();
@@ -62,7 +70,7 @@ class MonitoringSystem extends EventEmitter {
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }
-      });           
+      });
 
       this.initialized = true;
       this.emit('initialized');
@@ -147,7 +155,7 @@ class MonitoringSystem extends EventEmitter {
   
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
-        const delay = calculateReconnectInterval(); // Use adaptive interval
+        const delay = this.calculateReconnectInterval(); // Use adaptive interval
         console.log(`Reconnecting in ${delay / 1000}s...`);
         setTimeout(() => this.connectWebSocket(), delay);
       } else {
@@ -172,7 +180,7 @@ class MonitoringSystem extends EventEmitter {
   
   // Exponential backoff combined with Jitter for an adaptive and distributed reconnect strategy
   calculateReconnectInterval() {
-    const base = Math.min(baseInterval * 2 ** reconnectAttempts, maxInterval);
+    const base = Math.min(10000 * 2 ** this.reconnectAttempts, this.maxReconnectInterval);
     const jitter = Math.random() * base * 0.5; // Add jitter (50% of base)
     return base + jitter;
   }
@@ -272,7 +280,7 @@ class MonitoringSystem extends EventEmitter {
         console.error('Error collecting metrics:', error);
         this.emit('error', error);
       }
-    }, 180000); // Every 3 minutea
+    }, 180000); // Every 3 minutes
   }  
 
   startHealthMonitoring() {

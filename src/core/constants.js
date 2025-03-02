@@ -110,9 +110,9 @@ export const REGISTRATION_MESSAGES = {
 };
 
 // Database Constants
-export const DB_POOL_SIZE = 10;
+export const DB_POOL_SIZE = 50;
 export const DB_IDLE_TIMEOUT = 5000;
-export const DB_CONNECT_TIMEOUT = 7000;
+export const DB_CONNECT_TIMEOUT = 60000;
 
 // Canvas Dimensions
 export const CANVAS_DIMENSIONS = {

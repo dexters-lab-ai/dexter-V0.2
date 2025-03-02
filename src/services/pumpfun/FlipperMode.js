@@ -71,12 +71,13 @@ class FlipperMode extends EventEmitter {
   // ---------------------------
   async initialize() {
     if (this.initialized) return;
+
     try {
       const database = db.getDatabase();
+      if (!database) throw new Error('Database connection is not established.');
+
       this.userMetricsCollection = database.collection('userMetrics');
       this.systemMetricsCollection = database.collection('systemMetrics');
-
-      await this.errorRecovery.initialize();
 
       // Listen to error recovery events (e.g., websocket disconnect)
       this.errorRecovery.on('recovered', async ({ type }) => {
@@ -85,12 +86,16 @@ class FlipperMode extends EventEmitter {
         }
       });
 
-      // Register this component for monitoring
       monitoringSystem.registerComponent('flipperMode', {
         getMetrics: this.collectMetrics.bind(this),
         getHealth: () => ({ status: this.isRunning ? 'healthy' : 'stopped' })
-      });
+      });      
 
+      // MongoDB timeout and retry handling for `countDocuments`
+      await this.countDocumentsWithTimeout(this.userMetricsCollection);
+      await this.countDocumentsWithTimeout(this.systemMetricsCollection);
+
+      
       this.snapshotSystemMetrics();
 
       this.initialized = true;
@@ -99,6 +104,30 @@ class FlipperMode extends EventEmitter {
       console.error('Error during FlipperMode initialization:', error);
       throw error;
     }
+  }
+
+  // Helper function to count documents with retry and timeout handling
+  async countDocumentsWithTimeout(collection, retries = 3, timeoutMS = 30000) {
+    try {
+      const result = await collection.countDocuments({}, { maxTimeMS: timeoutMS });
+      console.log(`Document count for ${collection.collectionName}:`, result);
+      return result;
+    } catch (error) {
+      console.error(`Error counting documents in collection ${collection.collectionName}:`, error);
+      
+      if (retries > 0 && error.code === 50) { // Code 50: MongoDB query timeout
+        console.log('Retrying document count...');
+        await this.delay(1000); // Wait 1 second before retrying
+        return this.countDocumentsWithTimeout(collection, retries - 1, timeoutMS);
+      }
+  
+      throw new Error(`Failed to count documents after retries: ${error.message}`);
+    }
+  }  
+
+  // Delay function to pause execution (for retries)
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   snapshotSystemMetrics() {
@@ -285,11 +314,11 @@ class FlipperMode extends EventEmitter {
     }
   }
 
+
+
   // ---------------------------
   // Token Processing & Trading
   // ---------------------------
-
-  // SWITCH FROM THIS PLACEHOLDER TO USING COOKIEDAO SENTIMENT SHIFT CHECK BEFORE FETCHING ALL TRENDING TOKENS AND TRYING TO BUY THE ONES THAT FIT THE USER STRATEGY (MIN LIQ, MIN VOLUME, ETC)
   async processNewToken(token) {
     try {
       const isValid = await tokenLaunchDetector.validateToken(token);
@@ -330,9 +359,6 @@ class FlipperMode extends EventEmitter {
       !this.blacklistedTokens.has(token.address);
   }
 
-  // ---------------------------
-  // Position Monitoring & Updates
-  // ---------------------------
   async monitorPosition(position) {
     return circuitBreakers.executeWithBreaker(
       'pumpfun',
@@ -406,6 +432,54 @@ class FlipperMode extends EventEmitter {
     );
   }
 
+  // ---------------------------
+  // Fetch Metrics for Dashboard
+  // ---------------------------
+  async fetchMetrics() {
+    try {
+      if (!this.userMetricsCollection || !this.systemMetricsCollection) {
+        throw new Error('Metrics collections are not initialized.');
+      }
+      const userMetrics = await this.userMetricsCollection.find({}).toArray();
+      const systemMetrics = await this.systemMetricsCollection.findOne({ _id: 'global' });
+      const liveMetrics = {
+        activePositions: this.openPositions.size || 0,
+        tokensBeingTracked: Array.from(this.openPositions.keys()) || [],
+        lastSnapshot: systemMetrics?.lastUpdated || new Date(),
+      };
+      const aggregatedSystemMetrics = {
+        totalTrades: systemMetrics?.totalTrades || 0,
+        totalProfit: systemMetrics?.totalProfit || 0,
+        profitableTrades: systemMetrics?.profitableTrades || 0,
+        averageHoldTime: systemMetrics?.totalHoldTime ? (systemMetrics.totalHoldTime / systemMetrics.totalTrades).toFixed(2) : 0,
+        winRate: systemMetrics?.totalTrades ? ((systemMetrics.profitableTrades / systemMetrics.totalTrades) * 100).toFixed(2) : 0,
+        lastUpdated: systemMetrics?.lastUpdated || new Date(),
+      };
+      const userLevelMetrics = (userMetrics || []).map((userMetric) => ({
+        userId: userMetric.userId,
+        totalTrades: userMetric.totalTrades || 0,
+        profitableTrades: userMetric.profitableTrades || 0,
+        totalProfit: userMetric.totalProfit || 0,
+        averageHoldTime: userMetric.avgHoldTime || 0,
+        winRate: userMetric.totalTrades ? ((userMetric.profitableTrades / userMetric.totalTrades) * 100).toFixed(2) : 0,
+        lastUpdated: userMetric.lastUpdated || new Date(),
+      }));
+      const combinedMetrics = {
+        systemMetrics: aggregatedSystemMetrics,
+        liveMetrics,
+        userMetrics: userLevelMetrics,
+      };
+      console.log('Fetched metrics successfully:', combinedMetrics);
+      return combinedMetrics;
+    } catch (error) {
+      console.error('Error fetching metrics:', error);
+      throw new Error('Failed to fetch metrics. Please check the collections or database connection.');
+    }
+  }
+
+  // ---------------------------
+  // Handle Metrics Update
+  // ---------------------------
   async handleMetricsUpdate(tokenAddress, metrics) {
     const position = this.openPositions.get(tokenAddress);
     if (!position) return;
@@ -434,12 +508,18 @@ class FlipperMode extends EventEmitter {
     }
   }
 
+  // ---------------------------
+  // Reconnect Price Feeds
+  // ---------------------------
   async reconnectPriceFeeds() {
     for (const [tokenAddress] of this.openPositions) {
       await this.positionMonitor.setupRedundantPriceFeeds({ address: tokenAddress });
     }
   }
 
+  // ---------------------------
+  // Handle Errors
+  // ---------------------------
   async handleError(error, context) {
     try {
       await this.errorRecovery.handleError(error, { ...context, component: 'FlipperMode', userId: this.userId });
@@ -449,6 +529,9 @@ class FlipperMode extends EventEmitter {
     }
   }
 
+  // ---------------------------
+  // Update Position
+  // ---------------------------
   async updatePosition(tokenAddress, currentPrice) {
     return circuitBreakers.executeWithBreaker(
       'pumpfun',
@@ -635,87 +718,158 @@ class FlipperMode extends EventEmitter {
     }
   }
 
+  /**
+   * Collects metrics for the system, including token positions, trade stats,
+   * user performance, and system health.
+   */
+  async collectMetrics() {
+    try {
+      // Collecting general system performance metrics
+      const systemMetrics = await this.getSystemMetrics();
+      const userMetrics = await this.getUserMetrics();
+      const openPositions = this.getOpenPositions();
+      const activeTokens = Array.from(this.openPositions.keys());
+      const activeStrategies = this.activeStrategies.size;
+      
+      // Additional data to track
+      const totalTrades = systemMetrics.totalTrades || 0;
+      const totalProfit = systemMetrics.totalProfit || 0;
+      const profitableTrades = systemMetrics.profitableTrades || 0;
+      const avgHoldTime = totalTrades > 0 ? systemMetrics.totalHoldTime / totalTrades : 0;
+      const winRate = totalTrades > 0 ? (profitableTrades / totalTrades) * 100 : 0;
+      const avgProfit = totalTrades > 0 ? totalProfit / totalTrades : 0;
+
+      const liveMetrics = {
+        activePositions: this.openPositions.size,
+        activeTokens,
+        activeStrategies,
+        totalTrades,
+        totalProfit,
+        profitableTrades,
+        avgHoldTime: avgHoldTime.toFixed(2),
+        winRate: winRate.toFixed(2),
+        avgProfit: avgProfit.toFixed(2),
+        lastUpdated: new Date().toISOString(),
+      };
+
+      // Gathering more specific position-level metrics
+      const positionStats = Array.from(this.positionStats.values()).map(stats => ({
+        tokenAddress: stats.token.address,
+        currentPrice: stats.currentPrice || stats.entryPrice,
+        profitLoss: stats.exitPrice
+          ? ((stats.exitPrice - stats.entryPrice) / stats.entryPrice) * 100
+          : 0,
+        timeElapsed: Math.floor((Date.now() - stats.entryTime) / 60000), // time in minutes
+        liquidity: stats.liquidity || 0,
+        volume: stats.volume || 0,
+      }));
+
+      // Combine all metrics into a comprehensive report
+      const metricsReport = {
+        systemMetrics: liveMetrics,
+        positionMetrics: positionStats,
+        userMetrics: userMetrics,
+      };
+
+      // Optionally, log the report
+      console.log('Metrics collected:', metricsReport);
+
+      // Return the metrics report
+      return metricsReport;
+    } catch (error) {
+      console.error('Error collecting metrics:', error);
+      throw new Error('Failed to collect metrics');
+    }
+  }
+
+  // Helper method to fetch system-level aggregated metrics
+  async getSystemMetrics() {
+    try {
+      // Assuming systemMetricsCollection is available and properly initialized
+      const result = await this.systemMetricsCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalTrades: { $sum: '$totalTrades' },
+            totalProfit: { $sum: '$totalProfit' },
+            profitableTrades: { $sum: '$profitableTrades' },
+            totalHoldTime: { $sum: '$totalHoldTime' },
+          }
+        }
+      ]).toArray();
+
+      return result.length > 0 ? result[0] : {};
+    } catch (error) {
+      console.error('Error fetching system metrics:', error);
+      return {};
+    }
+  }
+
+  // Helper method to fetch user-level aggregated metrics
+  async getUserMetrics() {
+    try {
+      // Assuming userMetricsCollection is available and properly initialized
+      const userMetrics = await this.userMetricsCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalTrades: { $sum: '$totalTrades' },
+            profitableTrades: { $sum: '$profitableTrades' },
+            totalProfit: { $sum: '$totalProfit' },
+            avgHoldTime: { $sum: '$avgHoldTime' },
+          }
+        }
+      ]).toArray();
+
+      return userMetrics.length > 0 ? userMetrics[0] : {};
+    } catch (error) {
+      console.error('Error fetching user metrics:', error);
+      return {};
+    }
+  }
+
+  // Example: Get current open positions with relevant details
   getOpenPositions() {
     return Array.from(this.openPositions.values()).map(position => {
       const stats = this.positionStats.get(position.token.address);
       return {
         ...position,
         currentPrice: stats?.currentPrice || position.entryPrice,
-        profitLoss: stats ? ((stats.currentPrice - position.entryPrice) / position.entryPrice) * 100 : 0,
-        timeElapsed: Math.floor((Date.now() - position.entryTime) / 60000)
+        profitLoss: stats
+          ? ((stats.currentPrice - position.entryPrice) / position.entryPrice) * 100
+          : 0,
+        timeElapsed: Math.floor((Date.now() - position.entryTime) / 60000), // Time in minutes
       };
     });
   }
-
+  
   calculateStats() {
-    const stats = {
-      totalTrades: this.positionStats.size,
-      profitable: 0,
-      totalProfit: 0,
-      avgHoldTime: 0,
-      bestTrade: 0,
-      worstTrade: 0
-    };
+      const stats = {
+        totalTrades: this.positionStats.size,
+        profitable: 0,
+        totalProfit: 0,
+        avgHoldTime: 0,
+        bestTrade: 0,
+        worstTrade: 0
+      };
 
-    for (const [, position] of this.positionStats) {
-      if (!position.exitPrice) continue;
-      const profit = ((position.exitPrice - position.entryPrice) / position.entryPrice) * 100;
-      if (profit > 0) stats.profitable++;
-      stats.totalProfit += profit;
-      stats.avgHoldTime += (position.exitTime - position.entryTime);
-      stats.bestTrade = Math.max(stats.bestTrade, profit);
-      stats.worstTrade = Math.min(stats.worstTrade, profit);
-    }
-
-    if (stats.totalTrades > 0) {
-      stats.avgHoldTime = Math.floor(stats.avgHoldTime / (stats.totalTrades * 60000));
-      stats.winRate = (stats.profitable / stats.totalTrades) * 100;
-      stats.avgProfit = stats.totalProfit / stats.totalTrades;
-    }
-
-    return stats;
-  }
-
-  async fetchMetrics() {
-    try {
-      if (!this.userMetricsCollection || !this.systemMetricsCollection) {
-        throw new Error('Metrics collections are not initialized.');
+      for (const [, position] of this.positionStats) {
+        if (!position.exitPrice) continue;
+        const profit = ((position.exitPrice - position.entryPrice) / position.entryPrice) * 100;
+        if (profit > 0) stats.profitable++;
+        stats.totalProfit += profit;
+        stats.avgHoldTime += (position.exitTime - position.entryTime);
+        stats.bestTrade = Math.max(stats.bestTrade, profit);
+        stats.worstTrade = Math.min(stats.worstTrade, profit);
       }
-      const userMetrics = await this.userMetricsCollection.find({}).toArray();
-      const systemMetrics = await this.systemMetricsCollection.findOne({ _id: 'global' });
-      const liveMetrics = {
-        activePositions: this.openPositions.size || 0,
-        tokensBeingTracked: Array.from(this.openPositions.keys()) || [],
-        lastSnapshot: systemMetrics?.lastUpdated || new Date(),
-      };
-      const aggregatedSystemMetrics = {
-        totalTrades: systemMetrics?.totalTrades || 0,
-        totalProfit: systemMetrics?.totalProfit || 0,
-        profitableTrades: systemMetrics?.profitableTrades || 0,
-        averageHoldTime: systemMetrics?.totalHoldTime ? (systemMetrics.totalHoldTime / systemMetrics.totalTrades).toFixed(2) : 0,
-        winRate: systemMetrics?.totalTrades ? ((systemMetrics.profitableTrades / systemMetrics.totalTrades) * 100).toFixed(2) : 0,
-        lastUpdated: systemMetrics?.lastUpdated || new Date(),
-      };
-      const userLevelMetrics = (userMetrics || []).map((userMetric) => ({
-        userId: userMetric.userId,
-        totalTrades: userMetric.totalTrades || 0,
-        profitableTrades: userMetric.profitableTrades || 0,
-        totalProfit: userMetric.totalProfit || 0,
-        averageHoldTime: userMetric.avgHoldTime || 0,
-        winRate: userMetric.totalTrades ? ((userMetric.profitableTrades / userMetric.totalTrades) * 100).toFixed(2) : 0,
-        lastUpdated: userMetric.lastUpdated || new Date(),
-      }));
-      const combinedMetrics = {
-        systemMetrics: aggregatedSystemMetrics,
-        liveMetrics,
-        userMetrics: userLevelMetrics,
-      };
-      console.log('Fetched metrics successfully:', combinedMetrics);
-      return combinedMetrics;
-    } catch (error) {
-      console.error('Error fetching metrics:', error);
-      throw new Error('Failed to fetch metrics. Please check the collections or database connection.');
-    }
+
+      if (stats.totalTrades > 0) {
+        stats.avgHoldTime = Math.floor(stats.avgHoldTime / (stats.totalTrades * 60000));
+        stats.winRate = (stats.profitable / stats.totalTrades) * 100;
+        stats.avgProfit = stats.totalProfit / stats.totalTrades;
+      }
+
+      return stats;
   }
 
   cleanup() {

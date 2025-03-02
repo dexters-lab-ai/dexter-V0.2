@@ -15,6 +15,7 @@ import { contextManager } from '../ContextManager.js';
 import BitrefillService from "../../bitrefill/BitrefillService.js";
 import WormholeBridgeService from '../../Wormhole/WormholeBridgeService.js';
 import { fallbackMap } from './Fallbacks.js';
+import { aiMetricsService } from '../../aiMetricsService.js';
 
 let IntentProcessor; // Declare but don't import yet. Fixing circular dependency on runTask. UnifiedAutonomousEngine.js imports IntentProcessor
 // Twitter service imports IntentProcessor and intentProcessor imports it, lets dynamically inject IntentProcessor here to fix it
@@ -1317,8 +1318,13 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       }
       // Validate arguments again
       this.validateRequiredParameters(name, args);
+
+      const result = await this[functionName](params);
+      aiMetricsService.trackFunctionCall(functionName, true);
+
       return await executor();
     } catch (error) {
+      aiMetricsService.trackFunctionCall(functionName, false);
       // Log full error fields
       console.error(`❌ Error in executeFunction('${name}')`, {
         message: error.message,

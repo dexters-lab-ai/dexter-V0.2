@@ -7,6 +7,7 @@ import { autonomousProcessor } from "../services/ai/processors/UnifiedAutonomous
 import { contextManager } from "../services/ai/ContextManager.js";
 import { VoiceService } from "../services/audio/voiceService.js"; // Provides both STT & TTS
 import { setupCommands } from "../commands/index.js";
+import { aiMetricsService } from '../services/aiMetricsService.js';
 
 // Command registry
 console.log('📜 Setting up command registry...');
@@ -198,6 +199,12 @@ export class UnifiedMessageHandler extends EventEmitter {
           await synthesizeAndSendAudio(chatId, ttsText);
         }
       }
+      // Track metrics
+      const duration = Date.now() - startTime;
+      aiMetricsService.trackMessageMetrics(
+        isVoiceInput ? 'audio' : 'text',
+        duration
+      );
     } catch (error) {
       console.error("❌ Error in handleMessage:", {
         message: error.message,

@@ -18,7 +18,6 @@ import { flipperMode } from '../../pumpfun/FlipperMode.js';
 import { priceAlertService } from '../../priceAlerts.js';
 import { walletService } from '../../wallet/index.js';
 import { tokenApprovalService } from '../../tokens/TokenApprovalService.js';
-import { solanaPayService } from '../../solanaPay/SolanaPayService.js';
 import { shopifyService } from '../../shopify/ShopifyService.js';
 import { dbAIInterface } from '../../db/DBAIInterface.js';
 import { contextManager } from '../ContextManager.js';
@@ -31,8 +30,8 @@ import { tasksService } from '../../tasks/TasksService.js';
 import { searchCoin } from '../../coingecko/CoinGecko.js';
 
 // Google & SolanaPay
-import { gmailController } from '../../../controllers/gmailController.js';
-import { calendarController } from '../../../controllers/calendarController.js';
+import { sendEmail, searchEmails, replyEmail, readEmail } from '../../../controllers/gmailController.js';
+import { manageCalendarEvent, listCalendarEvents } from '../../../controllers/calendarController.js';
 import { solanaPayService } from '../../solanaPay/SolanaPayService.js';
 import { recurringPaymentService } from '../../recurringPayments/RecurringPayments.js';
 import { paymentHistoryService } from '../../paymentHistory/PaymentHistory.js';
@@ -1706,7 +1705,19 @@ export class IntentProcessor extends EventEmitter {
       const user = await User.findOne({ telegramId: userId });
       if (!user) throw new Error('User not found');
 
-      return await calendarController.manageCalendarEvent({ body: { telegramId: userId, action, eventId, title, startTime, endTime, description } });
+      return await manageCalendarEvent({ body: { telegramId: userId, action, eventId, title, startTime, endTime, description } });
+    } catch (error) {
+      console.error('Error managing calendar event:', error);
+      throw error;
+    }
+  }
+
+  async listCalendarEvent(userId, args) {
+    try {
+      const user = await User.findOne({ telegramId: userId });
+      if (!user) throw new Error('User not found');
+
+      return await listCalendarEvents({ body: { telegramId: userId, maxResults: 10 } });
     } catch (error) {
       console.error('Error managing calendar event:', error);
       throw error;
@@ -1719,7 +1730,7 @@ export class IntentProcessor extends EventEmitter {
       const user = await User.findOne({ telegramId: userId });
       if (!user) throw new Error('User not found');
 
-      return await gmailController.sendEmail({ body: { telegramId: userId, to, subject, text, html } });
+      return await sendEmail({ body: { telegramId: userId, to, subject, text, html } });
     } catch (error) {
       console.error('Error sending email:', error);
       throw error;
@@ -1732,7 +1743,7 @@ export class IntentProcessor extends EventEmitter {
       const user = await User.findOne({ telegramId: userId });
       if (!user) throw new Error('User not found');
 
-      return await gmailController.searchEmails({ body: { telegramId: userId, query, maxResults } });
+      return await searchEmails({ body: { telegramId: userId, query, maxResults } });
     } catch (error) {
       console.error('Error searching emails:', error);
       throw error;
@@ -1745,7 +1756,7 @@ export class IntentProcessor extends EventEmitter {
       const user = await User.findOne({ telegramId: userId });
       if (!user) throw new Error('User not found');
 
-      return await gmailController.readEmail({ body: { telegramId: userId, messageId, format } });
+      return await readEmail({ body: { telegramId: userId, messageId, format } });
     } catch (error) {
       console.error('Error reading email:', error);
       throw error;
@@ -1758,13 +1769,13 @@ export class IntentProcessor extends EventEmitter {
       const user = await User.findOne({ telegramId: userId });
       if (!user) throw new Error('User not found');
 
-      return await gmailController.replyEmail({ body: { telegramId: userId, threadId, messageId, body } });
+      return await replyEmail({ body: { telegramId: userId, threadId, messageId, body } });
     } catch (error) {
       console.error('Error replying to email:', error);
       throw error;
     }
   }
-  
+
   // SolanaPay Methods
   async createSolanaPayment(args) {
     try {

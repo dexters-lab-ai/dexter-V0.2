@@ -1,4 +1,3 @@
-// controllers/calendarController.js
 import { google } from 'googleapis';
 import { getAuthorizedClient } from '../services/google/googleAPIService.js';
 

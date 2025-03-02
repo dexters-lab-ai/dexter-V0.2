@@ -32,12 +32,10 @@ export class PriceMonitoringService {
    */
   startMonitoring() {
     if (this.monitoringIntervalId) {
-      console.log('[PriceMonitoring] Already monitoring. Skipped.');
+      console.log('💲 [PriceMonitoring] Already monitoring. Skipped.');
       return;
-    }
-
-    
-    console.log(`[PriceMonitoring] Started polling every ${this.alertCheckInterval} ms`);
+    }    
+    console.log(`💲 [PriceMonitoring] Started polling every ${this.alertCheckInterval} ms`);
   }
 
   /**
@@ -47,7 +45,7 @@ export class PriceMonitoringService {
     if (this.monitoringIntervalId) {
       clearInterval(this.monitoringIntervalId);
       this.monitoringIntervalId = null;
-      console.log('[PriceMonitoring] Stopped monitoring.');
+      console.log('🔴 [PriceMonitoring] Stopped monitoring.');
     }
   }
 
@@ -150,7 +148,7 @@ export class PriceMonitoringService {
 
         // Log the comparison for debug
         console.log(
-          `[PriceMonitoring] Checking alert ID ${alert._id} for token ${alert.tokenAddress}:\n` +
+          `💲 [PriceMonitoring] Checking alert ID ${alert._id} for token ${alert.tokenAddress}:\n` +
           `  targetPrice=${alert.targetPrice}, currentPrice=${currentPrice}, condition=${alert.condition}`
         );
 
@@ -175,7 +173,7 @@ export class PriceMonitoringService {
         }
       }
     } catch (error) {
-      console.error('[PriceMonitoring] Error in monitorPrices:', error.message);
+      console.error('💲 [PriceMonitoring] Error in monitorPrices:', error.message);
     }
   }
 }

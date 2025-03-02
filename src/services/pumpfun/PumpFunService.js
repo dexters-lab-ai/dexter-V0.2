@@ -16,9 +16,9 @@ class PumpFunService extends EventEmitter {
     this.websocketEndpoint = 'wss://pumpportal.fun/api/data';
     this.apiEndpoint = 'https://pumpportal.fun/api/trade-local';
 
-    this.ws = null; // WebSocket instance
-    this.connection = new Connection(networkConfig.rpcUrl, 'confirmed'); // Solana connection
-    this.apiKey = config.pumpFunApiKey; // API Key for authenticated requests
+    this.ws = null; 
+    this.connection = new Connection(networkConfig.rpcUrl, 'confirmed'); 
+    this.apiKey = config.pumpFunApiKey;
 
     this.wsManager = wsManager;
     this.tokenDetector = tokenLaunchDetector;
@@ -32,31 +32,26 @@ class PumpFunService extends EventEmitter {
 
     this.maxReconnectAttempts = 10;
     this.startBatchProcessing();
+
+    this.isInitialized = false;
   }
 
   /**
    * Establish WebSocket connection
    */
-
-  // Update connect method:
   async connect() {
     try {
-      const ws = await this.wsManager.createConnection(
+      this.ws = await this.wsManager.createConnection(
         this.websocketEndpoint,
         {
           reconnect: true,
-          onMessage: this.handleMessage.bind(this)
+          onMessage: this.handleMessage.bind(this),
         }
       );
-
-      this.ws = ws;
-      this.startHeartbeat();
-
+      this.isInitialized = true;
+      this.emit('connected');
     } catch (error) {
-      await this.errorRecovery.handleError(error, {
-        operation: 'connect',
-        endpoint: this.websocketEndpoint
-      });
+      await this.errorRecovery.handleError(error, { operation: 'connect' });
     }
   }
 
@@ -77,10 +72,11 @@ class PumpFunService extends EventEmitter {
       // Check if the message contains `txType` and process accordingly
       if (message.txType) {
         switch (message.txType) {
-          case 'create':
+          case 'create':            
+            this.tokenLaunchCount++; // Increase count
             this.handleCreateMessage(message);
             break;
-          // You can add more cases for other `txType` values as needed
+          // other `txType` values as needed
           default:
             console.log(`ℹ️ Unhandled Pumpfun txType: "${message.txType}"`);
         }
@@ -266,65 +262,16 @@ class PumpFunService extends EventEmitter {
 
   async checkHealth() {
     try {
-      // Check RPC health
       const latestBlockhash = await this.connection.getLatestBlockhash();
-      if (!latestBlockhash) {
-        throw new Error('❌ Failed to fetch latest blockhash');
-      }
+      if (!latestBlockhash) throw new Error('Failed to fetch latest blockhash');
 
-      // Check WebSocket connection
-      const wsStatus = this.ws?.readyState === WebSocket.OPEN;
-      if (!wsStatus) {
-        throw new Error('❌ Pumpfun WebSocket is not connected');
-      }
-
-      // Check API health
-      try {
-        const apiResponse = await fetch(this.apiEndpoint, { method: 'GET' });
-
-        if (!apiResponse.ok) {
-          // If API returns an error but is reachable, consider it alive
-          const errorText = await apiResponse.text();
-          if (errorText.includes('Must supply publicKey')) {
-            console.log('✅ API is reachable but requires authentication.');
-            return {
-              status: 'healthy',
-              latestBlockhash,
-              ws: { connected: true },
-              api: { reachable: true },
-            };
-          } else {
-            throw new Error(`API unreachable: ${apiResponse.statusText}`);
-          }
-        }
-      } catch (apiError) {
-        const errorMessage = apiError.message || 'Unknown error';
-        if (errorMessage.includes('Must supply publicKey')) {
-          console.log('✅ API is reachable but requires authentication.');
-          return {
-            status: 'healthy',
-            latestBlockhash,
-            ws: { connected: true },
-            api: { reachable: true },
-          };
-        } else {
-          throw new Error(`API unreachable: ${errorMessage}`);
-        }
-      }
-
-      console.log('✅ PumpFunService is healthy');
       return {
         status: 'healthy',
         latestBlockhash,
-        ws: { connected: true },
-        api: { reachable: true },
+        tokensLaunched: this.tokenLaunchCount, // Include launch count
       };
     } catch (error) {
-      console.error('❌ PumpFunService health check failed:', error.message);
-      return {
-        status: 'unhealthy',
-        error: error.message,
-      };
+      return { status: 'unhealthy', error: error.message };
     }
   }
 

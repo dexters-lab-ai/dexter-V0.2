@@ -1,5 +1,3 @@
-// routes/googleRoutes.js
-
 import express from 'express';
 import {
   initiateGoogleAuth,
@@ -20,17 +18,17 @@ import {
 
 const router = express.Router();
 
-// OAuth endpoints
-router.get('/google/auth', initiateGoogleAuth);      // 1) /api/google/auth?telegramId=1234
-router.get('/google/callback', handleGoogleCallback); // 2) callback from Google
+// ✅ OAuth2 Flow
+router.get('/google/auth', initiateGoogleAuth);       // 1) Starts Google OAuth2 flow
+router.get('/google/callback', handleGoogleCallback); // 2) Callback URL from Google
 
-// Gmail endpoints
+// ✅ Gmail API Endpoints
 router.post('/gmail/send', sendEmail);
 router.post('/gmail/search', searchEmails);
 router.post('/gmail/read', readEmail);
 router.post('/gmail/reply', replyEmail);
 
-// Calendar endpoints
+// ✅ Google Calendar API Endpoints
 router.post('/calendar/manage', manageCalendarEvent);
 router.post('/calendar/list', listCalendarEvents);
 

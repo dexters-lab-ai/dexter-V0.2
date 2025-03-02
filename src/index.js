@@ -1,223 +1,200 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import axios from 'axios';
-import https from 'https';
-import fs from 'fs';
 import express from 'express';
+import http from 'http'; // Use http instead of https
 import path from 'path';
 import { fileURLToPath } from 'url';
-import ngrok from 'ngrok'
+import ngrok from 'ngrok';
+import bodyParser from 'body-parser';
 
 import { config } from './core/config.js';
-
-// Core services (Telegram bot, DB, etc.)
 import { bot } from './core/bot.js';
 import { db } from './core/database.js';
 import { intentProcessor } from './services/ai/processors/IntentProcessor.js';
 import { unifiedMessenger } from './core/UnifiedMessageHandler.js';
 import { rateLimiter } from './core/rate-limiting/RateLimiter.js';
 import { circuitBreakers } from './core/circuit-breaker/index.js';
-import { startMonitoringDashboard } from './core/monitoring/Dashboard.js';
 import { tasksService } from './services/tasks/TasksService.js';
 import { taskScheduler } from './services/tasks/Scheduler.js';
 import { priceAlertService } from './services/priceAlerts.js';
 import { walletService } from './services/wallet/index.js';
 import { shopifyService } from './services/shopify/ShopifyService.js';
-import { ErrorHandler } from './core/errors/index.js';
 import { kolLearningSystem } from './services/ai/flows/learning/KOLLearningSystem.js';
 import { strategyManager } from './services/ai/flows/learning/StrategyManager.js';
 import { twitterService } from './services/twitter/index.js';
+import { flipperMode } from './services/pumpfun/FlipperMode.js';
+import { startMonitoringDashboard } from './core/monitoring/Dashboard.js'; 
 
-// Moralis Web3 SDK
+import DashboardServer from './core/monitoring/DashboardServer.js';
+import googleRoutes from './routes/googleRoutes.js';
+import merchantRoutes from './routes/merchantRoutes.js';
+
 import Moralis from 'moralis';
 
-let isShuttingDown = false;
+class ServerManager {
+  constructor() {
+    this.app = express();
+    this.httpServer = null;  // Changed to httpServer
+    this.ngrokUrl = null;
+    this.__dirname = path.dirname(fileURLToPath(import.meta.url));
+  }
 
-/**
- * Graceful Cleanup
- */
-async function cleanup(botInstance) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
+  setupMiddleware() {
+    this.app.use(bodyParser.json());
+    this.app.use('/api', googleRoutes);
+    this.app.use('/api/merchants', merchantRoutes);
+  }  
 
-  console.log('🛑 Shutting down AI Agent...');
-  try {
-    await db.disconnect();
-    await walletService.cleanup();
-    if (botInstance) {
-      await botInstance.stopPolling();
+  async startHttpServer(port) {
+    try {
+      // Switch to HTTP since we don't need SSL certificates
+      this.httpServer = http.createServer(this.app);
+
+      return new Promise((resolve, reject) => {
+        this.httpServer.listen(port, () => {
+          console.log(`🚀 HTTP Server running on port ${port}`);
+          resolve(this.httpServer);
+        });
+        this.httpServer.on('error', reject);
+      });
+    } catch (error) {
+      console.error('Failed to start HTTP server:', error);
+      throw error;
     }
-    console.log('✅ Cleanup completed.');
-  } catch (error) {
-    console.error('❌ Error during cleanup:', error);
-  } finally {
-    isShuttingDown = false;
+  }
+
+  async startNgrok(port) {
+    try {
+      // Now using port 80 as per Ngrok's recommendation
+      this.ngrokUrl = await ngrok.connect({
+        addr: port,  // Port for Ngrok to tunnel to
+        authtoken: config.ngrokAuthToken,
+      });
+
+      console.log(`🌍 Ngrok tunnel established at: ${this.ngrokUrl}`);
+      console.log(`🔗 OAuth callback URL: ${this.ngrokUrl}/api/google/callback`);
+
+      return this.ngrokUrl;
+    } catch (error) {
+      console.error('Failed to start Ngrok:', error);
+      throw error;
+    }
+  }
+
+  async shutdown() {
+    try {
+      if (this.httpServer) {
+        await new Promise(resolve => this.httpServer.close(resolve));
+      }
+      if (this.ngrokUrl) {
+        await ngrok.disconnect(this.ngrokUrl);
+        await ngrok.kill();
+      }
+      console.log('✅ Servers shut down successfully');
+    } catch (error) {
+      console.error('Error during shutdown:', error);
+    }
   }
 }
 
-/**
- * Start an HTTPS server on local port 3000,
- * 
- */
-async function startLocalHttpsAndNgrok() {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+class Application {
+  constructor() {
+    this.serverManager = new ServerManager();
+    this.isShuttingDown = false;
+  }
+
+  async initialize() {
+    try {
+      this.serverManager.setupMiddleware();
+      await this.initializeServices();
+      await this.startServers();
+      this.setupErrorHandlers();
+      console.log('✅ Application initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize application:', error);
+      process.exit(1);
+    }
+  }
+
+  async initializeServices() {
+    console.log('🔧 Initializing core services...');
+    try {
+      await db.connect();
+      await intentProcessor.initialize();
+      await unifiedMessenger.initialize();
+      await walletService.initialize();
+      await rateLimiter.initialize();
+      await circuitBreakers.initialize();
+      await shopifyService.initialize();
+      await tasksService.initialize();
+      await taskScheduler.initialize();
+      await taskScheduler.start();
+      await Moralis.start({ apiKey: config.moralisAPIKey });
+      
+      await Promise.all([
+        kolLearningSystem.initialize(),
+        strategyManager.initialize(),
+        priceAlertService.initialize(),
+        twitterService.initialize(),
+        // Initialize FlipperMode for DB collections in Dashboard
+        flipperMode.initialize() 
+      ]);
   
-  // 1) Create an Express app if you want to mount routes, etc.
-  app.get('/', (req, res) => {
-    res.send('Hello from local HTTPS server + ngrok!');
-  });
+      console.log('✅ Core services initialized successfully');
+    } catch (error) {
+      console.error('Error initializing services:', error);
+      throw error;
+    }
+  }  
 
-  // 2) Create local HTTPS server
-  const keyPath = path.join(__dirname, '../config/openssl/key.pem');
-  const certPath = path.join(__dirname, '../config/openssl/cert.pem');
-  const options = {
-    key: fs.readFileSync(keyPath),
-    cert: fs.readFileSync(certPath)
-  };
+  async startServers() {
+    try {
+      await this.serverManager.startHttpServer(80); 
+      await this.serverManager.startNgrok(80);  
+      
+      // Automatically start monitoring dashboard when the server starts
+      await startMonitoringDashboard(); // Starts the monitoring dashboard automatically
+      
+      const dashboardPort = process.env.DASHBOARD_PORT || 4000;
+      console.log(`📊 Starting Monitoring Dashboard on port ${dashboardPort}`);
+      
+      // Create and start the dashboard server
+      const dashboardServer = new DashboardServer();
+      await dashboardServer.start();
+      
+      await bot.startPolling();
+    } catch (error) {
+      console.error('Error starting servers:', error);
+      throw error;
+    }
+  }
 
-  const localPort = config.ngrokPort || 3000;
-  const server = https.createServer(options, app);
-
-  await new Promise((resolve, reject) => {
-    server.listen(localPort, () => {
-      console.log(`✅ HTTPS server running on https://localhost:${localPort}`);
-      resolve();
+  setupErrorHandlers() {
+    process.on('SIGINT', async () => {
+      console.log('🛑 SIGINT received. Shutting down...');
+      await this.serverManager.shutdown();
+      process.exit(0);
     });
-    server.on('error', reject);
-  });
 
-  // 3) Start ngrok tunnel
-  const authtoken = config.ngrokAuthToken;
-
-  try {
-    const publicUrl = await ngrok.connect({
-      addr: localPort,
-      authtoken,
-      region: 'us',
-      hostname: 'molly-humane-flea.ngrok-free.app',
-      onStatusChange: status => console.log('ngrok status ->', status),
-      onLogEvent: data => console.log('ngrok event ->', data)
+    process.on('SIGTERM', async () => {
+      console.log('🛑 SIGTERM received. Shutting down...');
+      await this.serverManager.shutdown();
+      process.exit(0);
     });
 
-    console.log(`🔗 Ngrok tunnel established at: ${publicUrl}`);
-    console.log('In use for Google OAuth callbacks:', `${publicUrl}/api/google/callback`);
+    process.on('uncaughtException', async (error) => {
+      console.error('❌ Uncaught Exception:', error);
+      await this.serverManager.shutdown();
+      process.exit(1);
+    });
 
-    return { server, publicUrl };
-  } catch (err) {
-    console.error('❌ Error starting ngrok tunnel:', err);
-    throw err;
+    process.on('unhandledRejection', async (reason) => {
+      console.error('❌ Unhandled Rejection:', reason);
+      await this.serverManager.shutdown();
+    });
   }
 }
 
-/**
- * Initialize all your core services
- */
-async function initializeServices() {
-  console.log('🔧 Initializing core services...');
-  try {
-    console.log('📡 Connecting to MongoDB...');
-    await db.connect();
-
-    await intentProcessor.initialize();
-    await unifiedMessenger.initialize();
-
-    console.log('👛 Initializing wallet service...');
-    await walletService.initialize();
-
-    console.log('⚡ Initializing rate limiter...');
-    await rateLimiter.initialize();
-
-    console.log('📊 Starting Express Server & monitoring dashboard...');
-    await startMonitoringDashboard();
-
-    console.log('☁️ Initializing Google API & Ngrok service...');
-    await startLocalHttpsAndNgrok();
-
-    console.log('🔌 Setting up circuit breakers...');
-    await circuitBreakers.initialize();
-
-    console.log('🛍️ Initializing Shopify service...');
-    await shopifyService.initialize();
-
-    console.log('⚙️ Initializing tasks and scheduler...');
-    await tasksService.initialize();
-    await taskScheduler.initialize();
-    await taskScheduler.start();
-
-    console.log('⚙️ Initializing Moralis...');
-    await Moralis.start({ apiKey: config.moralisAPIKey });
-
-    console.log('🧠 Initializing learning systems...');
-    await Promise.all([
-      kolLearningSystem.initialize(),
-      strategyManager.initialize(),
-    ]);
-
-    console.log('💲 Initializing price alerts...');
-    await priceAlertService.initialize();
-
-    console.log('🐦 Initializing Twitter service...');
-    await twitterService.initialize();
-
-    console.log('✅ Core services initialized successfully :)');
-  } catch (error) {
-    console.error('❌ Error initializing core services:', error);
-    throw error;
-  }
-}
-
-/**
- * Main startup function
- */
-async function startAgent() {
-  try {
-    console.log('🚀 Starting KATZ AI Agent...');
-    await initializeServices();
-
-    console.log('🤖 Starting Telegram Bot polling...');
-    await bot.startPolling();
-
-    console.log('✅ D.A.I.L AI Agent is up and running!');
-    return bot;
-  } catch (error) {
-    console.error('❌ Error during agent startup:', error);
-    await cleanup(bot);
-    process.exit(1);
-  }
-}
-
-/**
- * Error Handlers
- */
-function setupErrorHandlers(botInstance) {
-  process.on('SIGINT', async () => {
-    console.log('🛑 SIGINT received. Shutting down...');
-    await cleanup(botInstance);
-    process.exit(0);
-  });
-
-  process.on('SIGTERM', async () => {
-    console.log('🛑 SIGTERM received. Shutting down...');
-    await cleanup(botInstance);
-    process.exit(0);
-  });
-
-  process.on('uncaughtException', async (error) => {
-    console.error('❌ Uncaught Exception:', error);
-    await ErrorHandler.handle(error);
-  });
-
-  process.on('unhandledRejection', async (reason) => {
-    console.error('❌ Unhandled Rejection:', reason);
-    await ErrorHandler.handle(reason);
-  });
-}
-
-/**
- * Run it all
- */
-(async () => {
-  const botInstance = await startAgent();
-  setupErrorHandlers(botInstance);
-})();
+const app = new Application();
+app.initialize().catch(console.error);

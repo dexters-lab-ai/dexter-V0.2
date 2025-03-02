@@ -3,7 +3,7 @@ import { getAuthorizedClient } from '../services/google/googleAPIService.js';
 import { User } from '../models/User.js';
 
 /**
- * 1) Send an email
+ * ✅ Send an email using Gmail API
  */
 export async function sendEmail(req, res) {
   try {
@@ -12,8 +12,7 @@ export async function sendEmail(req, res) {
 
     const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
-    // Gmail requires the raw message in base64-encoded RFC 2822 format
-    // We'll do a simple approach:
+    // RFC 2822 formatted raw message (Base64-encoded)
     const messageParts = [
       `To: ${to}`,
       `Subject: ${subject}`,
@@ -21,21 +20,17 @@ export async function sendEmail(req, res) {
       ``,
       html || text
     ];
-    const message = messageParts.join('\n');
-
-    const encodedMessage = Buffer.from(message)
+    const encodedMessage = Buffer.from(messageParts.join('\n'))
       .toString('base64')
       .replace(/\+/g, '-')
       .replace(/\//g, '_');
 
     await gmail.users.messages.send({
       userId: 'me',
-      requestBody: {
-        raw: encodedMessage
-      }
+      requestBody: { raw: encodedMessage }
     });
 
-    res.json({ success: true, message: 'Email sent' });
+    res.json({ success: true, message: 'Email sent successfully' });
   } catch (error) {
     console.error("Error sending email:", error);
     res.status(500).json({ error: error.message });
@@ -43,7 +38,7 @@ export async function sendEmail(req, res) {
 }
 
 /**
- * 2) Search emails by query or label
+ * ✅ Search for emails using a query or label
  */
 export async function searchEmails(req, res) {
   try {
@@ -53,7 +48,7 @@ export async function searchEmails(req, res) {
     const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
     const response = await gmail.users.messages.list({
       userId: 'me',
-      q: query,        // e.g. "label:unread from:someone@example.com"
+      q: query, // Example: "label:unread from:someone@example.com"
       maxResults
     });
 
@@ -66,7 +61,7 @@ export async function searchEmails(req, res) {
 }
 
 /**
- * 3) Read a specific email
+ * ✅ Read an email by message ID
  */
 export async function readEmail(req, res) {
   try {
@@ -80,14 +75,7 @@ export async function readEmail(req, res) {
       format
     });
 
-    const message = response.data;
-    // Optionally store the thread info in user's doc for future reference
-    const user = await User.findOne({ telegramId });
-    if (user && message.threadId) {
-      await user.addEmailThread(message.threadId, message.snippet, /*subject*/'', message.historyId);
-    }
-
-    res.json({ success: true, message });
+    res.json({ success: true, message: response.data });
   } catch (error) {
     console.error("Error reading email:", error);
     res.status(500).json({ error: error.message });
@@ -95,16 +83,15 @@ export async function readEmail(req, res) {
 }
 
 /**
- * 4) Reply to an email in a thread
+ * ✅ Reply to an email in a thread
  */
 export async function replyEmail(req, res) {
   try {
     const { telegramId, threadId, messageId, body } = req.body;
     const oAuth2Client = await getAuthorizedClient(telegramId);
-
     const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
-    // First, get the original message to gather 'References' and 'In-Reply-To'
+    // Get the original email details
     const original = await gmail.users.messages.get({
       userId: 'me',
       id: messageId,
@@ -112,48 +99,27 @@ export async function replyEmail(req, res) {
     });
 
     const headers = original.data.payload?.headers || [];
-    const subjectHeader = headers.find(h => h.name.toLowerCase() === 'subject');
-    const fromHeader = headers.find(h => h.name.toLowerCase() === 'from');
-    const toHeader = headers.find(h => h.name.toLowerCase() === 'to');
-    const referencesHeader = headers.find(h => h.name.toLowerCase() === 'references');
-    const inReplyToHeader = headers.find(h => h.name.toLowerCase() === 'in-reply-to');
-
-    const subject = subjectHeader ? subjectHeader.value : "No Subject";
-    const references = referencesHeader ? referencesHeader.value : "";
-    const inReplyTo = inReplyToHeader ? inReplyToHeader.value : `<${messageId}@mail.gmail.com>`;
-
-    // Construct reply
+    const subject = headers.find(h => h.name.toLowerCase() === 'subject')?.value || "No Subject";
+    const fromHeader = headers.find(h => h.name.toLowerCase() === 'from')?.value || "";
+    
     const messageParts = [
+      `To: ${fromHeader}`,
       `Subject: Re: ${subject}`,
-      `To: ${fromHeader ? fromHeader.value : ''}`, // or you can do to the original "From"
-      `References: ${references} <${messageId}@mail.gmail.com>`,
-      `In-Reply-To: ${inReplyTo}`,
-      `Thread-Topic: ${subject}`,
+      `In-Reply-To: <${messageId}@mail.gmail.com>`,
       ``,
       body
     ];
-    const rawMessage = messageParts.join('\n');
-    const encodedMessage = Buffer.from(rawMessage)
+    const rawMessage = Buffer.from(messageParts.join('\n'))
       .toString('base64')
       .replace(/\+/g, '-')
       .replace(/\//g, '_');
 
-    // Send
     await gmail.users.messages.send({
       userId: 'me',
-      requestBody: {
-        raw: encodedMessage,
-        threadId
-      }
+      requestBody: { raw: rawMessage, threadId }
     });
 
-    // If desired, update local stored thread snippet
-    const user = await User.findOne({ telegramId });
-    if (user) {
-      await user.addEmailThread(threadId, `Replied: ${body.slice(0,40)}...`, subject, original.data.historyId);
-    }
-
-    res.json({ success: true, message: 'Reply sent' });
+    res.json({ success: true, message: 'Reply sent successfully' });
   } catch (error) {
     console.error("Error replying to email:", error);
     res.status(500).json({ error: error.message });
