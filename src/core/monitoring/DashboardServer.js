@@ -1,5 +1,6 @@
 import express from 'express';
 import dashboardRouter from './Dashboard.js';
+import apiRouter from './api/routes.js';  // New API routes
 
 class DashboardServer {
   constructor() {
@@ -10,12 +11,19 @@ class DashboardServer {
 
   async start() {
     try {
-      this.server = this.app.listen(this.port, () => {
-        console.log(`📊 Monitoring Dashboard running at: http://localhost:${this.port}`);
-      });
+      // Serve static files
+      this.app.use(express.static('public'));
+      
+      // Parse JSON bodies
+      this.app.use(express.json());
 
       // Setup routes
       this.app.use('/', dashboardRouter);
+      this.app.use('/api', apiRouter);  // Mount API routes
+
+      this.server = this.app.listen(this.port, () => {
+        console.log(`📊 Monitoring Dashboard running at: http://localhost:${this.port}`);
+      });
 
       return this.server;
     } catch (error) {
