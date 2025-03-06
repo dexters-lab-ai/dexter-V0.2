@@ -68,6 +68,7 @@ class Config {
     };
 
     // Blockchains Endpoints for direct usage (if needed)
+    this.sonicEndpoint = process.env.SONIC_ENDPOINT;
     this.solanaEndpoint = process.env.QUICKNODE_SOLANA_ENDPOINT;
     this.baseEndpoint = process.env.QUICKNODE_BASE_RPC;
     this.avaxEndpoint = process.env.QUICKNODE_AVAX_RPC;

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D.A.I.L API – Agent Data & Trading Intelligence</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Floating Navigation -->
+    <nav class="glass-nav">
+      <div class="nav-glow-border"></div>
+      <div class="nav-brand">
+        <img src="/images/dail.png" alt="D.A.I.L Logo" class="logo">
+        <h1>D.A.I.L API</h1>
+      </div>
+      <div class="nav-links">
+        <a href="/dashboard" class="nav-link">Dashboard</a>
+        <a href="/docs" class="nav-link">Documentation</a>
+        <a href="https://t.me/the_ai_lab_announcements" class="nav-link">Telegram</a>
+        <a href="https://x.com/dexters_ai_lab" class="nav-link">Twitter</a>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero" data-aos="fade-up">
+      <div class="hero-content">
+        <h1>D.A.I.L API Landing</h1>
+        <p>
+        Welcome to the D.A.I.L Agents Monitor & Data API.<br>
+          Unlock live AI-generated data streams, sentiment analytics, and trading signals.<br>
+          Build, integrate, and automate your trading strategies with our robust RESTful API.
+        </p>
+        <div class="status-card">
+          <h2>Service Status</h2>
+          <div class="status-item">
+            <span class="status-label">API Endpoint:</span>
+            <span class="status-value active">Online 🟢</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Uptime:</span>
+            <span class="status-value" id="uptime">Calculating...</span>
+          </div>
+        </div>
+      </div>
+      <div class="test-tube">
+        <div class="liquid"></div>
+      </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section class="features-grid">
+      <!-- Live Data Streams -->
+      <div class="feature-category" data-aos="fade-up">
+        <h3>📡 Live Data Streams</h3>
+        <div class="feature-cards">
+          <div class="feature-card glow-effect">
+            <i class="fas fa-chart-line"></i>
+            <h4>System Metrics</h4>
+            <p>Access real-time system stats and performance data from our AI agent.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-database"></i>
+            <h4>Cached Data Access</h4>
+            <p>Query historical and live data for cashtags, token addresses, trends, and more with flexible filtering.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-bolt"></i>
+            <h4>Sentiment Analytics</h4>
+            <p>Obtain sentiment scores and market trends from social media and trading data.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trading Signals -->
+      <div class="feature-category" data-aos="fade-up">
+        <h3>💹 Trading Signals</h3>
+        <div class="feature-cards">
+          <div class="feature-card glow-effect">
+            <i class="fas fa-signal"></i>
+            <h4>Flipper Mode</h4>
+            <p>Automated buy/sell triggers based on real-time sentiment shifts to capture market opportunities.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-user-secret"></i>
+            <h4>KOL Monitoring</h4>
+            <p>Monitor key opinion leaders’ tweets to generate actionable trade signals.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-robot"></i>
+            <h4>Auto Signal Execution</h4>
+            <p>Leverage our autonomous engine to process and execute trading signals automatically.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- API & Developer Tools -->
+      <div class="feature-category" data-aos="fade-up">
+        <h3>🛠️ API & Developer Tools</h3>
+        <div class="feature-cards">
+          <div class="feature-card glow-effect">
+            <i class="fas fa-code"></i>
+            <h4>Robust REST API</h4>
+            <p>Retrieve live system stats, sentiment analytics, and trade signals through our RESTful API endpoints.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-file-alt"></i>
+            <h4>Comprehensive Documentation</h4>
+            <p>Detailed API documentation with sample queries, filters, and integration guides to get you started.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-plug"></i>
+            <h4>Seamless Integration</h4>
+            <p>Embed our data streams into your own trading platforms, dashboards, or custom applications.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Future Products -->
+      <div class="feature-category" data-aos="fade-up">
+        <h3>🚀 Future Products</h3>
+        <div class="feature-cards">
+          <div class="feature-card glow-effect">
+            <i class="fas fa-mobile-alt"></i>
+            <h4>Telegram AI Agent</h4>
+            <p>Interact with our AI-powered trading assistant via Telegram for live updates and autonomous trades.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-desktop"></i>
+            <h4>Operator Desktop App</h4>
+            <p>Coming soon: A native desktop application to execute complex multi-step tasks with ease.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- API Landing CTA Section -->
+    <section class="cta-section">
+      <div class="lab-scene">
+        <div class="beaker"></div>
+        <div class="flask"></div>
+        <div class="smoke"></div>
+      </div>
+      <div class="cta-content">
+        <h2><span class="no-gradient">🚪</span> Access the API</h2>     
+        <p>
+          Unlock the power of live AI data streams and advanced trading intelligence. Our API provides the raw data and insights you need to build, automate, and optimize your trading strategies. Query system metrics, market sentiment, and curated trade signals—all in real time.
+        </p>
+        <div class="experiment-stats">
+          <div class="stat">
+            <span class="number">24/7</span>
+            <span class="label">Data Streaming</span>
+          </div>
+          <div class="stat">
+            <span class="number">∞</span>
+            <span class="label">Endpoints</span>
+          </div>
+          <div class="stat">
+            <span class="number">✓</span>
+            <span class="label">Reliability</span>
+          </div>
+        </div>
+        <a href="/docs" class="cta-button">View API Documentation</a>
+        <br/><br/>
+        <p>
+          Join our developer community to integrate D.A.I.L’s live data into your applications, build your own AI trading assistant, and revolutionize the way you trade sentiment. Our API is the foundation for next‑generation autonomous trading.
+        </p>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="glass-footer">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h3>Connect</h3>
+          <a href="https://t.me/the_ai_lab_announcements">Telegram</a>
+          <a href="https://x.com/dexters_ai_lab">Twitter</a>
+        </div>
+        <div class="footer-section">
+          <h3>Resources</h3>
+          <a href="/dashboard">Dashboard</a>
+          <a href="/docs">Documentation</a>
+        </div>
+        <div class="footer-section">
+          <p>&copy; 2025 Dexter's AI Lab</p>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+  <script>
+    AOS.init({
+      duration: 800,
+      offset: 100,
+      once: true
+    });
+
+    // Update uptime
+    function updateUptime() {
+      fetch('/health')
+        .then(res => res.json())
+        .then(data => {
+          const uptime = Math.floor(data.uptime);
+          const days = Math.floor(uptime / 86400);
+          const hours = Math.floor((uptime % 86400) / 3600);
+          const minutes = Math.floor((uptime % 3600) / 60);
+          document.getElementById('uptime').textContent =
+            `${days}d ${hours}h ${minutes}m`;
+        })
+        .catch(console.error);
+    }
+
+    updateUptime();
+    setInterval(updateUptime, 60000);
+
+    // Particle Effects for Product Suite
+    function initParticleNetwork() {
+      const canvas = document.createElement('canvas');
+      canvas.classList.add('particle-network');
+      document.querySelector('.features-grid').prepend(canvas);
+      const ctx = canvas.getContext('2d');
+
+      let particles = [];
+      const particleCount = 100;
+
+      function resize() {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+      }
+
+      function createParticles() {
+        for (let i = 0; i < particleCount; i++) {
+          particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            vx: Math.random() * 2 - 1,
+            vy: Math.random() * 2 - 1,
+            radius: Math.random() * 2 + 1
+          });
+        }
+      }
+
+      function drawParticles() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(particle => {
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.fill();
+          particle.x += particle.vx;
+          particle.y += particle.vy;
+          if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
+          if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
+        });
+        requestAnimationFrame(drawParticles);
+      }
+
+      resize();
+      createParticles();
+      drawParticles();
+      window.addEventListener('resize', resize);
+    }
+
+    function createDNABackground() {
+      const container = document.createElement('div');
+      container.className = 'dna-background';
+      document.querySelector('.features-list').prepend(container);
+      for (let i = 0; i < 50; i++) {
+        const strand = document.createElement('div');
+        strand.className = 'dna-strand';
+        strand.style.left = `${Math.random() * 100}%`;
+        strand.style.top = `${Math.random() * 100}%`;
+        strand.style.animationDelay = `${Math.random() * 8}s`;
+        container.appendChild(strand);
+      }
+    }
+
+    function createLabEffects() {
+      const container = document.createElement('div');
+      container.className = 'lab-container';
+      document.body.appendChild(container);
+      function createBubble() {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.style.left = Math.random() * 100 + 'vw';
+        bubble.style.bottom = '-20px';
+        bubble.style.width = Math.random() * 30 + 10 + 'px';
+        bubble.style.height = bubble.style.width;
+        container.appendChild(bubble);
+        setTimeout(() => bubble.remove(), 4000);
+      }
+      function createChemical() {
+        const chemical = document.createElement('div');
+        chemical.className = 'chemical';
+        chemical.style.left = Math.random() * 100 + 'vw';
+        chemical.style.top = Math.random() * 100 + 'vh';
+        container.appendChild(chemical);
+        setTimeout(() => chemical.remove(), 2000);
+      }
+      function createFlask() {
+        const flask = document.createElement('div');
+        flask.className = 'flask';
+        flask.style.left = Math.random() * 100 + 'vw';
+        flask.style.top = Math.random() * 100 + 'vh';
+        container.appendChild(flask);
+        setTimeout(() => flask.remove(), 3000);
+      }
+      setInterval(createChemical, 3000);
+      setInterval(createFlask, 4000);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initParticleNetwork();
+      createDNABackground();
+      createLabEffects();
+    });
+  </script>
+</body>
+</html>

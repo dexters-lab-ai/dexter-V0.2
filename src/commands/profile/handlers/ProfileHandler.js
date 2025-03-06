@@ -534,16 +534,16 @@ async function  drawLogoAndTitle(ctx, logoBuffer) {
         ctx.restore();
     }
     // "KATZ!" in Toontime Bold
-    drawTiltedText(ctx, 'KATZ!', 500, 180, 'bold 42px "SF Toontime"', 'azure', 'center', 0.05, 0);
+    drawTiltedText(ctx, 'D.A.I.L', 500, 180, 'bold 42px "SF Toontime"', 'azure', 'center', 0.05, 0);
 
     // "memes" in italic Toontime Bold
     drawTiltedText(ctx, 'memes', 280, 210, 'italic 20px "SF Toontime"', 'rgba(212, 212, 212, 0.7)', 'center', -0.03, 0);
 
-    // "Autonomous Trench Agent..." slogan in italic Toontime Bold
-// drawTiltedText(ctx, 'Autonomous Trench Agent...', 405, 300, 'italic 19px "SF Toontime"', '#666', 'center', 0.02, 0);
+    // "Your AI Companion for Crypto and Daily Tasks..." slogan in italic Toontime Bold
+    drawTiltedText(ctx, 'Your AI Companion for Crypto and Daily Tasks', 405, 300, 'italic 17px "SF Toontime"', '#666', 'center', 0.02, 0);
 
     // Cartoon Skew Effect for "KATZ!"
-    drawTiltedText(ctx, 'KATZ!', 490, 200, 'bold 45px "SF Toontime"', 'azure', 'center', -0.3, 0);
+    drawTiltedText(ctx, 'D.A.I.L', 490, 200, 'bold 45px "SF Toontime"', 'azure', 'center', -0.3, 0);
 
     // Cartoon Skew Effect for "memes"
     drawTiltedText(ctx, 'memes', 280, 210, 'italic 18px "SF Toontime"', '#b09a9a', 'center', 0.1, 0.2);

@@ -15,7 +15,6 @@ import { contextManager } from '../ContextManager.js';
 import BitrefillService from "../../bitrefill/BitrefillService.js";
 import WormholeBridgeService from '../../Wormhole/WormholeBridgeService.js';
 import { fallbackMap } from './Fallbacks.js';
-import { aiMetricsService } from '../../aiMetricsService.js';
 
 let IntentProcessor; // Declare but don't import yet. Fixing circular dependency on runTask. UnifiedAutonomousEngine.js imports IntentProcessor
 // Twitter service imports IntentProcessor and intentProcessor imports it, lets dynamically inject IntentProcessor here to fix it
@@ -50,6 +49,8 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
 
     // AI Model Function Definitions
     this.functions = AIFunctions;
+
+    this.startTime = Date.now();
   }
 
   async initialize() {
@@ -1301,7 +1302,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         bridge_tokens: () => this.intentProcessor.handleBridgeTokens(args, chatId),
         fetch_bridge_receipts: () => this.intentProcessor.handleFetchBridgeReceipts(args),
         // Wallet creation
-        create_avalanche_wallet: () => this.intentProcessor.createAvalancheWallet(),
+        create_evm_wallet: () => this.intentProcessor.createEVMWallet(userId, args.network),
         // Research and Tasks
         save_research: () => this.intentProcessor.processSaveResearchIntent(args, chatId),
         retrieve_research: () => this.intentProcessor.processRetrieveResearchIntent(args, chatId),
@@ -1319,12 +1320,14 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       // Validate arguments again
       this.validateRequiredParameters(name, args);
 
-      const result = await this[functionName](params);
-      aiMetricsService.trackFunctionCall(functionName, true);
+      // Track successful function call
+      const duration = Date.now() - this.startTime;
+      aiMetricsService.trackFunctionCall(name, true, duration);
 
       return await executor();
     } catch (error) {
-      aiMetricsService.trackFunctionCall(functionName, false);
+      const duration = Date.now() - this.startTime;
+      aiMetricsService.trackFunctionCall(name, false, duration);
       // Log full error fields
       console.error(`❌ Error in executeFunction('${name}')`, {
         message: error.message,

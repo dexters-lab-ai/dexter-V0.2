@@ -9,25 +9,32 @@ export class WelcomeHandler {
   /** Show Welcome Message */
   async showWelcome(chatId) {
     const startMessage = `
-🐈‍⬛ *KATZ - Autonomous Trench Agent...* 🐈‍⬛
+# 🧠 D.A.I.L - Your Smart Companion for Crypto & Daily Digital Life 
 
-_AI trench pawtner on Eth, Base, SOL_ 
+**Live smarter, faster, better**
 
-🔍 *Personal meme trading agent:* 😼
-• 🦴 Meme Analysis
-• 🦴 AI Ape Suggestions
-• 🦴 AI Loan Matching
-• 🦴 Token Scanning
-• 🦴 Autonomous Voice Trading
-• 🦴 Pump.fun, Moonshot and more...
+---
 
-🐕 *Origins:* Courage The Cowardly Dog (meme)
+### 🧠 Intelligent Assistant:
+- **Ticker Discovery** 🔎
+- **Ticker Research & Analysis** 🔬
+- **Autonomous Portfolio Management** ⚗️
+- **Autonomous Position & Task Management** 🧫
+- **Voice-Enabled Operations (Easy Mode)** 🗯️
+- **Powered by:** OpenAI, DeepSeek, Google, Nvidia Parakeet
+- **Services:** Pump.fun, SolanaPay, Google, Shopify, and more...
+
+---
+
+### 🧬 Origins:
+**KATZ! from CTCD, D.A.I.L's Pilot Agent in Node.js **
+
 `.trim();
 
     // Send animation with the welcome message
     await this.bot.sendAnimation(
       chatId,
-      "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExa2JkenYycWk0YjBnNXhhaGliazI2dWxwYm94djNhZ3R1dWhsbmQ2MCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xouqS1ezHDrNkhPWMI/giphy.gif",
+      "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWJlaTQxdW01NW9jeGQ4aGlvM3c5YjJ2bTQ5bWY4cHVob2s0ajIwcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Aq1gmGwbJNye8Wvm4v/giphy.gif",
       {
         caption: startMessage,
         parse_mode: "Markdown",

@@ -1,5 +1,6 @@
 // Network Constants
 export const NETWORKS = {
+  SONIC: 'sonic',
   ETHEREUM: 'ethereum',
   BASE: 'base',
   SOLANA: 'solana',
@@ -23,6 +24,7 @@ export const NETWORKS = {
 };
 
 export const NETWORK_DISPLAY_NAMES = {
+  [NETWORKS.SONIC]: 'Sonic',
   [NETWORKS.ETHEREUM]: 'Ethereum',
   [NETWORKS.BASE]: 'Base',
   [NETWORKS.SOLANA]: 'Solana',
@@ -82,31 +84,31 @@ export const ERROR_MESSAGES = {
 
 // Welcome Messages
 export const WELCOME_MESSAGES = {
-  NEW_USER: `*Say "Hey to KATZ!" to bother him* 🐈‍⬛\n\n` +
-           `*{username}*, ready for the trenches? 🌳🌍🕳️\n\n` +
-           `_Intelligent & autonomous meme trading..._ 🤖💎\n\n` +
-           `Need help? Type /help or /start over.`,
+  NEW_USER: `*🧠 Say "Hello" to bother him*\n\n` +
+           `*{username}*, ready to trench? 🌳🕳️\n\n` +
+           `_Dont be shy to combine complex tasks..._ 🤖\n\n` +
+           `🗯️ Need help? Ask him anything.`,
            
-  RETURNING_USER: `*Welcome Back {username}!* 🐈‍⬛\n\n` +
+  RETURNING_USER: `*👨‍🔬 Welcome Back {username}!* \n\n` +
                  `Ready for the trenches? 🌳🕳️\n\n` +
                  `_Let's find gems..._ 💎\n\n` +
-                 `Need help? Type /help or /start over.`
+                 `🗯️ Need help? Ask him anything ffs!.`
 };
 
 // Registration Messages
 export const REGISTRATION_MESSAGES = {
-  PROMPT: `*🆕 First Time?...*\n\n` +
-         `_Let's get you set up with your own secure wallets and access to all KATZ features!_\n\n` +
-         `• Secure wallet creation\n` +
-         `• Multi-chain trenching\n` +
-         `• AI-powered trading\n` +
-         `• And much more...\n\n` +
-         `Ready to start? 🚀`,
+  PROMPT: `*🆕 First Time?*\n\n` +
+        `🧫 Let's setup some wallets to access full features\n\n` +
+        `• Secure wallet creation\n` +
+        `• Multi-chain trenching\n` +
+        `• AI-powered operations\n` +
+        `• And much more...\n\n` +
+        `Ready to experiment? 🚀`,
 
-  SUCCESS: `*Welcome to KATZ!* 🐈‍⬛\n\n` +
+  SUCCESS: `*👨‍🔬 Welcome Lad!!\n\n` +
           `*{username}*, your wallets are ready.\n\n` +
-          `_Let's start finding gems in the trenches..._ 💎\n\n` +
-          `Type /help to see available commands.`
+          `_Let's start by asking Dexter to check Twitter trench chatter..._ 💎\n\n` +
+          `Type /help or simply ask the agent what it can do.`
 };
 
 // Database Constants

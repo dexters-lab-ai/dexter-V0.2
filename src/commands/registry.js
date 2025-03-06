@@ -2,8 +2,10 @@ import { bot } from '../core/bot.js';
 import { EventEmitter } from 'events';
 import { ErrorHandler } from '../core/errors/index.js';
 import { SettingsCommand } from '../commands/settings/SettingsCommand.js';
+import { StartCommand } from './start/StartCommand.js';
 import { ScanCommand } from './scan/ScanCommand.js';
 import { HelpCommand } from '../commands/help/HelpCommand.js';
+import { eventHandler } from '../events/EventHandler.js'; 
 
 export class CommandRegistry extends EventEmitter {
   constructor(bot) {
@@ -12,6 +14,8 @@ export class CommandRegistry extends EventEmitter {
     this.commands = new Map();
     this.callbackHandlers = new Map();
     // Instantiate common commands so that their callbacks can be referenced
+    this.startCommand = new StartCommand(bot, eventHandler);
+    this.scanCommand = new ScanCommand(bot);
     this.settingsCommand = new SettingsCommand(bot);
     this.helpCommand = new HelpCommand(bot);
     this.initialized = false;

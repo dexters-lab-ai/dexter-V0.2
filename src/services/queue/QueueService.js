@@ -1,5 +1,3 @@
-// src/services/queue/QueueService.js
-
 import Bull from 'bull';
 import { EventEmitter } from 'events';
 import { createClient } from 'redis';

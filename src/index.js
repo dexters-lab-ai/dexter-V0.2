@@ -27,6 +27,7 @@ import { flipperMode } from './services/pumpfun/FlipperMode.js';
 import { startMonitoringDashboard } from './core/monitoring/Dashboard.js'; 
 
 import DashboardServer from './core/monitoring/DashboardServer.js';
+import dashboardRouter from './core/monitoring/Dashboard.js';
 import googleRoutes from './routes/googleRoutes.js';
 import merchantRoutes from './routes/merchantRoutes.js';
 
@@ -38,6 +39,33 @@ class ServerManager {
     this.httpServer = null;  // Changed to httpServer
     this.ngrokUrl = null;
     this.__dirname = path.dirname(fileURLToPath(import.meta.url));
+  }
+
+  setupRoutes() {
+    // Serve static files from public directory
+    this.app.use(express.static(path.join(this.__dirname, 'public')));
+  
+    // Root route handler - serves the dashboard
+    this.app.get('/', (req, res) => {
+      res.sendFile(path.join(this.__dirname, 'public', 'index.html'));
+    });
+  
+    // Dashboard route
+    this.app.use('/dashboard', dashboardRouter);
+  
+    // Health check endpoint
+    this.app.get('/health', (req, res) => {
+      res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      });
+    });
+  
+    // Handle 404s
+    this.app.use((req, res) => {
+      res.status(404).sendFile(path.join(this.__dirname, 'public', '404.html'));
+    });
   }
 
   setupMiddleware() {
@@ -66,21 +94,21 @@ class ServerManager {
 
   async startNgrok(port) {
     try {
-      // Now using port 80 as per Ngrok's recommendation
       this.ngrokUrl = await ngrok.connect({
-        addr: port,  // Port for Ngrok to tunnel to
+        addr: port,
         authtoken: config.ngrokAuthToken,
+        hostname: config.ngrokHostname,
       });
-
-      console.log(`🌍 Ngrok tunnel established at: ${this.ngrokUrl}`);
+      console.log(`🌍 Ngrok tunnel established at: ${this.ngrokUrl}`);      
       console.log(`🔗 OAuth callback URL: ${this.ngrokUrl}/api/google/callback`);
-
+      // Make the ngrok URL available globally
+      global.ngrokUrl = this.ngrokUrl;
       return this.ngrokUrl;
     } catch (error) {
       console.error('Failed to start Ngrok:', error);
       throw error;
     }
-  }
+  }  
 
   async shutdown() {
     try {
@@ -107,6 +135,7 @@ class Application {
   async initialize() {
     try {
       this.serverManager.setupMiddleware();
+      this.serverManager.setupRoutes();
       await this.initializeServices();
       await this.startServers();
       this.setupErrorHandlers();

@@ -264,7 +264,8 @@ class PumpFunService extends EventEmitter {
     try {
       const latestBlockhash = await this.connection.getLatestBlockhash();
       if (!latestBlockhash) throw new Error('Failed to fetch latest blockhash');
-
+      
+      console.log(`🧹 Pumpfun Healthy: ${signature}`);
       return {
         status: 'healthy',
         latestBlockhash,

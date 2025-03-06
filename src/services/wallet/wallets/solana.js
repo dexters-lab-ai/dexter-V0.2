@@ -54,7 +54,7 @@ export class SolanaWallet {
         await this.setupWebSocket();
         
         // Start health monitoring
-        this.startHealthChecks();
+        //this.startHealthChecks();
         
         this.state.initialized = true;
         console.log('✅ SolanaWallet initialized.');

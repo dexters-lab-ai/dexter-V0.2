@@ -280,7 +280,7 @@ class MonitoringSystem extends EventEmitter {
         console.error('Error collecting metrics:', error);
         this.emit('error', error);
       }
-    }, 180000); // Every 3 minutes
+    }, 4000000); // Every Hour plus
   }  
 
   startHealthMonitoring() {
@@ -300,9 +300,9 @@ class MonitoringSystem extends EventEmitter {
         }
       } catch (error) {
         console.error('Error in health monitoring:', error);
-        this.emit('error', error);
+        this.emit('error', error);c
       }
-    }, 300000); // Every 5mins
+    }, 36000000); // Every Hour
   }
 
   startPerformanceMonitoring() {

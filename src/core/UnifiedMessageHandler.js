@@ -30,6 +30,7 @@ export class UnifiedMessageHandler extends EventEmitter {
     // Timer references for typing indicators and long-response notifications
     this.typingInterval = null;
     this.tooLongTimer = null;
+    this.startTime = Date.now();
   }
 
   async initialize() {
@@ -200,7 +201,7 @@ export class UnifiedMessageHandler extends EventEmitter {
         }
       }
       // Track metrics
-      const duration = Date.now() - startTime;
+      const duration = Date.now() - this.startTime;
       aiMetricsService.trackMessageMetrics(
         isVoiceInput ? 'audio' : 'text',
         duration

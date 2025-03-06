@@ -8,6 +8,7 @@ import { ErrorHandler } from '../../core/errors/index.js';
 import { config } from '../../core/config.js';
 import { queueService } from '../queue/QueueService.js';
 import { SwapController } from '../ai/processors/swapController.js';
+import { aiMetricsService } from '../aiMetricsService.js';
 
 /**
  * Normalize the tweet date string.
@@ -985,7 +986,7 @@ class TwitterService extends EventEmitter {
         for (const tweet of tweets) {
           const cashtags = this.extractCashtags(tweet);
           if (cashtags.length < 1) continue;
-          const weight = 1 + (tweet.favorites || 0) * 0.1 + (tweet.retweets || 0) * 0.1 + (tweet.replies || 0) * 0.3;
+          const weight = 1 + (tweet.likeCount || 0) * 0.1 + (tweet.retweetCount || 0) * 0.1 + (tweet.replyCount || 0) * 0.3;
           cashtags.forEach((cashtag) => {
             if (!cashtagData[cashtag]) {
               cashtagData[cashtag] = { score: 0 };
@@ -1096,8 +1097,17 @@ class TwitterService extends EventEmitter {
   async fetchTweetsFromAccount(account) {
     try {
       console.log(`🔄 Fetching tweets for account: ${account}`);
-      const input = { username: account, max_posts: 20 };
-      const run = await this.apifyClient.actor('danek/twitter-timeline').call(input);
+
+        input = {          
+          cookies: [config.apifyCookieToken],
+          endTime: this._getDefaultToDate(),
+          maxItems: 100,
+          searchTerms: [`from:${account}`],
+          sortBy: "Latest",
+          startTime: this._getDefaultFromDate(),
+        };
+
+      const run = await this.apifyClient.actor('fastcrawler/tweet-fast-scraper').call(input);
       const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
       console.log(`✅ Fetched ${items.length} tweets for ${account}`);
       return items;
@@ -1110,16 +1120,18 @@ class TwitterService extends EventEmitter {
   
   extractCashtags(tweet) {
     const cashtags = new Set();
+    // Use tweet.entities.symbols if available for a more reliable extraction
     if (tweet.entities?.symbols?.length) {
       tweet.entities.symbols.forEach((symbol) => {
         cashtags.add(`$${symbol.text.toUpperCase()}`);
       });
     }
-    const cashtagRegex = /\$[a-z0-9]+/gi;
+    // Fallback: search the tweet text using regex with a word boundary
+    const cashtagRegex = /\$[A-Z0-9]+\b/gi;
     const textCashtags = tweet.text.match(cashtagRegex) || [];
     textCashtags.forEach((ct) => cashtags.add(ct.toUpperCase()));
     return Array.from(cashtags);
-  }
+  }  
   
   getFromCache(key) {
     const cached = this.searchCache.get(key);
@@ -1131,6 +1143,147 @@ class TwitterService extends EventEmitter {
   
   cacheResults(key, data) {
     this.searchCache.set(key, { data, timestamp: Date.now() });
+  }
+
+  // Checking Twitter health via Apify actors
+  async checkTwitterHealth() {
+    const uniqueTwitterActors = [ 
+      "apidojo/tweet-scraper",
+      "fastcrawler/twitter-cashtag-scraper-stock-crypto-sentiment-analysis",
+      "fastcrawler/tweet-fast-scraper",
+    ];
+    const statuses = [];
+
+    for (const actor of uniqueTwitterActors) {
+      try {
+        // checkActorHealth returns some data if healthy, null or throws if not
+        const result = await this.checkActorHealth(actor);
+        // Discard the result; we only care that it returned without error
+        statuses.push({ actor, status: 'healthy' });
+      } catch (error) {
+        statuses.push({ actor, status: 'unhealthy', error: error.message });
+      }
+    }
+
+    // Update the metrics
+    aiMetricsService.updateTwitterHealth(statuses);
+  }
+
+  /**
+ * Performs a health check on the specified Apify actor.
+ * It makes an actual call (no ping) using minimal valid input.
+ * If a function requires a handle, "elon_musk" is used.
+ *
+ * @param {string} actorName - The Apify actor identifier.
+ * @returns {boolean} - true if the actor returns data (healthy), false otherwise.
+ */
+async checkActorHealth(actorName) {
+    // Prepare minimal valid input based on actor requirements.
+    let input = {};
+    switch (actorName) {
+      // For a cashtag scraper; even though it normally expects a cashtag,
+      // we use "elon_musk" for functions that require a handle.
+      case "fastcrawler/twitter-cashtag-scraper-stock-crypto-sentiment-analysis":
+        input = {
+          cashtag: "BTC",
+          cookies: [config.apifyCookieToken],
+          onlyBuleVerifiedUsers: false,
+          onlyVerifiedUsers: false,
+          sentimentAnalysis: true,
+          sortBy: "Latest",
+          maxItems: 100,
+          minRetweets: 0,
+          minLikes: 0,
+          minReplies: 0,
+        };
+        break;
+      case "fastcrawler/tweet-fast-scraper":
+        input = {          
+          cookies: [config.apifyCookieToken],
+          endTime: this._getDefaultToDate(),
+          maxItems: 100,
+          searchTerms: ["from:elonmusk"],
+          sortBy: "Latest",
+          startTime: this._getDefaultFromDate(),
+        };
+        break;
+      
+      case "apidojo/tweet-scraper":
+        input = {
+          customMapFunction: "(object) => { return {...object} }",
+          includeSearchTerms: false,
+          maxItems: 100,
+          minimumFavorites: 0,
+          minimumReplies: 0,
+          minimumRetweets: 0,
+          onlyImage: false,
+          onlyQuote: false,
+          onlyTwitterBlue: false,
+          onlyVerifiedUsers: false,
+          onlyVideo: false,
+          searchTerms: ["Trump", "Bitcoin"],          
+          sortBy: 'Latest',
+          startUrls: [
+            "https://twitter.com/elonmusk/with_replies"
+          ],
+          tweetLanguage: "en",
+          twitterHandles: [
+            "elonmusk"
+          ]
+        };
+        break;
+      
+      default:
+        // Fallback for any other actor.
+        input = { handle: "elonmusk", maxItems: 1 };
+    }
+
+    try {
+      // Call the actor with the minimal input.
+      const run = await this.apifyClient.actor(actorName).call(input);
+      // Retrieve items from the actor's dataset.
+      const datasetResponse = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
+      
+      // If we get at least one item, the actor is considered healthy.
+      if (datasetResponse?.items && datasetResponse.items.length > 0) {
+        return true;
+      } else {
+        return false;
+      }
+    } catch (error) {
+      console.error(`❌ Health check failed for actor ${actorName}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Check the health of KOL monitoring by checking the number of active monitors.
+   * This function assumes that your KOL monitoring service exposes an `activeMonitors` Map.
+   */
+  async checkKOLMonitoringHealth() {
+    try {
+      const activeMonitors = this.activeMonitors || new Map();
+      const handleCount = activeMonitors.size;
+      const healthy = handleCount > 0;
+      const kolMetrics = {
+        healthy,             // true if at least one job is active
+        handleCount,         // the number of active monitors (handles being processed)
+        details: []          // optionally, you could include more details (e.g., job IDs)
+      };
+
+      aiMetricsService.updateKOLMetrics(kolMetrics);
+      return kolMetrics;
+    } catch (error) {
+      console.error("Error checking KOL monitoring health:", error);
+      const kolMetrics = {
+        healthy: false,
+        handleCount: 0,
+        details: [],
+        error: error.message
+      };
+      aiMetricsService.updateKOLMetrics(kolMetrics);
+      return kolMetrics;
+    }
   }
   
   cleanup() {

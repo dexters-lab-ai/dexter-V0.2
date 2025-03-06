@@ -1,13 +1,23 @@
-import { getDefaultProvider } from "ethers";
 import dotenv from "dotenv";
+import { ethers, getDefaultProvider } from "ethers";
 import { config } from "../../../core/config.js";
 dotenv.config();
 
+// Define the Sonic RPC endpoint & Create endpoint
+const SONIC_RPC_URL = config.sonicEndpoint;
+const sonicMainnetProvider = new ethers.JsonRpcProvider(SONIC_RPC_URL);
+
+
 /**
  * Quicknode EVM Providers mapping.
- * Ensure that your environment variables (or config file) provide all required endpoints.
+ * Some chains are not supported on getDefaultProvider which is meant for ETH, so we declare manual
+ * Sonic First! Avax second it did not work with getDefaultProvider for me but used ports instead(config with host &port to get xChain & keyPair)
  */
-export const providers = {
+
+const providers = {
+    // Sonic
+    sonic: sonicMainnetProvider,
+
     // Ethereum Mainnet
     ethereum: getDefaultProvider(config.etherEndpoint),
     
@@ -65,3 +75,12 @@ export const providers = {
     // Omni
     omni: getDefaultProvider(config.omniEndpoint),
 };
+
+// Validate provider initialization
+Object.entries(providers).forEach(([network, provider]) => {
+    if (!provider) {
+        console.warn(`⚠️ No provider configured for network: ${network}`);
+    }
+});
+
+export { providers };

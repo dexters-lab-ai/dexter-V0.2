@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { ErrorHandler } from '../../core/errors/index.js';
 import { db } from '../../core/database.js';
+import { aiMetricsService } from '../aiMetricsService.js';
 
 export class AIContextManager extends EventEmitter {
   constructor() {
@@ -64,10 +65,13 @@ export class AIContextManager extends EventEmitter {
         this.conversations.set(userId, fullHistory);
         context = fullHistory;
       }
+      aiMetricsService.trackContextMetrics(true); // Cache hit
 
       // Return the last x messages for processing set above
       return context.slice(-this.maxMessagesForAI);
     } catch (error) {
+      
+      aiMetricsService.trackContextMetrics(false); // Cache miss
       await ErrorHandler.handle(error);
       return [];
     }

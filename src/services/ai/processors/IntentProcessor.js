@@ -693,9 +693,9 @@ export class IntentProcessor extends EventEmitter {
   }
 
   // Wallet Creation
-  async createAvalancheWallet() {
+  async createEVMWallet(network) {
     try {
-      const wallet = await walletService.createAvalancheWallet();
+      const wallet = await walletService.createWallet(network);
       return wallet;
     } catch (error) {
       console.error(error.message);
@@ -2248,7 +2248,7 @@ export class IntentProcessor extends EventEmitter {
   async processBridgeTransaction(userId, chatId, userInput) {
     try {
       const bridgeService = new WormholeBridgeService();
-      const result = await bridgeService.bridgeTokens(userInput, this.bot, chatId);
+      const result = await bridgeService.bridgeTokens(userId, userInput, this.bot, chatId);
       return result;
     } catch (error) {
       console.error("Error processing bridge intent:", error);

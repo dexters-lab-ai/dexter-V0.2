@@ -32,6 +32,15 @@ export class StartCommand extends Command {
     this.registerCallbacks();
   }
 
+  getCallbackHandlers() {
+    return {
+      register_user: this.handleRegistration.bind(this),
+      cancel_registration: this.handleCancelRegistration.bind(this),
+      start_menu: this.handleStartMenu.bind(this),
+      retry_start: this.retryStart.bind(this)
+    };
+  }  
+
   /**
    * Register event callbacks. These events now expect plain message objects.
    */
@@ -66,37 +75,39 @@ export class StartCommand extends Command {
    * @param {object} msg - Message object.
    */
   async handleStart(msg) {
+    
+    console.log('====>>>> start',msg);
+
     const chatId = msg.chat.id;
     const userInfo = msg.from;
     
     // Clear any previous state for the user.
     await this.clearState(userInfo.id);
-
-    const currentNetwork = await networkState.getCurrentNetwork(userInfo.id);
     const user = await User.findOne({ telegramId: userInfo.id.toString() }).lean();
 
     const startMessage = `
-🫧 *D.A.I.L - KATZ!* 🫧
+# 🧠 D.A.I.L - Your Smart Companion for Crypto & Daily Digital Life 
 
-_Your all-in-one AI Agent operator on *SOL, Base, Avax, ETH* and *Web2*_
+**Live smarter, faster, better**
 
-📜 *The agent that does things for you:* 
-• 💭 Crypto research, multi-chain token swaps, Solana Pay, and Shopify or Amazon shopping using crypto
-• 💭 AI Token Suggestions based on narratives, sentiment & hot trends
-• 💭 AI Task Monitoring and Execution, for price alerts, KOLs, positions, calendar events etc
-• 💭 AI powered strategy creation, revision and execution with Flip Mode powered by Pump.fun launches or Cookie.fun sentiment shifts
-• 💭 Twitter sentiment scanning for any Ticker and KOL monitoring with swap actions
-• 💭 Bridge between Solana and EVM chains using Wormhole
-• 💭 Web2 and cloud service assistant, google anything and email final findings to friends
-• 💭 Pump.fun, Moonshot and more...
+---
 
-_default: *${networkState.getNetworkDisplay(currentNetwork)}*_
+📜 *Delegate tasks in *natural language* & watch it execute:* 
+• 💭 Deep research, Twitter search, Brave Search, Moralis, Coingecko, Apify, Dexscreener, Dextools
+• 💭 Ticker Suggestions based on narratives, sentiment & popular trends
+• 💭 AI Task Monitoring and Execution, for price alerts, KOLs, positions, events etc
+• 💭 AI powered strategy management, trade measurable shifts in ticker sentiment over a period
+• 💭 Ticker social sentiment and KOL monitoring with automated swap actions
+• 💭 Bridge between Solana and EVM chains using Wormhole. +JupiterMetis V6, QuickNode and Paraswap
+• 💭 Digital life just got easier, schedule tasks: "buy coffee at 8am daily", "search for PS5 for sale near me at 1pm"
+• 💭 Pump.fun, Emailing, Calender Events, Offline SMS Notifications, Analyze images and more...
+
 `.trim();
 
     // Send an animation (GIF) with a caption using node-telegram-bot-api.
     await this.bot.sendAnimation(
       chatId,
-      "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExNmRycXdxdWZvNnM0NGNxYnNvMXB2MHI2Ymd0bDVla2ZuN3V1ZGt1eiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/mOWLBeH5XoXecgSEcp/giphy.gif",
+      "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWJlaTQxdW01NW9jeGQ4aGlvM3c5YjJ2bTQ5bWY4cHVob2s0ajIwcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Aq1gmGwbJNye8Wvm4v/giphy.gif",
       {
         caption: startMessage,
         parse_mode: "Markdown",
@@ -130,7 +141,7 @@ _default: *${networkState.getNetworkDisplay(currentNetwork)}*_
       `_Let's get you set up with your own secure wallets inside the Agent!_\n\n` +
       `• Secure wallet creation\n` +
       `• Multi-chain transactions\n` +
-      `• AI-powered research and tasking\n` +
+      `• AI-powered trading\n` +
       `• And much more...\n\n` +
       `Ready to start? 🚀`,
       {
@@ -140,20 +151,36 @@ _default: *${networkState.getNetworkDisplay(currentNetwork)}*_
     );
   }
 
+  normalizeCallbackQuery(msg) {
+    if (msg.callback_query) {
+      // Answer the callback query
+      this.bot.answerCallbackQuery(msg.callback_query.id).catch(console.error);
+      // Replace the top-level properties with those from the callback
+      msg.chat = msg.callback_query.message.chat;
+      msg.from = msg.callback_query.from;
+    }
+    return msg;
+  }  
+
   /**
    * Handles user registration when the "register_user" callback is received.
    * @param {object} msg - Message object.
    */
   async handleRegistration(msg) {
-    const chatId = msg.chat.id;
+    // Normalize the callback query so that msg.chat and msg.from exist
+    msg = this.normalizeCallbackQuery(msg);
+    console.log('====>>>>',msg);
+    
+    const chatId = msg.message.chat.id;
     const userInfo = msg.from;
     const state = await this.getState(userInfo.id);
     if (state === USER_STATES.AWAITING_REGISTRATION) {
-      await this.registrationHandler.handleRegistration(msg);
+      await this.registrationHandler.handleRegistration(chatId, userInfo.id, userInfo.username);
     } else {
-      await this.bot.sendMessage(chatId, "🛑 You are already registered or in another state.");
+      await this.bot.sendMessage(chatId, "🛑 You are already registered buddy");
     }
   }
+  
 
   /**
    * Handles registration cancellation.

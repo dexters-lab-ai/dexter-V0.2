@@ -120,6 +120,10 @@ class TrendingService extends EventEmitter {
     const lower = network.toLowerCase();
     let url, prompt;
     switch (lower) {
+      case "sonic":
+        url = "https://dexscreener.com/sonic";
+        prompt = "Check out Sonic trending tokens";
+        break;
       case "ethereum":
         url = "https://dexscreener.com/ethereum";
         prompt = "Check out Ethereum trending tokens";

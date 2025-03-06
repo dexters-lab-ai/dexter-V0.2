@@ -1,64 +1,122 @@
+// wormhole/helpers/helpers.js
+
 import { Wormhole, amount } from "@wormhole-foundation/sdk";
 import evm from "@wormhole-foundation/sdk/evm";
 import solana from "@wormhole-foundation/sdk/solana";
 import { config } from "../../../core/config.js";
-import dotenv from "dotenv";
-dotenv.config(); // load .env into process.env
+import { providers } from "../../trading/providers/ProviderList.js";
 
 /**
- * getEnv
- * Helper to fetch environment variables or throw if missing
+ * Maps provider network names to Wormhole chain names
  */
-function getEnv(key) {
-  const val = config.wormholeKey[key];
-  if (!val) {
-    throw new Error(`Missing env var: ${key}. Did you set it in .env or config.js?`);
+const getWormholeChainName = (network) => {
+  const provider = providers[network];
+  if (!provider?.wormholeEnabled) {
+    throw new Error(`Network ${network} is not supported by Wormhole`);
   }
-  return val;
-}
+  // Capitalize first letter for Wormhole's expected format
+  return network.charAt(0).toUpperCase() + network.slice(1);
+};
 
 /**
- * getSigner
- * @param {ChainContext} chain - The Wormhole chain context (EVM or Solana)
- * @returns {Promise<{ chain, signer, address }>}
+ * Get signer configuration from provider settings
  */
-export async function getSigner(chain) {
-  // Identify the platform
-  const platform = chain.platform.utils()._platform; // "Solana" or "Evm"
+const getSignerConfig = (network) => {
+  const provider = providers[network];
+  if (!provider?.wormholeEnabled) {
+    throw new Error(`Network ${network} is not Wormhole enabled`);
+  }
 
-  let signer;
-  switch (platform) {
-    case "Solana": {
-      const solPrivateKey = getEnv("SOL_PRIVATE_KEY");
-      signer = await solana.getSigner(await chain.getRpc(), solPrivateKey, {
-        debug: true,
-        priorityFee: {
-          percentile: 0.5,
-          percentileMultiple: 2,
-          min: 1,
-          max: 1000
-        }
-      });
-      break;
-    }
-    case "Evm": {
-      // For EVM, store private key in process.env.ETH_PRIVATE_KEY
-      const ethPrivateKey = getEnv("ETH_PRIVATE_KEY");
-      signer = await evm.getSigner(await chain.getRpc(), ethPrivateKey, {
-        debug: true,
-        // optional gas limit constraints
-        maxGasLimit: amount.units(amount.parse("0.01", 18))
-      });
-      break;
-    }
-    default: {
-      throw new Error(`Unsupported platform in getSigner: ${platform}`);
-    }
+  // Get private key from config based on network
+  const privateKey = config.wormholeKey[network];
+  if (!privateKey) {
+    throw new Error(`No private key configured for network: ${network}`);
   }
 
   return {
-    chain,
-    signer,
-    address: Wormhole.chainAddress(chain.chain, signer.address())
+    privateKey,
+    rpcUrl: provider.rpcUrl,
+    chainId: provider.chainId,
+    // Add any other provider-specific settings
+    settings: provider.wormholeSettings || {}
   };
+};
+
+/**
+ * getSigner
+ * @param {ChainContext} chain - The Wormhole chain context
+ * @param {string} userId - Optional user ID to get user-specific wallet
+ * @returns {Promise<{ chain, signer, address }>}
+ */
+export async function getSigner(chain, userId = null) {
+  // Get network name from chain context
+  const network = chain.chain.toString().toLowerCase();
+  
+  try {
+    // Get signer config from provider
+    const signerConfig = getSignerConfig(network);
+
+    // Get user's wallet if userId provided
+    let privateKey = signerConfig.privateKey;
+    if (userId) {
+      const userWallet = await getUserWallet(userId, network);
+      if (userWallet?.privateKey) {
+        privateKey = userWallet.privateKey;
+      }
+    }
+
+    // Create platform-specific signer
+    let signer;
+    if (network === 'solana') {
+      signer = await solana.getSigner(
+        await chain.getRpc(), 
+        privateKey,
+        {
+          debug: true,
+          priorityFee: signerConfig.settings.priorityFee || {
+            percentile: 0.5,
+            percentileMultiple: 2,
+            min: 1,
+            max: 1000
+          }
+        }
+      );
+    } else {
+      // Default to EVM signer for all other chains
+      signer = await evm.getSigner(
+        await chain.getRpc(),
+        privateKey,
+        {
+          debug: true,
+          maxGasLimit: amount.units(amount.parse("0.01", 18)),
+          ...signerConfig.settings
+        }
+      );
+    }
+
+    return {
+      chain,
+      signer,
+      address: Wormhole.chainAddress(chain.chain, signer.address())
+    };
+
+  } catch (error) {
+    console.error(`Failed to get signer for ${network}:`, error);
+    throw error;
+  }
 }
+
+/**
+ * Get user's wallet for specified network
+ */
+async function getUserWallet(userId, network) {
+  // Implementation to fetch user's wallet from your system
+  // This could query your database or wallet management service
+  return null; // Return null to fallback to default wallet
+}
+
+// Export utility functions
+export {
+  getWormholeChainName,
+  getSignerConfig
+};

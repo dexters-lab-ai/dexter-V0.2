@@ -61,7 +61,7 @@ export class BaseCommand extends EventEmitter {
     await ErrorHandler.handle(error, this.bot, chatId, retryAction);
   }
 
-  async showLoadingMessage(chatId, message = '😼 Processing...') {
+  async showLoadingMessage(chatId, message = 'Processing...') {
     return this.bot.sendMessage(chatId, message);
   }
 

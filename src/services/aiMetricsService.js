@@ -25,17 +25,17 @@ class AIMetricsService extends EventEmitter {
       users: new Map(),
       hourlyStats: new Map(),
       errors: new Map(),
-
-      // New metrics
+      functions: new Map(),
       messages: {
         total: 0,
         text: 0,
         audio: 0,
         responseTimes: []
       },
-      functions: new Map(), // Track AI function usage
       wallets: [], // Track wallet health
-      pumpFun: {}, // PumpFun service status
+      pumpFun: {}, // PumpFun service status      
+      twitter: [],       // Twitter health statuses
+      kolMonitoring: {},  // KOL monitoring metrics/health
       priceAlerts: {
         totalAlerts: 0,
         activeAlerts: 0,
@@ -52,8 +52,6 @@ class AIMetricsService extends EventEmitter {
     if (this.initialized) return;
 
     try {
-      this.initializeMetrics();
-      this.startMetricsCollection();
       this.initialized = true;
       console.log('✅ AIMetricsService initialized');
       return true;
@@ -79,7 +77,62 @@ class AIMetricsService extends EventEmitter {
       (modelStats.avgResponseTime * (modelStats.uses - 1) + responseTime) / modelStats.uses;
 
     this.metrics.openai.modelUsage.set(model, modelStats);
+    // Update global stats
+    this.metrics.openai.totalTokens += tokens;
+    this.metrics.openai.totalCost += cost;
+    this.metrics.openai.responseTimes.push({
+      timestamp: new Date(),
+      duration: responseTime
+    });
+    // Keep only last 1000 response times
+    if (this.metrics.openai.responseTimes.length > 1000) {
+      this.metrics.openai.responseTimes.shift();
+    }
+
+    // Emit metrics update event
+    this.emit('metricsUpdated', this.metrics);
+
     this.recordOpenAIUsage(tokens, cost, responseTime);
+  }
+
+  recordOpenAIUsage(tokens, cost, responseTime, model) {
+    // Update global stats
+    this.metrics.openai.totalTokens += tokens;
+    this.metrics.openai.totalCost += cost;
+    
+    // Update per-model stats
+    const modelStats = this.metrics.openai.modelUsage.get(model) || {
+      uses: 0,
+      tokens: 0,
+      cost: 0,
+      avgResponseTime: 0
+    };
+
+    modelStats.uses++;
+    modelStats.tokens += tokens;
+    modelStats.cost += cost;
+    modelStats.avgResponseTime = 
+      (modelStats.avgResponseTime * (modelStats.uses - 1) + responseTime) / modelStats.uses;
+
+    this.metrics.openai.modelUsage.set(model, modelStats);
+
+    // Track response time
+    this.metrics.openai.responseTimes.push({
+      timestamp: new Date(),
+      duration: responseTime
+    });
+
+    // Keep only last 1000 response times
+    if (this.metrics.openai.responseTimes.length > 1000) {
+      this.metrics.openai.responseTimes.shift();
+    }
+
+    // Log metrics update
+    console.log(`📊 OpenAI Usage Updated:
+      Model: ${model}
+      Tokens: ${tokens}
+      Cost: $${cost.toFixed(4)}
+      Response Time: ${responseTime}ms`);
   }
 
   // Track message metrics
@@ -95,6 +148,41 @@ class AIMetricsService extends EventEmitter {
     if (this.metrics.messages.responseTimes.length > 1000) {
       this.metrics.messages.responseTimes.shift();
     }
+  }
+
+  // Track OpenAI model usage
+  trackModelUsage(model, tokens, cost, responseTime) {
+    // Update per-model stats
+    const modelStats = this.metrics.openai.modelUsage.get(model) || {
+      uses: 0,
+      tokens: 0,
+      cost: 0,
+      avgResponseTime: 0
+    };
+
+    modelStats.uses++;
+    modelStats.tokens += tokens;
+    modelStats.cost += cost;
+    modelStats.avgResponseTime = 
+      (modelStats.avgResponseTime * (modelStats.uses - 1) + responseTime) / modelStats.uses;
+
+    this.metrics.openai.modelUsage.set(model, modelStats);
+
+    // Update global stats
+    this.metrics.openai.totalTokens += tokens;
+    this.metrics.openai.totalCost += cost;
+    this.metrics.openai.responseTimes.push({
+      timestamp: new Date(),
+      duration: responseTime
+    });
+
+    // Keep only last 1000 response times
+    if (this.metrics.openai.responseTimes.length > 1000) {
+      this.metrics.openai.responseTimes.shift();
+    }
+
+    // Emit metrics update event
+    this.emit('metricsUpdated', this.metrics);
   }
 
   // Track function calls
@@ -116,6 +204,17 @@ class AIMetricsService extends EventEmitter {
     stats.lastUsed = new Date();
 
     this.metrics.functions.set(name, stats);
+    this.emit('functionMetricsUpdated', { name, stats });
+  }
+
+  // Track context metrics
+  trackContextMetrics(hit) {
+    if (hit) {
+      this.metrics.context.cacheHits++;
+    } else {
+      this.metrics.context.cacheMisses++;
+    }
+    this.metrics.context.memoryUsage = process.memoryUsage().heapUsed;
   }
 
   // Update service statuses
@@ -130,6 +229,35 @@ class AIMetricsService extends EventEmitter {
   updatePriceAlerts(alerts) {
     this.metrics.priceAlerts = alerts;
   }
+
+  /**
+   * Expects an array of unique status objects for each Apify actor, e.g.:
+   * [
+   *   { actor: 'actorName1', status: 'healthy' },
+   *   { actor: 'actorName2', status: 'unhealthy', error: 'Error message' },
+   * ]
+   */
+  updateTwitterHealth(twitterStatuses) {
+    this.metrics.twitter = twitterStatuses;
+    console.log("📊 Updated Twitter Health Metrics:", twitterStatuses);
+    this.emit('metricsUpdated', this.metrics);
+  }
+
+  /**
+   * Expects an object that includes details such as the count of handles
+   * being monitored and whether the monitor is actively processing jobs.
+   * {
+   *   healthy: true,
+   *   handleCount: 25,
+   *   details: [ 'handle1', 'handle2', ... ]
+   * }
+   */
+  updateKOLMetrics(kolMetrics) {
+    this.metrics.kolMonitoring = kolMetrics;
+    console.log("📊 Updated KOL Monitoring Metrics:", kolMetrics);
+    this.emit('metricsUpdated', this.metrics);
+  }
+
 
   // Enhanced existing methods
   recordUserActivity(userId, type = 'interaction') {
@@ -174,7 +302,9 @@ class AIMetricsService extends EventEmitter {
       services: {
         wallets: this.metrics.wallets,
         pumpFun: this.metrics.pumpFun,
-        priceAlerts: this.metrics.priceAlerts
+        priceAlerts: this.metrics.priceAlerts,
+        twitter: this.metrics.twitter,
+        kolMonitoring: this.metrics.kolMonitoring
       }
     };
 
@@ -228,10 +358,6 @@ class AIMetricsService extends EventEmitter {
             successRate: Array.from(this.metrics.functions.values())
               .reduce((acc, f) => acc + (f.successes / f.calls * 100), 0) / 
               this.metrics.functions.size
-          },
-          system: {
-            memoryUsage: `${(this.metrics.context.memoryUsage / 1024 / 1024).toFixed(2)}MB`,
-            uptime: process.uptime()
           }
         },
         timestamp: new Date().toISOString()
@@ -258,6 +384,8 @@ class AIMetricsService extends EventEmitter {
       wallets: this.metrics.wallets,
       pumpFun: this.metrics.pumpFun,
       priceAlerts: this.metrics.priceAlerts,
+      twitter: this.metrics.twitter,
+      kolMonitoring: this.metrics.kolMonitoring,
       users: {
         total: this.metrics.users.size,
         active: Array.from(this.metrics.users.values())
@@ -291,7 +419,7 @@ class AIMetricsService extends EventEmitter {
 export const aiMetricsService = new AIMetricsService();
 
 // Initialize service
-aiMetricsService.initialize().catch(console.error);
+aiMetricsService.initialize().catch('oooooooooooooooooooooooooooooppsss' + console.error);
 
 // Register with cleanup manager
 cleanupManager.registerService('aiMetrics', () => aiMetricsService.cleanup());

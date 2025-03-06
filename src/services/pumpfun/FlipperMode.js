@@ -16,88 +16,104 @@ import { errorRecoverySystem } from '../errors/ErrorRecoverySystem.js';
 import { kolLearningSystem } from '../ai/flows/learning/KOLLearningSystem.js';
 import { strategyManager } from '../ai/flows/learning/StrategyManager.js';
 
+/**
+ * FlipperMode
+ * 
+ * The major changes from your original version:
+ * 1) We add two new methods: enable(...) and disable(...),
+ *    which simply wrap your existing start(...) and stop(...).
+ * 2) Optionally accept a walletAddress param or auto-detect from user
+ *    so that `this.walletAddress` is set (the PumpFun command code
+ *    calls "enable(user)" but doesn't pass a wallet address).
+ */
 class FlipperMode extends EventEmitter {
   constructor() {
     super();
 
-    // State management
     this.openPositions = new Map();
     this.positionStats = new Map();
     this.blacklistedTokens = new Set();
     this.priceWebsockets = new Map();
 
-    // MongoDB collections (initialized lazily)
     this.userMetricsCollection = null;
     this.systemMetricsCollection = null;
 
-    // Queue for processing new tokens
     this.tokenQueue = new PQueue({ concurrency: 1, interval: 500, intervalCap: 1 });
-
     this.transactionQueue = enhancedQueue;
     this.positionMonitor = new EnhancedPositionMonitor();
     this.errorRecovery = errorRecoverySystem;
 
-    // Configuration
     this.config = {
-      minLiquidity: 5,        // in SOL
+      minLiquidity: 5,
       minHolders: 100,
       maxPositions: 3,
-      profitTarget: 30,       // in %
-      stopLoss: 15,           // in %
-      timeLimit: 15 * 60 * 1000, // 15 minutes in ms
-      gasBuffer: 0.01,        // in SOL
-      buyAmount: 0.1,         // in SOL per trade
+      profitTarget: 30,
+      stopLoss: 15,
+      timeLimit: 15 * 60 * 1000,
+      gasBuffer: 0.01,
+      buyAmount: 0.1,
     };
 
-    // Learning system integrations
     this.kolLearning = kolLearningSystem;
     this.strategyManager = strategyManager;
 
-    // Strategy tracking
     this.activeStrategies = new Map();
     this.strategyPerformance = new Map();
 
-    // Runtime state
     this.isRunning = false;
     this.userId = null;
     this.walletAddress = null;
-
-    // Indicates whether the class is initialized
     this.initialized = false;
   }
 
-  // ---------------------------
-  // Initialization & Setup
-  // ---------------------------
+  // -------------------------------------------
+  // NEW: Simple "enable/disable" to match your PumpFun usage
+  // -------------------------------------------
+  /**
+   * Called from PumpFunCommand: flipperMode.enable(user)
+   * Optionally pass `walletAddress` or set it from user doc.
+   */
+  async enable(user, customConfig = {}) {
+    if (!user) throw new Error("No user object provided to enable FlipperMode.");
+
+    // If you store the Solana wallet address in user data, extract it here:
+    // e.g. user.wallets.solana.find(...) or user.defaultSolanaWallet, etc.
+    const solanaWallet = user.wallets?.solana?.find((w) => w.isAutonomous);
+    if (!solanaWallet) throw new Error("No autonomous Solana wallet found in user data.");
+
+    this.walletAddress = solanaWallet.address;
+    // Start the mode with userId, no chatId needed, pass config
+    return this.start(user.telegramId, null, customConfig);
+  }
+
+  /**
+   * Called from PumpFunCommand: flipperMode.disable(user, bot)
+   */
+  async disable(user, bot) {
+    if (!user) throw new Error("No user provided to disable FlipperMode.");
+    return this.stop(bot, user.telegramId);
+  }
+  // -------------------------------------------
+  // END: Simple enable/disable
+  // -------------------------------------------
+
   async initialize() {
     if (this.initialized) return;
-
     try {
       const database = db.getDatabase();
       if (!database) throw new Error('Database connection is not established.');
-
       this.userMetricsCollection = database.collection('userMetrics');
       this.systemMetricsCollection = database.collection('systemMetrics');
-
-      // Listen to error recovery events (e.g., websocket disconnect)
       this.errorRecovery.on('recovered', async ({ type }) => {
-        if (type === 'WEBSOCKET_DISCONNECT') {
-          await this.reconnectPriceFeeds();
-        }
+        if (type === 'WEBSOCKET_DISCONNECT') await this.reconnectPriceFeeds();
       });
-
       monitoringSystem.registerComponent('flipperMode', {
         getMetrics: this.collectMetrics.bind(this),
-        getHealth: () => ({ status: this.isRunning ? 'healthy' : 'stopped' })
-      });      
-
-      // MongoDB timeout and retry handling for `countDocuments`
+        getHealth: () => ({ status: this.isRunning ? 'healthy' : 'stopped' }),
+      });
       await this.countDocumentsWithTimeout(this.userMetricsCollection);
       await this.countDocumentsWithTimeout(this.systemMetricsCollection);
-
-      
       this.snapshotSystemMetrics();
-
       this.initialized = true;
       console.log('FlipperMode initialized successfully.');
     } catch (error) {
@@ -106,157 +122,150 @@ class FlipperMode extends EventEmitter {
     }
   }
 
-  // Helper function to count documents with retry and timeout handling
   async countDocumentsWithTimeout(collection, retries = 3, timeoutMS = 30000) {
     try {
       const result = await collection.countDocuments({}, { maxTimeMS: timeoutMS });
       console.log(`Document count for ${collection.collectionName}:`, result);
       return result;
     } catch (error) {
-      console.error(`Error counting documents in collection ${collection.collectionName}:`, error);
-      
-      if (retries > 0 && error.code === 50) { // Code 50: MongoDB query timeout
+      console.error(`Error counting documents in ${collection.collectionName}:`, error);
+      if (retries > 0 && error.code === 50) {
         console.log('Retrying document count...');
-        await this.delay(1000); // Wait 1 second before retrying
+        await this.delay(1000);
         return this.countDocumentsWithTimeout(collection, retries - 1, timeoutMS);
       }
-  
-      throw new Error(`Failed to count documents after retries: ${error.message}`);
+      throw new Error(`Failed to count documents: ${error.message}`);
     }
-  }  
-
-  // Delay function to pause execution (for retries)
+  }
   delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((res) => setTimeout(res, ms));
   }
 
   snapshotSystemMetrics() {
     setInterval(async () => {
       if (!this.systemMetricsCollection) return;
       try {
-        const aggregatedMetrics = await this.systemMetricsCollection.aggregate([
-          {
-            $group: {
-              _id: null,
-              totalTrades: { $sum: '$totalTrades' },
-              totalProfit: { $sum: '$totalProfit' },
-              profitableTrades: { $sum: '$profitableTrades' },
-            }
-          }
-        ]).toArray();
-
-        const snapshot = {
+        const aggregatedMetrics = await this.systemMetricsCollection
+          .aggregate([
+            {
+              $group: {
+                _id: null,
+                totalTrades: { $sum: '$totalTrades' },
+                totalProfit: { $sum: '$totalProfit' },
+                profitableTrades: { $sum: '$profitableTrades' },
+              },
+            },
+          ])
+          .toArray();
+        const snap = {
           timestamp: new Date(),
           totalTrades: aggregatedMetrics[0]?.totalTrades || 0,
           totalProfit: aggregatedMetrics[0]?.totalProfit || 0,
           profitableTrades: aggregatedMetrics[0]?.profitableTrades || 0,
         };
-
-        await db.getDatabase().collection('systemMetricsSnapshots').insertOne(snapshot);
-        console.log('System metrics snapshot saved successfully.');
+        await db.getDatabase().collection('systemMetricsSnapshots').insertOne(snap);
+        console.log('System metrics snapshot saved.');
       } catch (error) {
         console.error('Error saving system metrics snapshot:', error);
       }
-    }, 600000); // Every 10 minutes (adjust as needed)
+    }, 600000);
   }
 
-  // ---------------------------
-  // Start / Stop Methods
-  // ---------------------------
-  async start(userId, chatId, customConfig = {}) {
-    if (!this.initialized) throw new Error('FlipperMode must be initialized before starting.');
-    return circuitBreakers.executeWithBreaker(
-      'pumpfun',
-      async () => {
-        if (this.isRunning) throw new Error('FlipperMode is already running.');
+  // --------------------------------
+  // Start/Stop
+  // --------------------------------
+  async start(userId, chatId = null, customConfig = {}) {
+    if (!this.initialized) throw new Error('FlipperMode must be initialized first.');
+    return circuitBreakers.executeWithBreaker('pumpfun', async () => {
+      if (this.isRunning) throw new Error('FlipperMode is already running.');
 
-        try {
-          const strategy = await this.strategyManager.createStrategy(userId, {
-            ...this.config,
-            ...customConfig
-          });
-          this.activeStrategies.set(userId, strategy);
-          this.strategyPerformance.set(userId, {
-            strategyId: strategy._id,
-            startTime: Date.now(),
-            trades: 0,
-            profit: 0
-          });
+      try {
+        const strategy = await this.strategyManager.createStrategy(userId, {
+          ...this.config,
+          ...customConfig,
+        });
+        this.activeStrategies.set(userId, strategy);
+        this.strategyPerformance.set(userId, {
+          strategyId: strategy._id,
+          startTime: Date.now(),
+          trades: 0,
+          profit: 0,
+        });
 
-          console.log('Starting FlipperMode...');
-          const wallet = await walletService.getWallet(userId, this.walletAddress);
-          if (!wallet) throw new Error('Wallet not found. Please ensure the wallet address is correct.');
+        console.log('Starting FlipperMode...');
+        const wallet = await walletService.getWallet(userId, this.walletAddress);
+        if (!wallet) throw new Error('Wallet not found. Please ensure the wallet address is correct.');
 
-          const balance = await walletService.getBalance(userId, this.walletAddress);
-          const requiredBalance = this.config.maxPositions * (this.config.buyAmount + this.config.gasBuffer);
-          if (balance < requiredBalance) {
-            throw new Error(`Insufficient balance. You need at least ${requiredBalance} SOL.`);
-          }
-
-          if (wallet.type === 'walletconnect') {
-            const user = await User.findOne({ telegramId: userId.toString() }).lean();
-            if (!user?.settings?.trading?.autonomousEnabled) {
-              throw new Error('Autonomous trading is disabled. Enable it in your wallet settings.');
-            }
-          }
-
-          this.config = { ...this.config, ...customConfig };
-          this.userId = userId;
-          this.isRunning = true;
-          await this.setupPriceMonitoring();
-
-          this.emit('started', { userId, walletAddress: this.walletAddress, config: this.config, wallet: wallet.type });
-          console.log('FlipperMode started successfully.');
-          return { action: 'start', config: this.config };
-        } catch (error) {
-          console.error('Error starting FlipperMode:', error);
-          this.cleanup();
-          throw error;
+        const balance = await walletService.getBalance(userId, this.walletAddress);
+        const needed = this.config.maxPositions * (this.config.buyAmount + this.config.gasBuffer);
+        if (balance < needed) {
+          throw new Error(`Insufficient balance. Need at least ${needed} SOL.`);
         }
-      },
-      BREAKER_CONFIGS.pumpfun
-    );
+
+        // If using walletconnect, confirm autonomous is enabled
+        if (wallet.type === 'walletconnect') {
+          const user = await User.findOne({ telegramId: userId.toString() }).lean();
+          if (!user?.settings?.trading?.autonomousEnabled) {
+            throw new Error('Autonomous trading is disabled. Enable in wallet settings.');
+          }
+        }
+
+        this.config = { ...this.config, ...customConfig };
+        this.userId = userId;
+        this.isRunning = true;
+        await this.setupPriceMonitoring();
+
+        this.emit('started', {
+          userId,
+          walletAddress: this.walletAddress,
+          config: this.config,
+          wallet: wallet.type,
+        });
+        console.log('FlipperMode started successfully.');
+        return { action: 'start', config: this.config };
+      } catch (err) {
+        console.error('Error starting FlipperMode:', err);
+        this.cleanup();
+        throw err;
+      }
+    }, BREAKER_CONFIGS.pumpfun);
   }
 
   async stop(bot, userId) {
-    return circuitBreakers.executeWithBreaker(
-      'pumpfun',
-      async () => {
-        if (!this.isRunning) return;
-
-        try {
-          this.tokenQueue.clear();
-          const closePromises = Array.from(this.openPositions.values()).map(async (position) => {
-            try {
-              await this.closePosition(position.token.address, 'manual_stop');
-            } catch (error) {
-              const message = `🚨 *Trade Closure Failed* 🚨\n- Token: ${position.token.name} (${position.token.address})\n- Reason: ${error.message || 'Unknown error'}\nPlease check the trade manually.`;
-              console.error(`Failed to close position for ${position.token.name}:`, error);
-              if (bot && userId) {
-                try {
-                  await bot.sendMessage(userId, message, { parse_mode: 'Markdown' });
-                } catch (botError) {
-                  console.error('Failed to send notification via bot:', botError);
-                }
+    return circuitBreakers.executeWithBreaker('pumpfun', async () => {
+      if (!this.isRunning) return;
+      try {
+        this.tokenQueue.clear();
+        const closePromises = Array.from(this.openPositions.values()).map(async (pos) => {
+          try {
+            await this.closePosition(pos.token.address, 'manual_stop');
+          } catch (error) {
+            const msg = `🚨 *Trade Closure Failed*\nToken: ${pos.token.name} (${pos.token.address})\nReason: ${error.message || 'Unknown'}`;
+            console.error(`Failed to close position for ${pos.token.name}:`, error);
+            if (bot && userId) {
+              try {
+                await bot.sendMessage(userId, msg, { parse_mode: 'Markdown' });
+              } catch (botError) {
+                console.error('Failed sending notification:', botError);
               }
-              await ErrorHandler.handle(error, bot, userId);
             }
-          });
+            // Log error
+            await ErrorHandler.handle(error, bot, userId);
+          }
+        });
 
-          await Promise.allSettled(closePromises);
-          const stats = this.calculateStats();
-          this.cleanup();
-          this.emit('stopped', { stats });
-          return { action: 'stop', stats };
-        } catch (error) {
-          await ErrorHandler.handle(error, bot, userId);
-          console.error('Error occurred while stopping FlipperMode:', error);
-          this.cleanup();
-          this.emit('error', error);
-        }
-      },
-      BREAKER_CONFIGS.pumpfun
-    );
+        await Promise.allSettled(closePromises);
+        const stats = this.calculateStats();
+        this.cleanup();
+        this.emit('stopped', { stats });
+        return { action: 'stop', stats };
+      } catch (error) {
+        await ErrorHandler.handle(error, bot, userId);
+        console.error('Error stopping FlipperMode:', error);
+        this.cleanup();
+        this.emit('error', error);
+      }
+    }, BREAKER_CONFIGS.pumpfun);
   }
 
   // ---------------------------
@@ -886,7 +895,7 @@ class FlipperMode extends EventEmitter {
     this.priceWebsockets.clear();
     wsManager.cleanup();
     this.positionMonitor.cleanup();
-    monitoringSystem.unregisterComponent('flipperMode');
+    //monitoringSystem.unregisterComponent('flipperMode');
     this.removeAllListeners();
   }
 }

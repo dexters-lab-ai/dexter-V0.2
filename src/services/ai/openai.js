@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { config } from '../../core/config.js';
 import { ErrorHandler } from '../../core/errors/index.js';
 import { systemPrompts } from './prompts.js';
+import { aiMetricsService } from '../aiMetricsService.js';
 
 const MAX_IMAGE_SIZE = 1 * 1024 * 1024; // 1MB
 
@@ -68,6 +69,7 @@ class OpenAIService {
     this.openai = new OpenAI({ apiKey: config.openaiApiKey });
     this.isConnected = false;
     this.conversationHistory = new Map();
+    this.startTime = Date.now();
   }
 
   async testConnection() {
@@ -99,12 +101,36 @@ class OpenAIService {
       if (!response || !response.choices || response.choices.length === 0) {
         throw new Error('Invalid response from OpenAI API');
       }
+      // Track metrics after successful call
+      const duration = Date.now() - this.startTime;
+      aiMetricsService.trackModelUsage(
+        model,
+        response.usage.total_tokens,
+        this.calculateCost(model, response.usage.total_tokens),
+        duration
+      );
+
       return response;
     } catch (error) {
+      // Track rate limit hits
+      if (error.response?.status === 429) {
+        aiMetricsService.metrics.openai.rateLimitHits++;
+      }
       console.error('❌ Error in createChatCompletion:', error.message);
       await ErrorHandler.handle(error);
       throw error;
     }
+  }
+
+  // Helper to calculate costs based on model and tokens
+  calculateCost(model, tokens) {
+    const costs = {
+      'gpt-4': 0.03,
+      'gpt-4-32k': 0.06,
+      'gpt-3.5-turbo': 0.002,
+      'gpt-3.5-turbo-16k': 0.004
+    };
+    return (costs[model] || 0.002) * (tokens / 1000);
   }
 
   async generateAIResponse(messages, purpose = 'chat') {

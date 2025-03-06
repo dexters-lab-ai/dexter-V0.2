@@ -12,23 +12,53 @@ export class RegistrationHandler {
   }
 
   /**
-   * Handle user registration process
-   * @param {number} userId - The Telegram user ID
-   * @param {string} username - The Telegram username
+   * Handle user registration process.
+   * @param {Object} ctx - Telegraf context object.
    */
-  async handleRegistration(userId, username) {
+  async handleRegistration(chatId, userId, username) {
     try {
+      
+      console.log("we are here....", chatId, " userId: ", userId, " username: ", username)
+
       // Notify user that wallet creation is in progress
       const loadingMsg = await this.bot.sendMessage(userId, "🔐 Creating your secure wallets...");
-
+      
       // Determine networks to create wallets for.
-      // Include all EVM networks from providers and add 'solana'
-      const evmNetworks = Object.keys(providers); // e.g., 'ethereum', 'avalanche', 'base', etc.
-      const walletNetworks = [...evmNetworks, "solana"];
+      //const evmNetworks = Object.keys(providers); // e.g., 'ethereum', 'avalanche', 'base', etc.
+      //const walletNetworks = [...evmNetworks, "solana"];
 
       // Create wallets for each network
+      /*
       const wallets = {};
       for (const network of walletNetworks) {
+        wallets[network] = await walletService.createWallet(userId, network);
+      }
+      */
+      // 1) Choose only the top 10 EVM networks from your providers object, in the order you want
+      const top7EvmNetworks = [
+        "sonic",
+        "avalanche",
+        "base",
+        "bsc",
+        "polygon",
+        "ethereum",
+        "berachain",
+        "linear",
+        "arbitrum",
+        "optimism"//10 wallets
+      ];
+
+      // 2) Combine them with "solana" as the 11th
+      const walletNetworks = [...top7EvmNetworks, "solana"];
+
+      // 3) Create wallets for those 8
+      const wallets = {};
+      for (const network of walletNetworks) {
+        // If your providers config might not have one of these, you can check for existence
+        if (network !== "solana" && !providers[network]) {
+          console.warn(`No provider for ${network}, skipping...`);
+          continue;
+        }
         wallets[network] = await walletService.createWallet(userId, network);
       }
 
@@ -38,7 +68,7 @@ export class RegistrationHandler {
         username,
         wallets: {},
         settings: {
-          defaultNetwork: "ethereum",
+          defaultNetwork: "sonic",
           notifications: { enabled: true, showInChat: true },
         },
         registeredAt: new Date(),
@@ -49,7 +79,8 @@ export class RegistrationHandler {
         userDoc.wallets[network] = [this.formatWallet(wallet)];
       }
 
-      await userDoc.save();
+      // ENCRYPTED in formatWallet above
+      //await userDoc.save();
 
       // Generate wallet certificate
       const certificateBuffer = await this.certificateGenerator.generate({
@@ -80,9 +111,13 @@ export class RegistrationHandler {
       // Send welcome message
       await this.bot.sendMessage(
         userId,
-        `**Meet D.A.I.L - KATZ!** \n\n` +
-          `*${username}*, your wallets are ready.\n\n` +
-          `_Let's start finding gems in the trenches..._ 💎\n\nType /help to see available commands.`,
+        `# 🧠 D.A.I.L - Youre in! 
+
+**Live smarter, faster, better**
+
+--- \n\n` +
+          `Anon *${username}*, you may proceed.\n\n` +
+          `💭 Try asking, "check trending tokens from everywhere"💎\n\nTDon't be shy to experiment.`,
         { parse_mode: "Markdown" }
       );
 
@@ -90,7 +125,7 @@ export class RegistrationHandler {
     } catch (error) {
       console.error("❌ Error during registration:", error);
       await ErrorHandler.handle(error);
-      await this.bot.sendMessage(userId, "❌ Registration failed. Please try again later.");
+      await this.bot.sendMessage(chatId, "❌ Registration failed. Please try again later.");
       throw error;
     }
   }

@@ -103,13 +103,29 @@ const UserSchema = new mongoose.Schema(
       unique: true,
       index: true
     },
+    // One array of WalletSchema for each chain
     wallets: {
-      sonic: [WalletSchema],      
-      ethereum: [WalletSchema],
-      base: [WalletSchema],
+      sonic: [WalletSchema],
       solana: [WalletSchema],
       avalanche: [WalletSchema],
-      bsc: [WalletSchema]
+      base: [WalletSchema],
+      bsc: [WalletSchema],
+      ethereum: [WalletSchema],
+      linear: [WalletSchema],
+      cyber: [WalletSchema],
+      fantom: [WalletSchema],
+      arbitrum: [WalletSchema],
+      berachain: [WalletSchema],
+      nova: [WalletSchema],
+      optimism: [WalletSchema],
+      zkevm: [WalletSchema],
+      scroll: [WalletSchema],
+      polygon: [WalletSchema],
+      celo: [WalletSchema],
+      worldchain: [WalletSchema],
+      mantle: [WalletSchema],
+      zksync: [WalletSchema],
+      omni: [WalletSchema],
     },
     googleAuth: {
       encryptedAccessToken: { type: String, default: "" },
@@ -193,11 +209,14 @@ const UserSchema = new mongoose.Schema(
 );
 
 // Add indexes
-UserSchema.index({ "wallets.ethereum.address": 1 });
+UserSchema.index({ "wallets.sonic.address": 1 });
+UserSchema.index({ "wallets.avalanche.address": 1 });
 UserSchema.index({ "wallets.base.address": 1 });
+UserSchema.index({ "wallets.bsc.address": 1 });
+UserSchema.index({ "wallets.polygon.address": 1 });
+UserSchema.index({ "wallets.ethereum.address": 1 });
+UserSchema.index({ "wallets.optimism.address": 1 });
 UserSchema.index({ "wallets.solana.address": 1 });
-UserSchema.index({ "wallets.avalanche.address": 1 }); 
-UserSchema.index({ "settings.autonomousWallet.address": 1 });
 
 // Pre-save middleware
 UserSchema.pre("save", function (next) {

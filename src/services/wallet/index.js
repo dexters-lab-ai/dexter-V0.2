@@ -6,8 +6,11 @@ import { encrypt, decrypt } from "../../utils/encryption.js";
 import { EventEmitter } from "events";
 import { ErrorHandler } from "../../core/errors/index.js";
 import axios from "axios";
+import { SolanaWallet } from "./wallets/solana.js";
+import { Avalanche } from 'avalanche';
 import { providers } from "../trading/providers/ProviderList.js";
 import { tradeService } from "../trading/TradeService.js";
+import { aiMetricsService } from "../aiMetricsService.js";
 
 // -------------------------------------------------
 // Helper: Sleep
@@ -37,10 +40,33 @@ function getNetworkResources(network) {
   return { provider, endpoint, axiosInstance };
 }
 
+async function validateProvider(network, provider) {
+  try {
+    if (!provider) {
+      throw new Error(`No provider configured for network: ${network}`);
+    }
+
+    // Network-specific validation
+    if (network === 'solana') {
+      const version = await provider.connection.getVersion();
+      console.log(`✅ Solana provider validated. Version: ${version['solana-core']}`);
+    } else {
+      const blockNumber = await provider.getBlockNumber();
+      console.log(`✅ ${network} provider validated. Block: ${blockNumber}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`❌ Provider validation failed for ${network}:`, error.message);
+    return false;
+  }
+}
+
 class WalletService extends EventEmitter {
   constructor() {
     super();
     this.walletCache = new Map();
+    this.providers = providers;
     this.isInitialized = false;
     this.initializationPromise = null;
     this.CACHE_DURATION = 1000 * 60 * 60 * 24; // 24 hours
@@ -59,6 +85,21 @@ class WalletService extends EventEmitter {
         this.usersCollection = database.collection("users");
         this.metricsCollection = database.collection("walletMetrics");
         console.log("✅ WalletService initialized successfully.");
+
+        // Validate all providers on startup
+        const validationResults = await Promise.all(
+          Object.entries(this.providers).map(async ([network, provider]) => {
+            const isValid = await validateProvider(network, provider);
+            return { network, isValid };
+          })
+        );
+
+        // Log validation results
+        validationResults.forEach(({ network, isValid }) => {
+          console.log(`${isValid ? '✅' : '❌'} ${network} provider: ${isValid ? 'Valid' : 'Invalid'}`);
+        });
+
+
         this.isInitialized = true;
         return true;
       } catch (error) {
@@ -96,14 +137,36 @@ class WalletService extends EventEmitter {
 
   /**
    * Creates a wallet on the given network and stores encrypted wallet data.
+   * Routes to specific modules if network is 'solana' or 'avalanche'.
    * @param {string|number} userId - The user's identifier.
    * @param {string} network - The network on which to create the wallet.
    */
   async createWallet(userId, network) {
     try {
-      const provider = await this.getProvider(network);
-      // createWallet() is assumed to exist on the provider instance.
-      const wallet = await provider.createWallet();
+      let wallet;
+      if (network.toLowerCase() === "solana") {
+        // Use Solana-specific wallet creation logic
+        const solanaWallet = new SolanaWallet();
+        await solanaWallet.initialize();
+        wallet = await solanaWallet.createWallet();
+      } else if (network.toLowerCase() === "avalanche") {
+        // Use the dedicated Avalanche wallet creation method
+        wallet = await this.createAvalancheWallet();
+      } else {
+        // Default: use the provider's createWallet method
+        console.log(" > > > creating wallet for ", userId, " on network: ", network);
+
+        // Create a new random wallet
+        const newWallet = ethers.Wallet.createRandom();
+        wallet = newWallet;
+
+        // Connect the new wallet to the provider, not really necessary but il leave 4 reference
+        const provider = await this.getProvider(network);
+        const connectedWallet = newWallet.connect(provider);
+
+        console.log(`New wallet address: ${connectedWallet.address}`);
+        //console.log(`New wallet private key: ${newWallet.privateKey}`);
+      }
 
       const encryptedData = {
         address: wallet.address,
@@ -446,21 +509,60 @@ class WalletService extends EventEmitter {
    * Checks the health of each network provider by calling its checkHealth method (if available).
    */
   async checkHealth() {
-    const results = [];
-    const supportedNetworks = Object.keys(config.networks);
-    for (const network of supportedNetworks) {
-      try {
-        const provider = await this.getProvider(network);
-        if (provider.checkHealth) {
-          await provider.checkHealth();
+    try {
+      const networkStatuses = [];
+      
+      // Get all available providers from the ProviderList
+      const availableNetworks = Object.keys(this.providers);
+      
+      for (const network of availableNetworks) {
+        try {
+          const provider = this.providers[network];
+          
+          if (!provider) {
+            networkStatuses.push({
+              network,
+              status: 'unhealthy',
+              error: `No provider configured for network: ${network}`
+            });
+            continue;
+          }
+
+          // Check provider connection based on network type
+          if (network === 'solana') {
+            // Solana-specific health check
+            const connection = provider.connection;
+            await connection.getLatestBlockhash();
+            networkStatuses.push({
+              network,
+              status: 'healthy'
+            });
+          } else {
+            // EVM chains health check
+            await provider.getBlockNumber();
+            networkStatuses.push({
+              network,
+              status: 'healthy'
+            });
+          }
+
+        } catch (error) {
+          networkStatuses.push({
+            network,
+            status: 'unhealthy',
+            error: error.message
+          });
         }
-        results.push({ network, status: "healthy" });
-      } catch (error) {
-        results.push({ network, status: "unhealthy", error: error.message });
-        console.error(`❌ Health check failed for ${network}:`, error.message);
       }
+
+      // Update metrics service with latest health status
+      aiMetricsService.updateWalletHealth(networkStatuses);
+      
+      return networkStatuses;
+    } catch (error) {
+      console.error('Error checking wallet health:', error);
+      return [];
     }
-    return results;
   }
 }
 
