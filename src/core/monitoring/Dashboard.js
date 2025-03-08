@@ -632,7 +632,7 @@ function renderAIMetrics(ai) {
           <div class="metric-icon">
             <i class="fas fa-volume-up"></i>
           </div>
-          <div class="metric-info">
+          <div class="metric-info small-ai-stat">
             <h3>TTS Performance</h3>
             <p>Total Calls: ${tts.totalCalls}</p>
             <p>Total Duration: ${tts.totalDuration ? (tts.totalDuration / 1000).toFixed(2) : 0} sec</p>
@@ -661,7 +661,7 @@ function renderAIMetrics(ai) {
           <div class="metric-icon">
             <i class="fas fa-microphone"></i>
           </div>
-          <div class="metric-info">
+          <div class="metric-info small-ai-stat">
             <h3>STT Performance</h3>
             <p>Total Calls: ${stt.totalCalls}</p>
             <p>Total Duration: ${stt.totalDuration ? (stt.totalDuration / 1000).toFixed(2) : 0} sec</p>
@@ -1738,6 +1738,14 @@ function getDashboardStyles() {
         align-items: center;
         gap: 10px;
         margin: 0.5rem 0;
+      }
+
+      .small-ai-stat {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 4px 6px;
+        font-size: 0.85rem;
+        margin: 2px 0;
+        border-radius: 4px;
       }
 
       /* AI Metrics Specific Styles */
@@ -2860,7 +2868,7 @@ function getServiceIcon(service) {
     wallets: 'wallet',
     pumpFun: 'chart-line',    
     priceAlerts: 'bell',
-    twitter: 'x-twitter',
+    twitter: 'twitter-square',
     kolMonitoring: 'user-secret',
     default: 'cube'
   };

@@ -1,5 +1,5 @@
 {
-  "name": "katz-ai-trench-agent",
+  "name": "dexters_ai_lab",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,8 @@
     "build": "node esbuild.config.js",
     "test": "vitest"
   },
+  "author": "tenDAI",
+  "version": "1.0.0",
   "dependencies": {
     "@google-cloud/aiplatform": "^3.34.0",
     "@google-cloud/local-auth": "^3.0.1",
@@ -15,6 +17,7 @@
     "@google-cloud/storage": "^7.15.0",
     "@google-cloud/text-to-speech": "^5.8.0",
     "@jup-ag/api": "^6.0.36",
+    "@mendable/firecrawl-js": "^1.19.0",
     "@moralisweb3/common-evm-utils": "^2.27.2",
     "@napi-rs/canvas": "^0.1.44",
     "@quicknode/sdk": "^2.4.0",

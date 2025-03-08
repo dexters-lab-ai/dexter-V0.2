@@ -1503,6 +1503,31 @@ export const AIFunctions = [
           },
           required: ["action", "mint", "amount", "denominatedInSol", "slippage"]
         }
+      }, 
+
+      // Web Scrapping
+      {
+        name: "trending_tokens_fallback_scrap",
+        description: "Scrape a fixed list of 10 dexscreener URLs for trending tokens across various chains and return the results in markdown format.",
+        parameters: {
+          type: "object",
+          properties: {}
+        }
+      },
+      
+      {
+        name: "scrape_provided_url",
+        description: "Scrape a provided URL using Firecrawl API and return the content in markdown and HTML formats. Deep dive into any link from results to get more info",
+        parameters: {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "The URL to scrape."
+            }
+          },
+          required: ["url"]
+        }
       },      
 
       // Research 
