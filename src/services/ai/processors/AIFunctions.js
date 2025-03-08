@@ -1394,21 +1394,116 @@ export const AIFunctions = [
         }
       },
 
+      // Pumpfun Service
       {
-        name: "create_evm_wallet",
-        description: "Create a EVM Wallet only once for user and return wallet and private key",
+        name: "subscribe_pumpfun_new_token",
+        description: "Subscribe a user for new token notifications via PumpFun service.",
         parameters: {
           type: "object",
           properties: {
-            network: {
-              type: "string",
-              enum: ["ethereum","avalanche","base","linear","cyber","fantom","arbitrum","berachain","nova","optimism","zkevm","scroll","polygon","bsc","celo","worldchain","mantle","zksync","omin"],
-              description: "The blockchain network to use."
-            },
-          },        
-          required: ["network"],
-          }
+            criteria: {
+              type: "object",
+              description: "Optional criteria for filtering notifications (e.g., minimum liquidity).",
+              properties: {
+                minLiquidity: {
+                  type: "number",
+                  description: "Minimum liquidity required for notification."
+                }
+              },
+              additionalProperties: true
+            }
+          },
+          required: []
+        }
       },
+      
+      {
+        name: "unsubscribe_pumpfun_new_token",
+        description: "Unsubscribe a user from new token notifications via PumpFun service.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: []
+        }
+      },
+      
+      {
+        name: "subscribe_pumpfun_token_trade",
+        description: "Subscribe a user for token trade notifications via PumpFun service.",
+        parameters: {
+          type: "object",
+          properties: {
+            criteria: {
+              type: "object",
+              description: "Optional criteria for filtering trade notifications (e.g., minimum trade amount).",
+              properties: {
+                minTradeAmount: {
+                  type: "number",
+                  description: "Minimum trade amount required for notification (in SOL, for example)."
+                }
+              },
+              additionalProperties: true
+            },
+            contractAddresses: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of contract addresses to monitor for trades."
+            }
+          },
+          required: ["contractAddresses"]
+        }
+      },
+      
+      {
+        name: "unsubscribe_pumpfun_token_trade",
+        description: "Unsubscribe a user from token trade notifications via PumpFun service.",
+        parameters: {
+          type: "object",
+          properties: {
+            contractAddresses: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of contract addresses to remove from monitoring."
+            }
+          },
+          required: ["contractAddresses"]
+        }
+      },
+      
+      {
+        name: "execute_pumpfun_trade",
+        description: "Execute a trade via the PumpFun service using provided API credentials and trade options.",
+        parameters: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              description: "The trade action (e.g., 'buy' or 'sell')."
+            },
+            mint: {
+              type: "string",
+              description: "The mint address of the token."
+            },
+            amount: {
+              type: "number",
+              description: "Amount to trade."
+            },
+            denominatedInSol: {
+              type: "boolean",
+              description: "Whether the amount is denominated in SOL."
+            },
+            slippage: {
+              type: "number",
+              description: "Allowed slippage percentage."
+            },
+            priorityFee: {
+              type: "number",
+              description: "Optional priority fee for the transaction."
+            }
+          },
+          required: ["action", "mint", "amount", "denominatedInSol", "slippage"]
+        }
+      },      
 
       // Research 
       {

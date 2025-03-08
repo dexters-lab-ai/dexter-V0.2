@@ -28,14 +28,24 @@ class QueueService extends EventEmitter {
   async initialize() {
     if (this.initialized) return;
     try {
-      this.redisClient = createClient(this.redisClientConfig);
+      // Create a single shared Redis client
+      this.redisClient = createClient({
+        ...this.redisClientConfig,
+        socket: { 
+          ...this.redisClientConfig.socket, 
+          reconnectStrategy: (times) => Math.min(times * 100, 2000)
+        }
+      });
+
       this.redisClient.on('error', async (error) => {
         console.error('❌ Redis connection error:', error);
         await ErrorHandler.handle(error);
       });
+
       this.redisClient.on('connect', () => {
         console.log('✅ Redis client connected');
       });
+
       await this.waitForRedis(30000);
 
       // Create default queues
@@ -43,7 +53,10 @@ class QueueService extends EventEmitter {
       await this.createQueue('priceAlerts');
       await this.createQueue('kolMonitor');
 
-      // Start health checks and monitoring
+      // Hard reset all queues on startup to clear past jobs
+      // await this.resetAllQueues();
+
+      // Start health checks and queue monitoring
       this.startHealthChecks();
       this.startQueueMonitoring();
 
@@ -85,15 +98,12 @@ class QueueService extends EventEmitter {
           port: config.redis.socket.port,
           password: config.redis.password,
           username: config.redis.username,
-          retryStrategy: (times) => {
-            const delay = Math.min(times * 100, 2000);
-            return delay;
-          }
+          retryStrategy: (times) => Math.min(times * 100, 2000)
         },
         settings: {
           lockDuration: 300000,      // 5 minutes
-          stalledInterval: 60000,    // checks every 1 min
-          maxStalledCount: 0         // effectively disables stall detection
+          stalledInterval: 60000,    // checks every 1 minute
+          maxStalledCount: 0         // disables stall detection
         },
         ...this.defaultQueueConfig,
         ...options
@@ -136,9 +146,27 @@ class QueueService extends EventEmitter {
     return this.queues.get(name);
   }
 
+  /**
+   * Deduplicate jobs based on a combination of userId and handle.
+   * If both properties exist in the data, only add a new job if
+   * no job with the same userId and handle is already in waiting, active, or delayed state.
+   */
   async addJob(queueName, data, options = {}) {
     const queue = this.getQueue(queueName);
     try {
+      if (data.userId && data.handle) {
+        const existingJobs = await queue.getJobs(['waiting', 'active', 'delayed']);
+        const duplicateJob = existingJobs.find(job => {
+          const d = job.data;
+          return d.userId === data.userId && d.handle === data.handle;
+        });
+        if (duplicateJob) {
+          console.log(
+            `⚠️ Skipping duplicate job in queue "${queueName}" for userId=${data.userId}, handle=${data.handle} (existing job ID ${duplicateJob.id})`
+          );
+          return duplicateJob;
+        }
+      }
       const job = await queue.add(data, {
         attempts: 3,
         backoff: { type: 'exponential', delay: 1000 },
@@ -179,8 +207,7 @@ class QueueService extends EventEmitter {
   async addRepeatableJob(queueName, data, repeatOptions, jobId, moreOptions = {}) {
     const queue = this.getQueue(queueName);
     try {
-      // Add timestamp to jobId to ensure uniqueness
-      //const uniqueJobId = `${jobId}_${Date.now()}`;
+      // Use jobId (or unique string) to identify the repeatable job.
       const uniqueJobId = jobId;
       
       const jobOpts = {
@@ -231,10 +258,6 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Removes a one-time (non-repeatable) job from the queue by job ID.
-   * For Bull v3, we must get the job, then call job.remove().
-   */
   async removeJob(queueName, jobId) {
     const queue = this.getQueue(queueName);
     try {
@@ -254,31 +277,22 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Removes all jobs related to a specific pattern or ID
-   * @param {string} queueName - The name of the queue
-   * @param {string} pattern - The job ID pattern to match
-   * @returns {Promise<number>} - Number of jobs removed
-   */
   async removeJobsByPattern(queueName, pattern) {
     const queue = this.getQueue(queueName);
     try {
-      // Get all jobs in various states
+      // Get all jobs in various states.
       const jobs = await queue.getJobs(['active', 'waiting', 'delayed', 'paused']);
+      // Filter jobs by matching pattern in their ID.
+      const matchingJobs = jobs.filter(job => job.id && job.id.toString().includes(pattern));
       
-      // Filter jobs by ID pattern
-      const matchingJobs = jobs.filter(job => 
-        job.id && job.id.toString().includes(pattern)
-      );
-      
-      // Remove each matching job
+      // Remove each matching job.
       for (const job of matchingJobs) {
         await job.remove();
         console.log(`🗑️ Removed job ${job.id} matching pattern "${pattern}" from queue "${queueName}"`);
         this.emit('jobRemoved', { queue: queueName, jobId: job.id, pattern });
       }
       
-      // Also try to remove any repeatable jobs with this pattern
+      // Also remove any repeatable jobs matching the pattern.
       const repeatableJobs = await queue.getRepeatableJobs();
       for (const job of repeatableJobs) {
         if (job.id && job.id.includes(pattern)) {
@@ -296,12 +310,6 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Checks if a job exists in the queue
-   * @param {string} queueName - The name of the queue
-   * @param {string} jobId - The job ID to check
-   * @returns {Promise<boolean>} - True if job exists, false otherwise
-   */
   async jobExists(queueName, jobId) {
     const queue = this.getQueue(queueName);
     try {
@@ -313,12 +321,6 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Lists all jobs in a queue with optional filtering
-   * @param {string} queueName - The name of the queue
-   * @param {Array<string>} states - Job states to include
-   * @returns {Promise<Array>} - Array of jobs
-   */
   async listJobs(queueName, states = ['active', 'waiting', 'delayed', 'paused']) {
     const queue = this.getQueue(queueName);
     try {
@@ -336,14 +338,8 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Starts health checks for all queues
-   * Runs every 5 minutes
-   */
   startHealthChecks() {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-    }
+    if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
     
     this.healthCheckInterval = setInterval(async () => {
       try {
@@ -356,10 +352,6 @@ class QueueService extends EventEmitter {
     console.log('✅ Queue health checks started');
   }
   
-  /**
-   * Runs health checks on all queues
-   * Checks for stalled jobs and Redis connection
-   */
   async runHealthChecks() {
     console.log('🏥 Running queue health checks...');
     
@@ -368,7 +360,6 @@ class QueueService extends EventEmitter {
       if (!this.redisClient.isReady) {
         console.error('❌ Redis client is not ready');
         this.emit('healthCheckFailed', { component: 'redis', error: 'Redis client is not ready' });
-        
         // Try to reconnect
         await this.redisClient.connect();
       }
@@ -377,17 +368,15 @@ class QueueService extends EventEmitter {
       this.emit('healthCheckFailed', { component: 'redis', error: error.message });
     }
     
-    // Check each queue
+    // Check each queue for stalled jobs and paused state.
     for (const [queueName, queue] of this.queues.entries()) {
       try {
-        // Check for stalled jobs
         const stalledCount = await queue.getStalledCount();
         if (stalledCount > 0) {
           console.warn(`⚠️ Queue "${queueName}" has ${stalledCount} stalled jobs`);
           this.emit('stalledJobsDetected', { queue: queueName, count: stalledCount });
         }
         
-        // Check if queue is paused
         const isPaused = await queue.isPaused();
         if (isPaused) {
           console.warn(`⚠️ Queue "${queueName}" is paused`);
@@ -402,14 +391,8 @@ class QueueService extends EventEmitter {
     console.log('✅ Queue health checks completed');
   }
   
-  /**
-   * Starts monitoring for all queues
-   * Collects stats every minute
-   */
   startQueueMonitoring() {
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
-    }
+    if (this.monitoringInterval) clearInterval(this.monitoringInterval);
     
     this.monitoringInterval = setInterval(async () => {
       try {
@@ -422,10 +405,6 @@ class QueueService extends EventEmitter {
     console.log('✅ Queue monitoring started');
   }
   
-  /**
-   * Collects stats for all queues
-   * Emits events for monitoring systems
-   */
   async collectQueueStats() {
     for (const [queueName, queue] of this.queues.entries()) {
       try {
@@ -446,7 +425,7 @@ class QueueService extends EventEmitter {
         const now = Date.now();
         const orphanedJobs = activeJobs.filter(job => {
           const processingTime = now - job.timestamp;
-          return processingTime > 10 * 60 * 1000; // 10 minutes
+          return processingTime > 10 * 60 * 1000; // 10 minutes threshold
         });
         
         if (orphanedJobs.length > 0) {
@@ -463,10 +442,6 @@ class QueueService extends EventEmitter {
     }
   }
   
-  /**
-   * Gets the current stats for all queues
-   * @returns {Object} - Queue stats
-   */
   getQueueStats() {
     const stats = {};
     for (const [queueName, queueStats] of this.queueStats.entries()) {
@@ -475,11 +450,6 @@ class QueueService extends EventEmitter {
     return stats;
   }
 
-  /**
-   * logQueueContents()
-   * ------------------
-   * Logs the current repeatable and waiting jobs for the specified queue.
-   */
   async logQueueContents(queueName) {
     try {
       const queue = this.getQueue(queueName);
@@ -498,34 +468,23 @@ class QueueService extends EventEmitter {
     }
   }
 
-  /**
-   * Cleans up orphaned jobs that have been active for too long
-   * @param {string} queueName - The name of the queue
-   * @param {number} thresholdMs - Time threshold in milliseconds (default: 30 minutes)
-   */
   async cleanupOrphanedJobs(queueName, thresholdMs = 30 * 60 * 1000) {
     const queue = this.getQueue(queueName);
     try {
       const activeJobs = await queue.getJobs(['active']);
       const now = Date.now();
-      const orphanedJobs = activeJobs.filter(job => {
-        const processingTime = now - job.timestamp;
-        return processingTime > thresholdMs;
-      });
+      const orphanedJobs = activeJobs.filter(job => (now - job.timestamp) > thresholdMs);
       
       if (orphanedJobs.length > 0) {
         console.warn(`⚠️ Cleaning up ${orphanedJobs.length} orphaned jobs in queue "${queueName}"`);
         
         for (const job of orphanedJobs) {
-          // Move to failed state instead of removing
+          // Mark as failed rather than removing immediately.
           await job.moveToFailed(new Error('Job marked as orphaned due to excessive processing time'), true);
           console.log(`🗑️ Marked job ${job.id} as failed (orphaned) in queue "${queueName}"`);
         }
         
-        this.emit('orphanedJobsCleaned', { 
-          queue: queueName, 
-          count: orphanedJobs.length 
-        });
+        this.emit('orphanedJobsCleaned', { queue: queueName, count: orphanedJobs.length });
       }
       
       return orphanedJobs.length;
@@ -535,9 +494,45 @@ class QueueService extends EventEmitter {
     }
   }
 
+  /**
+   * Hard resets (empties) the specified queue by:
+   * - Emptying waiting, delayed, active, completed, and failed jobs.
+   * - Removing all repeatable jobs.
+   */
+  async resetQueue(queueName) {
+    const queue = this.getQueue(queueName);
+    try {
+      // Empty all jobs from waiting, delayed, active, completed, and failed sets.
+      await queue.empty();
+      await queue.clean(0, 'completed');
+      await queue.clean(0, 'failed');
+      
+      // Remove all repeatable jobs.
+      const repeatableJobs = await queue.getRepeatableJobs();
+      for (const job of repeatableJobs) {
+        await queue.removeRepeatableByKey(job.key);
+      }
+      
+      console.log(`🔄 Queue "${queueName}" has been hard reset (emptied)`);
+      this.emit('queueReset', { queue: queueName });
+    } catch (error) {
+      console.error(`❌ Error resetting queue "${queueName}":`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Hard resets all queues managed by this service.
+   * Call this on startup to ensure no stuck or leftover jobs remain.
+   */
+  async resetAllQueues() {
+    const resetPromises = Array.from(this.queues.keys()).map(queueName => this.resetQueue(queueName));
+    await Promise.all(resetPromises);
+    console.log('🔄 All queues have been hard reset');
+  }
+
   async cleanup() {
     try {
-      // Stop health checks and monitoring
       if (this.healthCheckInterval) {
         clearInterval(this.healthCheckInterval);
         this.healthCheckInterval = null;

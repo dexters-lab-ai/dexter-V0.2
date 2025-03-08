@@ -471,39 +471,37 @@ class PriceAlertService extends EventEmitter {
    * Deletes an alert.
    */
   async deleteAlert(alertId) {
-  try {
-    const alert = await PriceAlert.findByIdAndDelete(alertId);
-    if (!alert) {
-      throw new Error(`Alert with ID ${alertId} not found`);
+    try {
+      const alert = await PriceAlert.findByIdAndDelete(alertId);
+      if (!alert) {
+        throw new Error(`Alert with ID ${alertId} not found`);
+      }
+      
+      // MISSING: Remove associated queue jobs
+      await this.removeAlertJobs(alertId);
+      
+      return { success: true, id: alertId };
+    } catch (error) {
+      await ErrorHandler.handle(error);
+      throw new Error('Error deleting price alert');
     }
-    
-    // MISSING: Remove associated queue jobs
-    await this.removeAlertJobs(alertId);
-    
-    return { success: true, id: alertId };
-  } catch (error) {
-    await ErrorHandler.handle(error);
-    throw new Error('Error deleting price alert');
   }
-}
 
-// Add this method to priceAlertService
-async removeAlertJobs(alertId) {
-  if (!this.alertQueue) return;
-  
-  try {
-    // Remove immediate check job
-    await queueService.removeJob(this.QUEUE_NAME, `check_${alertId}_*`);
+  async removeAlertJobs(alertId) {
+    if (!this.alertQueue) return;
     
-    // Remove recurring check job
-    await queueService.removeRepeatableJobById(this.QUEUE_NAME, `recurring_check_${alertId}`);
-    
-    console.log(`✅ Removed all queue jobs for alert ${alertId}`);
-  } catch (error) {
-    console.error(`❌ Error removing queue jobs for alert ${alertId}:`, error);
+    try {
+      // Remove immediate check job
+      await queueService.removeJob(this.QUEUE_NAME, `check_${alertId}_*`);
+      
+      // Remove recurring check job
+      await queueService.removeRepeatableJobById(this.QUEUE_NAME, `recurring_check_${alertId}`);
+      
+      console.log(`✅ Removed all queue jobs for alert ${alertId}`);
+    } catch (error) {
+      console.error(`❌ Error removing queue jobs for alert ${alertId}:`, error);
+    }
   }
-}
-
 
   async getMetrics() {
     try {
@@ -519,6 +517,7 @@ async removeAlertJobs(alertId) {
       });
 
       return {
+        status: activeAlerts > 0 ? 'healthy' : 'unhealthy',
         totalAlerts,
         activeAlerts,
         executedAlerts,

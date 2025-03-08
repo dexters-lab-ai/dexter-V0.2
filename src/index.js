@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import WebSocket, { WebSocketServer } from 'ws';
 import express from 'express';
 import http from 'http'; // Use http instead of https
 import path from 'path';
@@ -24,10 +25,11 @@ import { kolLearningSystem } from './services/ai/flows/learning/KOLLearningSyste
 import { strategyManager } from './services/ai/flows/learning/StrategyManager.js';
 import { twitterService } from './services/twitter/index.js';
 import { flipperMode } from './services/pumpfun/FlipperMode.js';
+import { pumpFunService } from './services/pumpfun/PumpFunService.js';
 import { startMonitoringDashboard } from './core/monitoring/Dashboard.js'; 
 
-import DashboardServer from './core/monitoring/DashboardServer.js';
 import dashboardRouter from './core/monitoring/Dashboard.js';
+import apiRoutes from './core/monitoring/api/routes.js';
 import googleRoutes from './routes/googleRoutes.js';
 import merchantRoutes from './routes/merchantRoutes.js';
 
@@ -50,35 +52,55 @@ class ServerManager {
       res.sendFile(path.join(this.__dirname, 'public', 'index.html'));
     });
   
-    // Dashboard route
+    // Mount API routes under /api – all endpoints defined in routes.js are available under /api
+    this.app.use('/api', apiRoutes); 
+  
+    // Mount Google routes (e.g., for OAuth callbacks)
+    this.app.use('/api/google', googleRoutes);
+  
+    // Mount dashboard routes
     this.app.use('/dashboard', dashboardRouter);
   
     // Health check endpoint
     this.app.get('/health', (req, res) => {
-      res.json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime()
-      });
+      res.json({ status: 'healthy', uptime: process.uptime() });
     });
   
     // Handle 404s
     this.app.use((req, res) => {
       res.status(404).sendFile(path.join(this.__dirname, 'public', '404.html'));
     });
-  }
+  }  
 
   setupMiddleware() {
     this.app.use(bodyParser.json());
-    this.app.use('/api', googleRoutes);
     this.app.use('/api/merchants', merchantRoutes);
   }  
 
   async startHttpServer(port) {
     try {
-      // Switch to HTTP since we don't need SSL certificates
+      // Create the HTTP server
       this.httpServer = http.createServer(this.app);
+  
+      // Attach WebSocket server to the HTTP server
+      const wss = new WebSocketServer({ server: this.httpServer });
+      wss.on('connection', (client) => {
+        console.log('Client connected to WebSocket');
+        client.on('message', (msg) => console.log('Received:', msg));
+        client.on('close', () => console.log('Client disconnected'));
+      });
 
+      // Broadcast updated metrics on repeat
+      setInterval(async () => {
+        const metrics = await startMonitoringDashboard();
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(metrics));
+          }
+        });
+      }, 900000);
+  
+      // Return a promise that resolves when the server is listening
       return new Promise((resolve, reject) => {
         this.httpServer.listen(port, () => {
           console.log(`🚀 HTTP Server running on port ${port}`);
@@ -90,7 +112,7 @@ class ServerManager {
       console.error('Failed to start HTTP server:', error);
       throw error;
     }
-  }
+  }  
 
   async startNgrok(port) {
     try {
@@ -167,7 +189,8 @@ class Application {
         priceAlertService.initialize(),
         twitterService.initialize(),
         // Initialize FlipperMode for DB collections in Dashboard
-        flipperMode.initialize() 
+        flipperMode.initialize(),
+        pumpFunService.connect()
       ]);
   
       console.log('✅ Core services initialized successfully');
@@ -185,12 +208,8 @@ class Application {
       // Automatically start monitoring dashboard when the server starts
       await startMonitoringDashboard(); // Starts the monitoring dashboard automatically
       
-      const dashboardPort = process.env.DASHBOARD_PORT || 4000;
+      const dashboardPort = 80;
       console.log(`📊 Starting Monitoring Dashboard on port ${dashboardPort}`);
-      
-      // Create and start the dashboard server
-      const dashboardServer = new DashboardServer();
-      await dashboardServer.start();
       
       await bot.startPolling();
     } catch (error) {

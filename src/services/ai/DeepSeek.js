@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { config } from "../../core/config.js";
 import { ErrorHandler } from "../../core/errors/index.js";
+import { aiMetricsService } from '../aiMetricsService.js';
 
 /**
  * DeepSeekService
@@ -18,6 +19,8 @@ class DeepSeekService {
   constructor() {
     this.apiKey = config.deepseekApiKey; // e.g. "sk-1234..."
     this.isConnected = false;
+    this.conversationHistory = new Map();
+    this.startTime = Date.now();
 
     // Set up the "openai" client but override baseURL to DeepSeek
     // (The docs mention we can still use "https://api.deepseek.com/v1" or "https://api.deepseek.com")
@@ -81,26 +84,46 @@ class DeepSeekService {
       if (!this.isConnected) {
         await this.testConnection();
       }
-
+      const requestStart = Date.now();  // Capture start time per call
       const completion = await this.openai.chat.completions.create({
         model,
-        messages, // array of { role, content }
+        messages,
         max_tokens,
         temperature,
         top_p,
         frequency_penalty,
         presence_penalty,
       });
-
+  
       if (!completion?.choices?.length) {
         throw new Error("Invalid or empty response from DeepSeek createChatCompletion.");
       }
-      return completion; // { id, choices[], usage, ... }
+  
+      // Track metrics after successful call
+      const duration = Date.now() - requestStart;  // Use per-call timing
+      aiMetricsService.trackModelUsage(
+        model,
+        completion.usage.total_tokens,
+        this.calculateCost(model, completion.usage.total_tokens),
+        duration
+      );
+  
+      return completion;
     } catch (error) {
       console.error("❌ Error in DeepSeek createChatCompletion:", error.message);
+      aiMetricsService.metrics.openai.rateLimitHits++;
       await ErrorHandler.handle(error);
       throw error;
     }
+  }  
+
+  // Helper to calculate costs based on model and tokens
+  calculateCost(model, tokens) {
+    const costs = {
+      'deepseek-chat': 0.0025,  // 8B model pricing
+      'deepseek-chat-67b': 0.012  // 67B model pricing
+    };
+    return (costs[model] || 0.0025) * (tokens / 1000); // Default to 8B pricing
   }
 
   /**
@@ -145,6 +168,29 @@ class DeepSeekService {
           ? msg.content
           : JSON.stringify(msg.content),
     }));
+  }
+
+  updateConversationHistory(userId, messages, reply) {
+    if (!userId) return;
+    const history = this.conversationHistory.get(userId) || [];
+    const updatedHistory = [...history];
+    if (Array.isArray(messages)) {
+      updatedHistory.push(
+        ...messages.map(msg => ({
+          role: msg.role || 'user',
+          content: typeof msg.content === 'string' ? msg.content : String(msg.content),
+        }))
+      );
+    } else if (typeof messages === 'string') {
+      updatedHistory.push({ role: 'user', content: messages });
+    }
+    if (reply) {
+      updatedHistory.push({ role: 'assistant', content: typeof reply === 'string' ? reply : String(reply) });
+    }
+    while (updatedHistory.length > 10) {
+      updatedHistory.shift();
+    }
+    this.conversationHistory.set(userId, updatedHistory);
   }
 }
 

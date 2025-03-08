@@ -540,7 +540,7 @@ async function  drawLogoAndTitle(ctx, logoBuffer) {
     drawTiltedText(ctx, 'memes', 280, 210, 'italic 20px "SF Toontime"', 'rgba(212, 212, 212, 0.7)', 'center', -0.03, 0);
 
     // "Your AI Companion for Crypto and Daily Tasks..." slogan in italic Toontime Bold
-    drawTiltedText(ctx, 'Your AI Companion for Crypto and Daily Tasks', 405, 300, 'italic 17px "SF Toontime"', '#666', 'center', 0.02, 0);
+    drawTiltedText(ctx, 'Your AI Companion for Crypto and Daily Tasks Automation', 405, 300, 'italic 17px "SF Toontime"', '#666', 'center', 0.02, 0);
 
     // Cartoon Skew Effect for "KATZ!"
     drawTiltedText(ctx, 'D.A.I.L', 490, 200, 'bold 45px "SF Toontime"', 'azure', 'center', -0.3, 0);

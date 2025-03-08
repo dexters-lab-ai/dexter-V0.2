@@ -9,6 +9,7 @@ import axios from "axios";
 import { SolanaWallet } from "./wallets/solana.js";
 import { Avalanche } from 'avalanche';
 import { providers } from "../trading/providers/ProviderList.js";
+import { solanaProvider } from "./wallets/solana.js";
 import { tradeService } from "../trading/TradeService.js";
 import { aiMetricsService } from "../aiMetricsService.js";
 
@@ -510,60 +511,44 @@ class WalletService extends EventEmitter {
    */
   async checkHealth() {
     try {
-      const networkStatuses = [];
-      
-      // Get all available providers from the ProviderList
-      const availableNetworks = Object.keys(this.providers);
-      
-      for (const network of availableNetworks) {
+      // Get all available provider keys (e.g. evm networks) and add 'solana'
+      const availableNetworks = [...new Set([...Object.keys(this.providers), 'solana'])];
+  
+      // Map each network to a health check promise
+      const healthChecks = availableNetworks.map(async (network) => {
         try {
-          const provider = this.providers[network];
-          
-          if (!provider) {
-            networkStatuses.push({
-              network,
-              status: 'unhealthy',
-              error: `No provider configured for network: ${network}`
-            });
-            continue;
-          }
-
-          // Check provider connection based on network type
           if (network === 'solana') {
-            // Solana-specific health check
-            const connection = provider.connection;
-            await connection.getLatestBlockhash();
-            networkStatuses.push({
-              network,
-              status: 'healthy'
-            });
+            // For Solana, initialize and get latest blockhash
+            await solanaProvider.initialize();
+            const blockhash = await solanaProvider.getLatestBlockhash();
+            if (blockhash) {
+              return { network, status: 'healthy', blockhash };
+            } else {
+              return { network, status: 'unhealthy', error: 'Blockhash not retrieved' };
+            }
           } else {
-            // EVM chains health check
+            // For EVM chains, get block number
+            const provider = this.providers[network];
+            if (!provider) {
+              return { network, status: 'unhealthy', error: `No provider configured for network: ${network}` };
+            }
             await provider.getBlockNumber();
-            networkStatuses.push({
-              network,
-              status: 'healthy'
-            });
+            return { network, status: 'healthy' };
           }
-
         } catch (error) {
-          networkStatuses.push({
-            network,
-            status: 'unhealthy',
-            error: error.message
-          });
+          return { network, status: 'unhealthy', error: error.message };
         }
-      }
-
-      // Update metrics service with latest health status
+      });
+  
+      // Run all health checks in parallel
+      const networkStatuses = await Promise.all(healthChecks);
       aiMetricsService.updateWalletHealth(networkStatuses);
-      
       return networkStatuses;
     } catch (error) {
       console.error('Error checking wallet health:', error);
       return [];
     }
-  }
+  }  
 }
 
 export const walletService = new WalletService();

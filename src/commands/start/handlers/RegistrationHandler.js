@@ -113,7 +113,7 @@ export class RegistrationHandler {
         userId,
         `# 🧠 D.A.I.L - Youre in! 
 
-**Live smarter, faster, better**
+**Task smarter. Trade faster. Live better**
 
 --- \n\n` +
           `Anon *${username}*, you may proceed.\n\n` +

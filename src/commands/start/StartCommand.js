@@ -86,9 +86,10 @@ export class StartCommand extends Command {
     const user = await User.findOne({ telegramId: userInfo.id.toString() }).lean();
 
     const startMessage = `
-# 🧠 D.A.I.L - Your Smart Companion for Crypto & Daily Digital Life 
+# 🧠 D.A.I.L - Your AI Companion for Crypto and Daily Tasks Automation 
 
-**Live smarter, faster, better**
+
+**Task smarter. Trade faster. Liver better**
 
 ---
 

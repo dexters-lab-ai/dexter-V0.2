@@ -1,88 +1,77 @@
 /**
  * isDataInsufficient
  * ------------------
- * Checks for:
- * 1) null/undefined
- * 2) minimal length for strings / JSON
- * 3) minimal array/object size
- * 4) presence of "error" property or content
+ * Checks if the result is insufficient by:
+ * 1) Checking for null/undefined values.
+ * 2) For strings, checking if empty or containing "error".
+ * 3) For arrays, considering it insufficient only if every element is insufficient.
+ * 4) For objects, checking for minimal keys or explicit error signals.
  */
 export function isDataInsufficient(result) {
-    // 1) Null or undefined => insufficient
-    if (!result) {
+  // 1) Null or undefined.
+  if (result == null) {
+    return true;
+  }
+
+  // 2) If it's a string, check for emptiness or error keywords.
+  if (typeof result === "string") {
+    if (containsErrorKeyword(result)) return true;
+    return result.trim().length === 0;
+  }
+
+  // 3) If it's an array:
+  if (Array.isArray(result)) {
+    if (result.length === 0) return true;
+    // Consider the array insufficient only if every element is insufficient.
+    return result.every(item => isDataInsufficient(item));
+  }
+
+  // 4) If it's an object:
+  if (typeof result === "object") {
+    if (Object.keys(result).length === 0) return true;
+    return objectHasErrorSignal(result);
+  }
+
+  // 5) For other types, assume the data is sufficient.
+  return false;
+}
+
+/**
+ * containsErrorKeyword
+ * --------------------
+ * Checks if the given text contains the substring "error" (case-insensitive).
+ */
+export function containsErrorKeyword(text) {
+  return text.toLowerCase().includes("error");
+}
+
+/**
+ * objectHasErrorSignal
+ * --------------------
+ * Checks whether an object contains an error signal.
+ * It only flags if a key exactly indicates an error (e.g. "error", "errorMessage")
+ * or if any value is a string that contains "error".
+ */
+export function objectHasErrorSignal(obj) {
+  // Define a list of keys that we interpret as error signals.
+  const errorKeys = ["error", "err", "errmsg", "errormessage"];
+  
+  for (const [key, val] of Object.entries(obj)) {
+    // (a) Check if the key matches one of our error keys (case-insensitive)
+    if (errorKeys.some(errKey => key.toLowerCase() === errKey)) {
+      if (val) return true;
+    }
+    // (b) Check if the value is a string that contains "error"
+    if (typeof val === "string" && containsErrorKeyword(val)) {
       return true;
     }
-  
-    // 2) If it's a string => check length & "error" mention
-    if (typeof result === "string") {
-      if (containsErrorKeyword(result)) return true;
-      return false;
-    }
-  
-    // 3) If it's an array => check minimal length & if any item says "error"
-    if (Array.isArray(result)) {
-      if (result.length < 1) return true;
-  
-      // Optionally scan each item if it's a string or object
-      for (const item of result) {
-        if (typeof item === "string" && containsErrorKeyword(item)) {
-          return true;
-        }
-        if (typeof item === "object" && objectHasErrorSignal(item)) {
-          return true;
-        }
-      }
-      return false;
-    }
-  
-    // By default, treat unknown types as insufficient
-    return false;
-  }
-  
-  /**
-   * containsErrorKeyword
-   * --------------------
-   * Simple check: does the text contain the substring "error"?
-   * (case-insensitive)
-   */
-  export function containsErrorKeyword(text) {
-    return text.toLowerCase().includes("error");
-  }
-  
-  /**
-   * objectHasErrorSignal
-   * --------------------
-   * 1) Checks if any top-level key includes "error"
-   * 2) Checks if the value is a string containing "error"
-   * 3) Optionally, do a shallow or deep scan
-   */
-  export function objectHasErrorSignal(obj) {
-    // We do a shallow check here; you can recursively check nested objects if needed
-  
-    for (const [key, val] of Object.entries(obj)) {
-      // (a) If the key contains the substring "error"
-      if (key.toLowerCase().includes("error")) {
+    // (c) For nested objects (but not arrays), do a shallow check.
+    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      if (Object.keys(val).some(k => errorKeys.includes(k.toLowerCase()))) {
         return true;
       }
-  
-      // (b) If the value is a string containing "error"
-      if (typeof val === "string" && containsErrorKeyword(val)) {
-        return true;
-      }
-  
-      // (c) If the value is itself an object: check if it has an "error" field
-      if (typeof val === "object" && val != null) {
-        // shallow check for "error" field
-        if (Object.keys(val).some(k => k.toLowerCase().includes("error"))) {
-          return true;
-        }
-  
-        // optionally do a deeper recursive check:
-        // Replace `this.objectHasErrorSignal(val)` with direct function call
-        if (objectHasErrorSignal(val)) return true;
-      }
     }
-  
-    return false;
   }
   
+  return false;
+}

@@ -28,6 +28,7 @@ import cookieFun from '../../cookieDAO/CookieFun.js';
 import ResearchService from '../../research/ResearchService.js';
 import { tasksService } from '../../tasks/TasksService.js';
 import { searchCoin } from '../../coingecko/CoinGecko.js';
+import { pumpFunService } from '../../pumpfun/PumpFunService.js';
 
 // Google & SolanaPay
 import { sendEmail, searchEmails, replyEmail, readEmail } from '../../../controllers/gmailController.js';
@@ -1483,7 +1484,6 @@ export class IntentProcessor extends EventEmitter {
 
   // Apify Twitter Cashtag Call
   async search_tweets_for_cashtag(userId, cashtag) {
-    console.log("x x x x x $", cashtag)
     const minLikes = 0, minRetweets = 0, minReplies = 0;
     try {
       const cleanCashtag = cashtag.toLowerCase().trim();
@@ -2398,6 +2398,148 @@ export class IntentProcessor extends EventEmitter {
       throw error;
     }
   }  
+
+  /**
+   * Subscribe a user for new token notifications.
+   * @param {string} userId 
+   * @param {string} chatId 
+   * @param {object} criteria 
+   */
+  async subscribeNewToken(userId, chatId, criteria = {}) {
+    try {
+      const result = pumpFunService.subscribeNewToken(userId, chatId, criteria);
+      return result;
+    } catch (error) {
+      console.error("Error in subscribeNewToken:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Unsubscribe a user from new token notifications.
+   * @param {string} userId 
+   */
+  async unsubscribeNewToken(userId) {
+    try {
+      const result = pumpFunService.unsubscribeNewToken(userId);
+      return result;
+    } catch (error) {
+      console.error("Error in unsubscribeNewToken:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Subscribe a user for token trade notifications.
+   * @param {string} userId 
+   * @param {string} chatId 
+   * @param {object} criteria 
+   * @param {string[]} contractAddresses 
+   */
+  async subscribeTokenTrade(userId, chatId, criteria = {}, contractAddresses = []) {
+    try {
+      const result = pumpFunService.subscribeTokenTrade(userId, chatId, criteria, contractAddresses);
+      return result;
+    } catch (error) {
+      console.error("Error in subscribeTokenTrade:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Unsubscribe a user from token trade notifications.
+   * @param {string} userId 
+   * @param {string[]} contractAddresses 
+   */
+  async unsubscribeTokenTrade(userId, contractAddresses = []) {
+    try {
+      const result = pumpFunService.unsubscribeTokenTrade(userId, contractAddresses);
+      return result;
+    } catch (error) {
+      console.error("Error in unsubscribeTokenTrade:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Execute a trade.
+   * @param {object} options - Trade options.
+   */
+  async executePumpfunTrade(userId, chatId, options) {
+    options.pool = "auto"; // Default to "auto" pool.
+
+    // Retrieve the user's Solana wallet.
+    const walletAddresses = await walletService.getWallets(userId);
+    const solWallets = walletAddresses.solana || [];
+    if (solWallets.length === 0) {
+        throw new Error("No Solana wallet available for user.");
+    }
+    options.publicKey = solWallets[0].address; // Use the first Solana wallet.
+
+    try {
+        // Retrieve user document.
+        const user = await User.findOne({ telegramId: userId });
+        if (!user || !user.wallets) {
+            throw new Error("User wallet not found.");
+        }
+
+        // Retrieve wallet data for Solana.
+        const networkKey = 'solana';
+        const walletData = (user.wallets[networkKey] && user.wallets[networkKey].length > 0)
+            ? user.wallets[networkKey][0]
+            : null;
+        if (!walletData || !walletData.encryptedPrivateKey) {
+            throw new Error("Encrypted private key missing for network: " + networkKey);
+        }
+
+        // Decrypt the private key.
+        let privateKey = decrypt(walletData.encryptedPrivateKey);
+        if (!privateKey) {
+            if (/^(0x)?[0-9a-fA-F]{64}$/.test(walletData.encryptedPrivateKey)) {
+                privateKey = walletData.encryptedPrivateKey;
+            } else {
+                throw new Error("Failed to decrypt or retrieve a valid private key.");
+            }
+        }
+        options.privateKey = privateKey;
+
+        // Execute the trade via PumpFun service.
+        const result = await pumpFunService.executeTrade(options);
+        
+        // Check if trade execution was successful.
+        if (!result.success) {
+            throw new Error(`Trade failed: ${result.error || 'Unknown error'}`);
+        }
+
+        // Truncate transaction signature for display.
+        const truncatedSignature = result.signature 
+            ? `${result.signature.slice(0, 6)}...${result.signature.slice(-6)}`
+            : 'N/A';
+
+        // Build the notification message with a clickable txn link.
+        const txnLink = result.signature 
+            ? `[${truncatedSignature}](https://solscan.io/tx/${result.signature})`
+            : '*Transaction failed*';
+
+        const coolMessage = `🚀 *Aping on PumpFun!*  
+✅ *Trade Successful!*  
+
+*Action:* ${options.action}  
+*Mint:* \`${options.mint}\`  
+*Amount:* \`${options.amount}\`  
+🔗 *Txn:* ${txnLink}  
+
+🔥 *Happy Pump!* 🚀`;
+
+        // ✅ Send the message to the user.
+        await safeSendMessage(bot, chatId, coolMessage, { parse_mode: 'Markdown' });
+
+        return result;
+    } catch (error) {
+        console.error("❌ Error in executePumpfunTrade:", error);
+        return { success: false, error: error.message };
+    }
+  }
 
   async safeSendMessage(bot, chatId, text, options) {
     try {

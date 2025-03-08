@@ -10,10 +10,7 @@ import { flipperMode } from '../../services/pumpfun/FlipperMode.js';
 import { User } from '../../models/User.js';
 import { ErrorHandler } from '../errors/index.js';
 import os from 'os';
-import Moralis from 'moralis';
-
 // For API keys
-import { v4 as uuidv4 } from 'uuid';
 import { encrypt, decrypt } from '../../utils/encryption.js';
 
 const dashboardRouter = express.Router();
@@ -37,7 +34,7 @@ async function fetchMetrics() {
 
     const [
       pumpFunMetrics,
-      aiMetrics,
+      aiMetricsResult,
       flipperMetrics,
       walletHealth,
       databaseHealth,
@@ -46,12 +43,27 @@ async function fetchMetrics() {
       kolMetrics
     ] = results;
 
-    const formatResult = (res) =>
-      res.status === 'fulfilled' ? res.value : (console.error('Error in result:', res.reason), null);
+    // If pumpFunMetrics is fulfilled, extract its value; otherwise, use an empty object.
+    const pumpFunHealth = pumpFunMetrics.status === 'fulfilled' ? pumpFunMetrics.value : {};
+
+    // Update the pumpFun field in your AI metrics with the PumpFun health data,
+    // which now includes recentTokens (the last 300 tokens from the DB).
+    aiMetricsService.updatePumpFunStatus(pumpFunHealth);
+
+    // Then, when you fetch live metrics from aiMetricsService, the pumpFun field is updated.
+    const aiMetrics = aiMetricsResult.status === 'fulfilled'
+      ? restoreMaps(aiMetricsResult.value)
+      : {};
+
+    // Format memory usage for display.
+    let memoryUsage = parseFloat(aiMetrics.context?.memoryUsage || 0);
+    aiMetrics.context.memoryUsage = isNaN(memoryUsage)
+      ? "0 MB"
+      : (memoryUsage / 1024 / 1024).toFixed(2) + " MB";
 
     const systemMetrics = {
       uptime: process.uptime().toFixed(2),
-      memoryUsage: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2),
+      memoryUsage: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2) + " MB",
       cpuUsage: os.loadavg()[0].toFixed(2),
       osLoadAvg: os.loadavg()
     };
@@ -63,10 +75,10 @@ async function fetchMetrics() {
         wallets: aggregateWalletStatus(formatResult(walletHealth)),
         pumpFun: formatResult(pumpFunMetrics),
         priceAlerts: formatResult(priceAlertMetrics),
-        twitter: formatResult(twitterHealth),
-        kolMonitoring: formatResult(kolMetrics)
+        twitter: formatResult(twitterHealth.value),
+        kolMonitoring: formatResult(kolMetrics.value)
       },
-      ai: formatResult(aiMetrics),
+      ai: aiMetrics,
       flipper: formatResult(flipperMetrics),
       users: {
         active: activeUsers,
@@ -78,6 +90,37 @@ async function fetchMetrics() {
     await ErrorHandler.handle(error);
     return { error: 'Failed to fetch metrics' };
   }
+}
+
+function restoreMaps(metrics) {
+  return {
+      ...metrics,
+      intents: new Map(Object.entries(metrics.intents || {})),
+      openai: { 
+          ...metrics.openai, 
+          modelUsage: new Map(Object.entries(metrics.openai?.modelUsage || {})) 
+      },
+      users: new Map(Object.entries(metrics.users || {})),
+      hourlyStats: new Map(Object.entries(metrics.hourlyStats || {})),
+      errors: new Map(Object.entries(metrics.errors || {})),
+      tts: { ...metrics.tts, modelUsage: new Map(Object.entries(metrics.tts?.modelUsage || {})) },
+      stt: { ...metrics.stt, modelUsage: new Map(Object.entries(metrics.stt?.modelUsage || {})) }
+  };
+}
+
+function formatResult(res) {
+  if (typeof res === 'boolean') {
+    return { status: res ? 'healthy' : 'unhealthy' };
+  }
+  if (typeof res === 'object' && res !== null && 'status' in res) {
+    if (res.status === 'fulfilled') {
+      return res.value;
+    } else {
+      console.error('Error in result:', res.reason);
+      return null;
+    }
+  }
+  return res || null;
 }
 
 function aggregateWalletStatus(walletArray) {
@@ -125,34 +168,8 @@ async function initializeCollections() {
 }
 initializeCollections().catch(console.error);
 
-async function createApiKey(userId, tier = 'basic') {
-  const key = `dail_${uuidv4()}`;
-  const encryptedKey = encrypt(key);
-
-  await apiKeyCollection.insertOne({
-    userId,
-    key: encryptedKey,
-    tier,
-    createdAt: new Date(),
-    active: true,
-    quotaLimit: getTierQuota(tier),
-    usageCount: 0
-  });
-
-  return key;
-}
-
-function getTierQuota(tier) {
-  const quotas = {
-    basic: 1000,
-    pro: 10000,
-    enterprise: 100000
-  };
-  return quotas[tier] || quotas.basic;
-}
-
 async function validateApiKey(key) {
-  const record = await apiKeyCollection.findOne({ key: encrypt(key) });
+  const record = await apiKeyCollection.findOne({ key: decrypt(key) });
   if (!record || !record.active) return false;
   if (record.usageCount >= record.quotaLimit) return false;
   return true;
@@ -173,14 +190,11 @@ async function trackApiUsage(key, endpoint) {
 // ----------------------------------------------------------
 // 3) THE MAIN DASHBOARD ROUTE
 // ----------------------------------------------------------
-dashboardRouter.get('/', async (req, res) => {
-  try {
-    const metrics = await fetchMetrics();
-    if (metrics.error) throw new Error(metrics.error);
-
-    res.send(`
-      <!DOCTYPE html>
-      <html>
+// Render the full dashboard HTML page
+function renderDashboard(metrics) {
+  return `
+    <!DOCTYPE html>
+    <html>
       <head>
         <title>D.A.I.L Dashboard</title>
         <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -189,30 +203,33 @@ dashboardRouter.get('/', async (req, res) => {
         ${getDashboardStyles()}
       </head>
       <body>
-        
         ${renderHeader()}
-
         <!-- Lab + Matrix behind everything -->
         <div class="lab-container"></div>
         <div class="matrix-container"></div>
-
-        <div class="dashboard-container">
+        <div class="dashboard-container" id="dashboardContainer">
           ${renderSystemMetrics(metrics.system)}
           ${renderNetworkStatus(metrics.services.wallets?.details || [])}
           ${renderServiceStatus(metrics.services)}
           ${renderAIMetrics(metrics.ai)}
           ${renderPriceAlerts(metrics.services.priceAlerts)}
+          ${renderPumpFunMetrics(metrics.services.pumpFun)}
           ${renderFunctionMetrics(metrics.ai?.functions || [])}
-
-          <!-- CHANGED: We replaced the old "renderApiSection()" with the new approach below: -->
           ${renderApiSection()}
         </div>
-
-        <!-- Scripts at bottom -->
         ${getDashboardScripts()}
       </body>
-      </html>
-    `);
+    </html>
+  `;
+}
+
+dashboardRouter.get('/', async (req, res) => {
+  try {
+    const metrics = await fetchMetrics();    
+  
+  console.log("*******  ***  00000000000000A *********:", JSON.stringify(metrics, null, 2));
+    if (metrics.error) throw new Error(metrics.error);
+    res.send(renderDashboard(metrics));
   } catch (error) {
     console.error('Error rendering dashboard:', error);
     res.status(500).send(`
@@ -223,6 +240,49 @@ dashboardRouter.get('/', async (req, res) => {
         </body>
       </html>
     `);
+  }
+});
+
+// IMP: DASHBOARD FRAGMENT ENDPOINT FOR DYNAMIC UPDATES
+dashboardRouter.get('/fragment', async (req, res) => {
+  try {
+    const metrics = await fetchMetrics();
+    if (metrics.error) throw new Error(metrics.error);
+    // Only return the inner HTML of the dashboard container
+    res.send(`
+      ${renderSystemMetrics(metrics.system)}
+      ${renderNetworkStatus(metrics.services.wallets?.details || [])}
+      ${renderServiceStatus(metrics.services)}
+      ${renderAIMetrics(metrics.ai)}
+      ${renderPriceAlerts(metrics.services.priceAlerts)}
+      ${renderPumpFunMetrics(metrics.services.pumpFun)}
+      ${renderFunctionMetrics(metrics.ai?.functions || [])}
+      ${renderApiSection()}
+    `);
+  } catch (error) {
+    console.error('Error rendering fragment:', error);
+    res.status(500).send('<p>Error refreshing dashboard.</p>');
+  }
+});
+
+// IMP: Download the last 300 Pumpfun launches from our cache
+dashboardRouter.get('/downloadPumpFunTokens', async (req, res) => {
+  try {
+    // Fetch all tokens from the beginning until now, then limit to 300 most recent
+    const tokensResult = await pumpFunService.getTokensByPeriod(new Date(0), new Date());
+    if (!tokensResult.success) {
+      throw new Error(tokensResult.error);
+    }
+    // Sort descending by timestamp and take the top 300
+    const tokens = tokensResult.tokens
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 300)
+      .reverse(); // reverse to chronological order
+    res.setHeader('Content-Disposition', 'attachment; filename=pumpfun_tokens.json');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(tokens, null, 2));
+  } catch (error) {
+    res.status(500).send({ error: error.message });
   }
 });
 
@@ -420,13 +480,23 @@ function renderAggregatedWallets(svc, walletObj) {
 function renderGenericService(svc, status) {
   const icon = getServiceIcon(svc);
   let state = 'unhealthy';
+
   if (typeof status === 'object' && status !== null) {
-    // If the object has a healthy property, use it.
-    state = status.healthy ? 'healthy' : 'unhealthy';
-  } else if (typeof status === 'string') {
+    // If the object explicitly has a 'healthy' property, use it.
+    if ('healthy' in status) {
+      state = status.healthy ? 'healthy' : 'unhealthy';
+    }
+    // Otherwise, if it has a 'status' property (like "status": "healthy"),
+    // treat 'healthy' or 'unhealthy' strings.
+    else if ('status' in status) {
+      state = status.status === 'healthy' ? 'healthy' : 'unhealthy';
+    }
+  } 
+  else if (typeof status === 'string') {
+    // If it’s just a string like "healthy" or "unhealthy"
     state = status;
   }
-  
+
   return `
     <div class="metric-item">
       <div class="metric-icon">
@@ -442,50 +512,19 @@ function renderGenericService(svc, status) {
   `;
 }
 
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-function getOverallPulse(services) {
-  const states = Object.entries(services).map(([svc, s]) => {
-    if (typeof s === 'object' && s !== null) {
-      if (svc === 'wallets' && s.overall) {
-        return s.overall; // for wallets we already aggregate overall status
-      } else if ('healthy' in s) {
-        return s.healthy ? 'healthy' : 'unhealthy';
-      }
-    } else if (typeof s === 'string') {
-      return s;
-    }
-    return 'unhealthy';
-  });
-
-  // If ANY is 'unhealthy' or 'partial', return warning.
-  if (states.includes('unhealthy') || states.includes('partial')) {
-    return 'warning';
-  }
-  return 'healthy';
-}
-
-function getServiceIcon(service) {
-  const icons = {
-    database: 'database',
-    wallets: 'wallet',
-    pumpFun: 'chart-line',    
-    priceAlerts: 'bell',
-    twitter: 'twitter',
-    kolMonitoring: 'user-secret',
-    default: 'cube'
-  };
-  return icons[service] || icons.default;
-}
-
 /**
  * Render AI metrics such as OpenAI usage and context stats.
  */
 function renderAIMetrics(ai) {
   if (!ai || !ai.openai) return '';
+
+  // Use safe defaults for TTS and STT metrics
+  const tts = ai.tts || { totalCalls: 0, totalDuration: 0, modelUsage: [] };
+  const stt = ai.stt || { totalCalls: 0, totalDuration: 0, modelUsage: [] };
+  const modelUsage = ai.openai.modelUsage;
   
+  console.log("*******  ***  AI - DATA *********:", JSON.stringify(ai, null, 2));
+
   return `
     <section class="metrics-card system-metrics glass-effect">
       <div class="card-header">
@@ -493,6 +532,7 @@ function renderAIMetrics(ai) {
         <div class="pulse-indicator ${ai.openai.rateLimitHits > 10 ? 'warning' : 'healthy'}"></div>
       </div>
       
+      <!-- Basic Metrics Grid -->
       <div class="metrics-grid">
         <!-- Token Usage -->
         <div class="metric-item">
@@ -547,7 +587,7 @@ function renderAIMetrics(ai) {
             <h3>Cache Performance</h3>
             <div class="progress-container">
               <div class="progress-bar">
-                <div class="progress" style="width: ${Math.min((ai.context?.cacheHits / (ai.context?.cacheHits + ai.context?.cacheMisses || 1)) * 100, 100)}%">
+                <div class="progress" style="width: ${Math.min((ai.context?.cacheHits / ((ai.context?.cacheHits + ai.context?.cacheMisses) || 1)) * 100, 100)}%">
                   <div class="progress-glow"></div>
                 </div>
               </div>
@@ -558,21 +598,122 @@ function renderAIMetrics(ai) {
 
         <!-- Memory Usage -->
         <div class="metric-item">
-          <div class="metric-icon">
-            <i class="fas fa-database"></i>
-          </div>
+          <div class="metric-icon"><i class="fas fa-database"></i></div>
           <div class="metric-info">
             <h3>Memory Usage</h3>
             <div class="progress-container">
               <div class="progress-bar">
-                <div class="progress" style="width: ${Math.min((ai.context?.memoryUsage / (1024 * 1024 * 1024)) * 100, 100)}%">
+                <div class="progress" style="width: ${Math.min((parseFloat(ai.context.memoryUsage) / 1024) * 100, 100)}%">
                   <div class="progress-glow"></div>
                 </div>
               </div>
-              <span class="progress-text">${((ai.context?.memoryUsage || 0) / 1024 / 1024).toFixed(2)} MB</span>
+              <span class="progress-text">${ai.context.memoryUsage || "0 MB"}</span>
             </div>
           </div>
         </div>
+      </div>
+      
+      <!-- Extra Info Cards Grid -->
+      <div class="metrics-grid" style="margin-top: 2rem;">
+        <!-- Message Stats Card -->
+        <div class="metric-item">
+          <div class="metric-icon">
+            <i class="fas fa-comments"></i>
+          </div>
+          <div class="metric-info">
+            <h3>Message Stats</h3>
+            <p>Total: ${ai.messages.total || 0}</p>
+            <p>Text: ${ai.messages.text || 0} | Audio: ${ai.messages.audio || 0}</p>
+          </div>
+        </div>
+
+        <!-- TTS Performance Card -->
+        <div class="metric-item">
+          <div class="metric-icon">
+            <i class="fas fa-volume-up"></i>
+          </div>
+          <div class="metric-info">
+            <h3>TTS Performance</h3>
+            <p>Total Calls: ${tts.totalCalls}</p>
+            <p>Total Duration: ${tts.totalDuration ? (tts.totalDuration / 1000).toFixed(2) : 0} sec</p>
+            ${
+              (tts.modelUsage && tts.modelUsage.length > 0)
+                ? `<ul>
+                    ${tts.modelUsage.map(([model, usage]) => {
+                      const avg = usage.calls > 0 ? (usage.totalDuration / usage.calls).toFixed(2) : 'N/A';
+                      return `<li>
+                        <i class="fas fa-${model.toLowerCase()}"></i>
+                        <strong>${model}</strong>
+                        <span class="badge">${usage.calls} calls</span>
+                        | ${usage.totalDuration} ms total
+                        | Avg: ${avg} ms
+                        | Cost: $${usage.totalCost ? usage.totalCost.toFixed(2) : '0.00'}
+                      </li>`;
+                    }).join('')}
+                   </ul>`
+                : '<p>No TTS metrics available</p>'
+            }
+          </div>
+        </div>
+
+        <!-- STT Performance Card -->
+        <div class="metric-item">
+          <div class="metric-icon">
+            <i class="fas fa-microphone"></i>
+          </div>
+          <div class="metric-info">
+            <h3>STT Performance</h3>
+            <p>Total Calls: ${stt.totalCalls}</p>
+            <p>Total Duration: ${stt.totalDuration ? (stt.totalDuration / 1000).toFixed(2) : 0} sec</p>
+            ${
+              (stt.modelUsage && stt.modelUsage.length > 0)
+                ? `<ul>
+                    ${stt.modelUsage.map(([model, usage]) => {
+                      const avg = usage.calls > 0 ? (usage.totalDuration / usage.calls).toFixed(2) : 'N/A';
+                      return `<li>
+                        <i class="fas fa-${model.toLowerCase()}"></i>
+                        <strong>${model}</strong>
+                        <span class="badge">${usage.calls} calls</span>
+                        | ${usage.totalDuration} ms total
+                        | Avg: ${avg} ms
+                      </li>`;
+                    }).join('')}
+                   </ul>`
+                : '<p>No STT metrics available</p>'
+            }
+          </div>
+        </div>
+      </div>
+      
+      <!-- Full-width Card: General LLM Metrics Table -->
+      <div class="metric-item full-width" style="margin-top:2rem;">
+        <h3><i class="fas fa-brain spin" style="margin-right:0.5rem;"></i> General LLM Metrics</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Total Tokens</th>
+              <th>Total Cost</th>
+              <th>Rate Limit Hits</th>
+              <th>Avg Response Time (ms)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Array.from(modelUsage.entries()).map(([model, stats]) => {
+              const avgResponseTime = stats.avgResponseTime ? stats.avgResponseTime.toFixed(2) : 'N/A';
+              return `
+                <tr>
+                  <td>
+                  <i class="fas fa-brain" style="margin-right:0.5rem;">
+                  ${model}</td>
+                  <td>${stats.tokens ? stats.tokens.toLocaleString() : 0}</td>
+                  <td>$${stats.cost ? stats.cost.toFixed(2) : '0.00'}</td>
+                  <td>${stats.uses || 0}</td>
+                  <td>${avgResponseTime}</td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
       </div>
     </section>
   `;
@@ -660,11 +801,87 @@ function renderPriceAlerts(alerts) {
   `;
 }
 
+function renderPumpFunMetrics(pumpFunData) {
+  if (!pumpFunData) {
+    return `
+      <section class="metrics-card system-metrics glass-effect">
+        <div class="card-header">
+          <h2><i class="fas fa-rocket pulse-icon"></i> PumpFun</h2>
+          <div class="pulse-indicator warning"></div>
+        </div>
+        <div class="metrics-grid">
+          <p>No PumpFun data available</p>
+        </div>
+      </section>
+    `;
+  }
+  
+  return `
+    <section class="metrics-card system-metrics glass-effect">
+      <div class="card-header">
+        <h2><i class="fas fa-rocket pulse-icon"></i> PumpFun</h2>
+        <div class="pulse-indicator ${pumpFunData.status === 'healthy' ? 'healthy' : 'warning'}"></div>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-item">
+          <div class="metric-icon">
+            <i class="fas fa-info-circle"></i>
+          </div>
+          <div class="metric-info">
+            <h3>Status</h3>
+            <div class="value-display">
+              ${pumpFunData.status}
+            </div>
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-icon">
+            <i class="fas fa-layer-group"></i>
+          </div>
+          <div class="metric-info">
+            <h3>Tokens Launched</h3>
+            <div class="value-display">
+              ${pumpFunData.tokensLaunched}
+            </div>
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-icon">
+            <i class="fas fa-sync-alt"></i>
+          </div>
+          <div class="metric-info">
+            <h3>Reconnect Attempts</h3>
+            <div class="value-display">
+              ${pumpFunData.reconnectAttempts}
+            </div>
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-icon">
+            <i class="fas fa-database"></i>
+          </div>
+          <div class="metric-info">
+            <h3>Cached Tokens</h3>
+            <div class="value-display">
+              ${pumpFunData.cachedTokens || 0}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="download-section" style="text-align: center; margin-top: 1rem;">
+        <a href="/downloadPumpFunTokens" class="download-link" style="color: var(--primary); text-decoration: underline;">
+          Download Last 300 Tokens (JSON)
+        </a>
+      </div>
+    </section>
+  `;
+}
+
 /**
  * Render function performance metrics as a table.
  */
 function renderFunctionMetrics(functions) {
-  if (!functions || !functions.length) {
+  if (!functions || !Array.isArray(functions) || functions.length === 0) {
     return `
       <section class="metrics-card system-metrics glass-effect">
         <div class="card-header">
@@ -677,25 +894,27 @@ function renderFunctionMetrics(functions) {
       </section>
     `;
   }
-
-  // Calculate overall success rate for the pulse indicator
-  const overallSuccessRate = Array.from(functions).reduce((acc, [_, stats]) => {
-    return acc + (stats.successes / stats.calls * 100);
+  
+  // Calculate overall success rate (if needed for styling)
+  const overallSuccessRate = functions.reduce((acc, [_, stats]) => {
+    return acc + (stats.calls ? (stats.successes / stats.calls * 100) : 0);
   }, 0) / functions.length;
 
   return `
     <section class="metrics-card system-metrics glass-effect">
-      <div class="card-header">
+      <div class="card-header"> 
         <h2><i class="fas fa-code pulse-icon"></i> Function Performance</h2>
         <div class="pulse-indicator ${overallSuccessRate > 90 ? 'healthy' : 'warning'}"></div>
       </div>
-      <div class="metrics-grid">
-        ${Array.from(functions).map(([fname, stats]) => {
+      <div class="metrics-grid fmm-parent">
+        ${functions.map(([fname, stats]) => {
           const successRate = stats.calls ? ((stats.successes / stats.calls) * 100).toFixed(1) : '0.0';
+          const avg = stats.avgDuration ? stats.avgDuration.toFixed(2) : 'N/A';
+          const lastUsed = stats.lastUsed ? new Date(stats.lastUsed).toLocaleString() : 'N/A';
           return `
-            <div class="metric-item">
+            <div class="metric-item func-metric-max">
               <div class="metric-icon">
-                <i class="fas fa-function"></i>
+                <i class="fas fa-brain"></i>
               </div>
               <div class="metric-info">
                 <h3>${fname}</h3>
@@ -705,13 +924,11 @@ function renderFunctionMetrics(functions) {
                       <div class="progress-glow"></div>
                     </div>
                   </div>
-                  <span class="progress-text">
-                    ${stats.calls} calls | ${successRate}% success
-                  </span>
+                  <span class="progress-text data-field">${stats.calls} calls | ${successRate}% success</span>
                 </div>
                 <div class="function-stats">
-                  <span class="duration">Avg: ${stats.avgDuration.toFixed(2)}ms</span>
-                  <span class="last-used">Last: ${new Date(stats.lastUsed).toLocaleString()}</span>
+                  <span class="duration data-field">Avg: ${avg} ms</span>
+                  <span class="last-used data-field">Last: ${lastUsed}</span>
                 </div>
               </div>
             </div>
@@ -722,52 +939,57 @@ function renderFunctionMetrics(functions) {
   `;
 }
 
-/**
- * Format uptime (in seconds) as "Xd Yh Zm".
- */
-function formatUptime(seconds) {
-  const totalSec = parseInt(seconds, 10);
-  const days = Math.floor(totalSec / 86400);
-  const hours = Math.floor((totalSec % 86400) / 3600);
-  const minutes = Math.floor((totalSec % 3600) / 60);
-  return `${days}d ${hours}h ${minutes}m`;
-}
-
 // ----------------------------------------------------------
 // 5) NEW API SECTION MARKUP
 // ----------------------------------------------------------
 function renderApiSection() {
-  // CHANGED: We replaced your old inline `onclick` logic
-  // with the more structured, form-based approach from the "clean" example.
   return `
-    <section class="api-section glass-effect">
+    <section class="api-section">
       <div class="section-header">
-        <h2><i class="fas fa-code pulse-icon"></i> API Access</h2>
-        <div class="api-description">
-          Access D.A.I.L's powerful AI-driven data streams and analytics through our RESTful API.
-        </div>
+        <h2><i class="fas fa-code"></i> API Access</h2>
+        <p class="intro-text">
+          Access D.A.I.L's cutting-edge AI-driven data streams through our modern, RESTful API.
+        </p>
       </div>
 
-      <!-- ========== API KEY MANAGEMENT ========== -->
+      <!-- API Key Management -->
       <div class="api-key-management">
         <h3>API Key Management</h3>
-        <p>Select a tier to generate an API key:</p>
+        <p>Select a tier to generate your API key:</p>
         <div class="tier-cards">
           <div class="tier-card">
             <h4>Basic</h4>
+            <p class="price">$49/month</p>
+            <ul>
+              <li>1,000 calls/month</li>
+              <li>Standard rate limits</li>
+              <li>Basic support</li>
+            </ul>
             <button class="tier-button" data-tier="basic">Get Basic API Key</button>
           </div>
           <div class="tier-card featured">
             <h4>Pro</h4>
-            <button class="tier-button" data-tier="pro">Get Pro API Key</button>
+            <p class="price">$199/month</p>
+            <ul>
+              <li>10,000 calls/month</li>
+              <li>Higher rate limits</li>
+              <li>Priority support</li>
+              <li>Advanced analytics</li>
+            </ul>
+            <button class="tier-button" data-tier="pro"">Get Pro API Key</button>
           </div>
           <div class="tier-card">
             <h4>Enterprise</h4>
+            <p class="price">Custom</p>
+            <ul>
+              <li>Unlimited calls</li>
+              <li>Custom rate limits</li>
+              <li>24/7 support</li>
+              <li>Dedicated infrastructure</li>
+            </ul>
             <button class="tier-button" data-tier="enterprise">Contact Sales</button>
           </div>
         </div>
-
-        <!-- Key reveal after generation -->
         <div id="apiKeyDisplay" class="api-key-display hidden">
           <h4>Your API Key</h4>
           <div class="key-container">
@@ -776,11 +998,11 @@ function renderApiSection() {
               <i class="fas fa-copy"></i>
             </button>
           </div>
-          <p class="warning">Save this key securely. It won't be shown again!</p>
+          <p class="warning">Save this key securely. It won’t be shown again!</p>
         </div>
       </div>
 
-      <!-- ========== SENTIMENTSCRUB API CARD ========== -->
+      <!-- SentimentScrub API Card -->
       <div class="api-card">
         <div class="api-card-header">
           <h3>SentimentScrub™</h3>
@@ -789,41 +1011,83 @@ function renderApiSection() {
             <span class="status-text">Checking status...</span>
           </div>
         </div>
-        <div class="api-details">
-          <p>Advanced sentiment analysis for tokens. Evaluate market sentiment, social metrics, etc.</p>
-        </div>
-        <div class="api-test-form">
-          <h4>Test Endpoint</h4>
-          <form id="sentimentTestForm">
-            <div class="form-group">
-              <label>Query (symbol or address)</label>
-              <input type="text" id="sentimentQuery" required>
+        <div class="api-card-content">
+          <div class="api-card-left">
+            <div class="api-card-description">
+              <p>
+                Our advanced sentiment analysis engine processes real-time market sentiment, social metrics, and engagement data for any token or project.
+              </p>
+              <div class="api-tags">
+                <span class="api-tag"><i class="fas fa-chart-line"></i> Sentiment Analysis</span>
+                <span class="api-tag"><i class="fas fa-comments"></i> Social Metrics</span>
+                <span class="api-tag"><i class="fas fa-bolt"></i> Real-time Data</span>
+              </div>
+              <div class="api-documentation">
+                <h3>Endpoint</h3>
+                <code class="endpoint">POST /api/v1/sentiment</code>
+                <h3>Parameters</h3>
+                <div class="param-table">
+                  <table>
+                    <tr>
+                      <th>Parameter</th>
+                      <th>Type</th>
+                      <th>Description</th>
+                    </tr>
+                    <tr>
+                      <td>query</td>
+                      <td>string</td>
+                      <td>Token symbol or address</td>
+                    </tr>
+                    <tr>
+                      <td>network</td>
+                      <td>string</td>
+                      <td>Network name (required for addresses)</td>
+                    </tr>
+                  </table>
+                </div>
+                <small class="doc-note">Expected Response: A JSON with sentiment score, confidence, metrics, and a timestamp.</small>
+              </div>
             </div>
-            <div class="form-group">
-              <label>Network (if address)</label>
-              <select id="sentimentNetwork">
-                <option value="ethereum">Ethereum</option>
-                <option value="base">Base</option>
-                <option value="solana">Solana</option>
-              </select>
+          </div>
+          <div class="api-card-right">
+            <div class="api-test-form">
+              <h4>Test Endpoint</h4>
+              <form id="sentimentTestForm">
+                <div class="form-group">
+                  <label>Query</label>
+                  <input type="text" id="sentimentQuery" placeholder="e.g. BRUSH" required>
+                </div>
+                <div class="form-group">
+                  <label>Network</label>
+                  <select id="sentimentNetwork">
+                    <option value="sonic">Sonic</option>
+                    <option value="solana">Solana</option>
+                    <option value="base">Base</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>API Key</label>
+                  <input type="text" id="sentimentApiKey" placeholder="Enter your API key" required>
+                </div>
+                <button type="submit" class="test-button">
+                  <span class="button-text">Test Endpoint</span>
+                </button>
+              </form>
+              <div id="sentimentResult" class="api-result hidden">
+                <div class="result-header">
+                  <h4>Response</h4>
+                  <button class="copy-button" data-target="sentimentResult">
+                    <i class="fas fa-copy"></i>
+                  </button>
+                </div>
+                <pre class="result-content"></pre>
+              </div>
             </div>
-            <button type="submit" class="test-button">
-              <span class="button-text">Test Endpoint</span>
-            </button>
-          </form>
-          <div id="sentimentResult" class="api-result hidden">
-            <div class="result-header">
-              <h4>Response</h4>
-              <button class="copy-button" data-target="sentimentResult">
-                <i class="fas fa-copy"></i>
-              </button>
-            </div>
-            <pre class="result-content"></pre>
           </div>
         </div>
       </div>
 
-      <!-- ========== TOKENSCRUB API CARD ========== -->
+      <!-- TokenScrub API Card -->
       <div class="api-card">
         <div class="api-card-header">
           <h3>TokenScrub™</h3>
@@ -832,36 +1096,78 @@ function renderApiSection() {
             <span class="status-text">Checking status...</span>
           </div>
         </div>
-        <div class="api-details">
-          <p>Comprehensive token analytics: on-chain data, market metrics, security analysis, etc.</p>
-        </div>
-        <div class="api-test-form">
-          <h4>Test Endpoint</h4>
-          <form id="tokenTestForm">
-            <div class="form-group">
-              <label>Token (symbol or address)</label>
-              <input type="text" id="tokenAddress" required>
+        <div class="api-card-content">
+          <div class="api-card-left">
+            <div class="api-card-description">
+              <p>
+                Our comprehensive token analytics endpoint merges on-chain data, market metrics, security insights, and social signals into one enriched response.
+              </p>
+              <div class="api-tags">
+                <span class="api-tag"><i class="fas fa-coins"></i> Token Analytics</span>
+                <span class="api-tag"><i class="fas fa-chart-bar"></i> Market Data</span>
+                <span class="api-tag"><i class="fas fa-shield-alt"></i> Security Analysis</span>
+              </div>
+              <div class="api-documentation">
+                <h3>Endpoint</h3>
+                <code class="endpoint">POST /api/v1/token</code>
+                <h3>Parameters</h3>
+                <div class="param-table">
+                  <table>
+                    <tr>
+                      <th>Parameter</th>
+                      <th>Type</th>
+                      <th>Description</th>
+                    </tr>
+                    <tr>
+                      <td>token</td>
+                      <td>string</td>
+                      <td>Token address</td>
+                    </tr>
+                    <tr>
+                      <td>network</td>
+                      <td>string</td>
+                      <td>Network name</td>
+                    </tr>
+                  </table>
+                </div>
+                <small class="doc-note">Expected Response: A JSON with token details, price, market data, security score, and social metrics.</small>
+              </div>
             </div>
-            <div class="form-group">
-              <label>Network</label>
-              <select id="tokenNetwork">
-                <option value="ethereum">Ethereum</option>
-                <option value="base">Base</option>
-                <option value="solana">Solana</option>
-              </select>
+          </div>
+          <div class="api-card-right">
+            <div class="api-test-form">
+              <h4>Test Endpoint</h4>
+              <form id="tokenTestForm">
+                <div class="form-group">
+                  <label>Token</label>
+                  <input type="text" id="tokenAddress" placeholder="e.g. 0xc5ab8d98f9594..." required>
+                </div>
+                <div class="form-group">
+                  <label>Network</label>
+                  <select id="tokenNetwork">
+                    <option value="sonic">Sonic</option>
+                    <option value="solana">Solana</option>
+                    <option value="base">Base</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>API Key</label>
+                  <input type="text" id="tokenApiKey" placeholder="Enter your API key" required>
+                </div>
+                <button type="submit" class="test-button">
+                  <span class="button-text">Test Endpoint</span>
+                </button>
+              </form>
+              <div id="tokenResult" class="api-result hidden">
+                <div class="result-header">
+                  <h4>Response</h4>
+                  <button class="copy-button" data-target="tokenResult">
+                    <i class="fas fa-copy"></i>
+                  </button>
+                </div>
+                <pre class="result-content"></pre>
+              </div>
             </div>
-            <button type="submit" class="test-button">
-              <span class="button-text">Test Endpoint</span>
-            </button>
-          </form>
-          <div id="tokenResult" class="api-result hidden">
-            <div class="result-header">
-              <h4>Response</h4>
-              <button class="copy-button" data-target="tokenResult">
-                <i class="fas fa-copy"></i>
-              </button>
-            </div>
-            <pre class="result-content"></pre>
           </div>
         </div>
       </div>
@@ -1016,7 +1322,8 @@ function getDashboardStyles() {
         margin: 8rem auto 2rem;
         padding: 2rem;
         background: var(--glass);
-        backdrop-filter: blur(10px);
+        /* backdrop-filter: blur(10px); */
+        background: inherit;
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
         position: relative;
@@ -1280,6 +1587,44 @@ function getDashboardStyles() {
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 1.5rem;
       }
+      .fmm-parent {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)) !important;
+        gap: 1.5rem;
+        width: 100% !important; /* Ensure the grid container takes full width */
+      }
+
+      /* Falling leaves effect on load
+       */
+      @keyframes fallingLeaves {
+        0% {
+          transform: translateY(-100px) rotate(-15deg);
+          opacity: 0;
+        }
+        100% {
+          transform: translateY(0) rotate(0deg);
+          opacity: 1;
+        }
+      }
+
+      /* Apply the falling leaves animation to each card */
+      .metric-item {
+        animation: fallingLeaves 0.8s ease-out forwards;
+        opacity: 0; /* Start hidden so the animation is visible */
+      }
+
+      /* Stagger the animation delays for children of the parent container.
+        For now, we'll define up to 8. 
+      */
+      .fmm-parent .metric-item:nth-child(1) { animation-delay: 0.1s; }
+      .fmm-parent .metric-item:nth-child(2) { animation-delay: 0.2s; }
+      .fmm-parent .metric-item:nth-child(3) { animation-delay: 0.3s; }
+      .fmm-parent .metric-item:nth-child(4) { animation-delay: 0.4s; }
+      .fmm-parent .metric-item:nth-child(5) { animation-delay: 0.5s; }
+      .fmm-parent .metric-item:nth-child(6) { animation-delay: 0.6s; }
+      .fmm-parent .metric-item:nth-child(7) { animation-delay: 0.7s; }
+      .fmm-parent .metric-item:nth-child(8) { animation-delay: 0.8s; }
+
       .metric-item {
         min-height: 100px;
         display: flex;
@@ -1291,11 +1636,75 @@ function getDashboardStyles() {
         border: 1px solid rgba(255, 255, 255, 0.05);
         transition: transform 0.3s ease, box-shadow 0.3s ease;
       }
+      .func-metric-max {
+        min-width: 400px !important;
+      }
       .metric-item:hover {
         transform: translateY(-5px);
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
         border-color: var(--primary);
       }
+      /* =============== General LLM Table Upgrades =============== */
+      .metric-item.full-width table {
+        width: 100%;
+        border-collapse: collapse;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .metric-item.full-width th,
+      .metric-item.full-width td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .metric-item.full-width th {
+        background: rgba(255, 255, 255, 0.1);
+        font-weight: bold;
+        color: var(--primary);
+      }
+
+      .metric-item.full-width tbody tr {
+        transition: background 0.3s ease-in-out;
+      }
+
+      .metric-item.full-width tbody tr:hover {
+        background: rgba(0, 255, 255, 0.1);
+      }
+
+      /* =============== TTS & STT Cards Styling =============== */
+      .metric-item .metric-info ul {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      .metric-item .metric-info ul li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 10px;
+        border-radius: 8px;
+        margin: 5px 0;
+        transition: background 0.3s;
+      }
+
+      .metric-item .metric-info ul li:hover {
+        background: rgba(0, 255, 255, 0.2);
+      }
+
+      .metric-item .metric-info ul li i {
+        font-size: 1.2rem;
+        color: var(--primary);
+        transition: transform 0.3s;
+      }
+
+      .metric-item .metric-info ul li:hover i {
+        transform: scale(1.2) rotate(10deg);
+      }
+
       .metric-icon {
         width: 48px;
         height: 48px;
@@ -1312,6 +1721,23 @@ function getDashboardStyles() {
         background: var(--primary);
         color: var(--bg);
         transform: rotate(360deg);
+      }
+      .metric-info.tts-stt .data-field {
+        font-size: 1rem;
+        font-weight: 500;
+        color: var(--text);
+        padding: 0.2rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+      }
+      .brain-icon {
+        color: var(--accent);
+      }
+      .model-entry {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0.5rem 0;
       }
 
       /* AI Metrics Specific Styles */
@@ -1434,7 +1860,94 @@ function getDashboardStyles() {
         animation: serverPulse 2s ease-in-out infinite;
       }
       @keyframes serverPulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } 100% { transform: scale(1); opacity: 1; } }
+      
+      .spin {
+        animation: spin 2s linear infinite;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      .badge {
+        display: inline-block;
+        background: var(--secondary);
+        color: #fff;
+        border-radius: 4px;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.75rem;
+        margin-left: 0.5rem;
+      }
+      .metric-info ul {
+        list-style: none;
+        padding-left: 0;
+      }
+      .metric-info ul li {
+        margin: 0.5rem 0;
+      }
+
+      /* =============== PUMPFUN ================================================= */
+      .download-section {
+        margin-top: 1rem;
+        text-align: center;
+      }
+      .download-link {
+        font-size: 1rem;
+        color: var(--primary);
+        text-decoration: underline;
+        transition: color 0.3s ease;
+      }
+      .download-link:hover {
+        color: var(--secondary);
+      }
+
+      /* =============== AI Functions - Test Tube & Bacteria Icons =============== */
+      .function-card {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        position: relative;
+      }
+
+      .function-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 16px rgba(0, 255, 255, 0.3);
+      }
+
+      .function-card .function-icon {
+        font-size: 1.8rem;
+        color: var(--accent);
+      }
+
+      .function-card .function-icon.test-tube {
+        animation: liquid-bubble 2s ease-in-out infinite;
+      }
+
+      @keyframes liquid-bubble {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+      }
+
+      /* =============== Scrub Cards - Default Values =============== */
+      .scrub-card .default-network::after {
+        content: "Solana";
+        font-weight: bold;
+        color: var(--secondary);
+      }
+
+      .scrub-card .default-symbol::after {
+        content: "PEPE";
+        font-weight: bold;
+        color: var(--primary);
+      }
+
       /* Particle and Matrix Effects */
+
       .particles-container {
         position: fixed;
         top: 0; left: 0;
@@ -1580,10 +2093,27 @@ function getDashboardStyles() {
 
       /* API Section Styles */
       .api-section {
-        max-width: 1400px;
-        margin: 2rem auto;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
         padding: 2rem;
-        border-radius: var(--border-radius);
+        margin-top: 2rem;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      }
+
+      .section-header {
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+
+      .section-header h2 {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .intro-text {
+        font-size: 1.1rem;
+        color: var(--text-secondary);
       }
         
       .api-categories {
@@ -1767,6 +2297,62 @@ function getDashboardStyles() {
         border: 1px solid rgba(255, 255, 255, 0.1);
       }
 
+      .api-card-content {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+      }
+
+      .api-card-left,
+      .api-card-right {
+        flex: 1 1 45%;
+      }
+
+      .api-card-description {
+        background: rgba(0, 0, 0, 0.15);
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      }
+
+      .api-documentation h3 {
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+        color: var(--primary);
+      }
+
+      .api-documentation code.endpoint {
+        background: #1a1a1a;
+        padding: 0.5rem;
+        border-radius: 4px;
+        display: block;
+        margin-bottom: 1rem;
+        font-family: monospace;
+      }
+
+      .api-tags {
+        margin-top: 1rem;
+      }
+
+      .api-tag {
+        display: inline-block;
+        background: var(--primary);
+        color: #fff;
+        padding: 0.25rem 0.5rem;
+        margin-right: 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+      }
+
+      /* Small note styling */
+      .doc-note {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.5rem;
+      }
+
       .api-card:hover {
         background: rgba(255, 255, 255, 0.08);
         transform: translateY(-5px);
@@ -1805,6 +2391,52 @@ function getDashboardStyles() {
         display: block;
       }
 
+      /* ---------- Parameter Table Styling ---------- */
+      .param-table {
+        width: 100% !important;
+        border-collapse: collapse;
+        margin: 1rem 0;
+        font-size: 0.9rem;
+        background-color: rgba(255, 255, 255, 0.02);
+      }
+
+      .param-table table {
+        width: 100%;
+      }
+
+      .param-table th,
+      .param-table td {
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        padding: 0.75rem 1rem;
+        text-align: left;
+      }
+
+      .param-table th {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: var(--primary);
+        font-weight: 600;
+      }
+
+      .param-table td {
+        background-color: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+      }
+
+      .param-table tr:nth-child(even) td {
+        background-color: rgba(255, 255, 255, 0.08);
+      }
+
+      /* Add a subtle hover effect for rows */
+      .param-table tr:hover td {
+        background-color: rgba(255, 255, 255, 0.12);
+      }
+
+      /* Optional: Rounded corners on the table */
+      .param-table {
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
       .api-params, .api-response {
         margin-bottom: 1.5rem;
       }
@@ -1817,6 +2449,22 @@ function getDashboardStyles() {
 
       .form-group {
         margin-bottom: 1rem;
+      }
+
+      /* =============== Dropdown Styling Fix =============== */
+      .form-group select {
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 8px;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .form-group select:hover {
+        background: rgba(0, 255, 255, 0.3);
+        color: black;
       }
 
       .form-group label {
@@ -1838,16 +2486,6 @@ function getDashboardStyles() {
         margin-top: 3rem;
         padding: 2rem;
         border-radius: var(--border-radius);
-      }
-
-      .api-card-content {
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.3s ease;
-      }
-
-      .api-card.expanded .api-card-content {
-        max-height: 500px;
       }
 
       .api-card pre {
@@ -1918,10 +2556,25 @@ function getDashboardScripts() {
         //
         // 1) INIT WEBSOCKET (Unchanged from your old code)
         //
-        const ws = new WebSocket('ws://localhost:4001');
-        ws.onmessage = (evt) => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const ws = new WebSocket(\`\${protocol}//\${host}\`);
+        ws.onmessage = async (evt) => {
           const data = JSON.parse(evt.data);
           console.log('Live metrics update:', data);
+          // Dynamically refresh dashboard fragment without full reload
+          try {
+            const res = await fetch('/dashboard/fragment');
+            const html = await res.text();
+            const container = document.getElementById('dashboardContainer');
+            if (container) {
+              container.innerHTML = html;
+            } else {
+              console.error('dashboardContainer element not found');
+            }
+          } catch (err) {
+            console.error('Error refreshing fragment:', err);
+          }
         };
 
         //
@@ -1929,7 +2582,7 @@ function getDashboardScripts() {
         //
         document.addEventListener('DOMContentLoaded', () => {
           createMatrixBackground();
-          createLabEffects();
+          //createLabEffects();
           initParticles();
           initNetworkCardAnimations();
 
@@ -1972,13 +2625,17 @@ function getDashboardScripts() {
             e.preventDefault();
             const query = document.getElementById('sentimentQuery').value;
             const network = document.getElementById('sentimentNetwork').value;
+            const apiKey = document.getElementById('sentimentApiKey').value;
             const resultDiv = document.getElementById('sentimentResult');
             const resultContent = resultDiv.querySelector('.result-content');
 
             try {
               const response = await fetch('/api/v1/sentiment', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-API-Key': apiKey
+                },
                 body: JSON.stringify({ query, network })
               });
               const data = await response.json();
@@ -1996,13 +2653,17 @@ function getDashboardScripts() {
             e.preventDefault();
             const tokenAddr = document.getElementById('tokenAddress').value;
             const network = document.getElementById('tokenNetwork').value;
+            const apiKey = document.getElementById('tokenApiKey').value;
             const resultDiv = document.getElementById('tokenResult');
             const resultContent = resultDiv.querySelector('.result-content');
 
             try {
               const response = await fetch('/api/v1/token', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-API-Key': apiKey
+                },
                 body: JSON.stringify({ token: tokenAddr, network })
               });
               const data = await response.json();
@@ -2028,7 +2689,7 @@ function getDashboardScripts() {
             });
           });
 
-          // ========== E) CHECK API STATUS AT LOAD ==========
+          // ========== F) CHECK API STATUS AT LOAD ==========
           checkApiStatus();
           setInterval(checkApiStatus, 30000);
         });
@@ -2036,17 +2697,101 @@ function getDashboardScripts() {
         //
         // 3) We keep the same createMatrixBackground(), createLabEffects() etc. 
         //
-        function createMatrixBackground() { /* your old logic here */ }
-        function createLabEffects() { /* your old logic here */ }
-        function initParticles() { /* your old logic here */ }
-        function initNetworkCardAnimations() { /* your old logic here */ }
+        function createMatrixBackground() {
+          const container = document.querySelector('.matrix-container');
+          if (!container) return;
+          const chars = '01';
+          const columnCount = Math.floor(window.innerWidth / 20);
+
+          for (let i = 0; i < columnCount; i++) {
+            const col = document.createElement('div');
+            col.className = 'matrix-column';
+            col.style.left = (i * 20) + 'px';
+            col.style.animationDuration = (Math.random() * 3 + 2) + 's';
+            // generate random sequence of '0'/'1'
+            const length = Math.floor(Math.random() * 25 + 5);
+            const textArr = Array(length).fill().map(() => chars[Math.floor(Math.random() * chars.length)]);
+            col.textContent = textArr.join('\\n');
+            container.appendChild(col);
+          }
+        }
+
+        function createLabEffects() {
+          const container = document.querySelector('.lab-container');
+          if (!container) return;
+
+          function createChemical() {
+            const c = document.createElement('div');
+            c.className = 'chemical';
+            c.style.width = '10px';
+            c.style.height = '40px';
+            c.style.left = Math.random() * 100 + 'vw';
+            c.style.top = Math.random() * 100 + 'vh';
+            container.appendChild(c);
+            setTimeout(() => c.remove(), 2000);
+          }
+
+          function createFlask() {
+            const f = document.createElement('div');
+            f.className = 'flask';
+            f.style.width = '20px';
+            f.style.height = '60px';
+            f.style.left = Math.random() * 100 + 'vw';
+            f.style.top = Math.random() * 100 + 'vh';
+            container.appendChild(f);
+            setTimeout(() => f.remove(), 2500);
+          }
+
+          setInterval(createChemical, 3000);
+          setInterval(createFlask, 4000);
+        }
+
+        function initParticles() {
+          const particlesContainer = document.createElement('div');
+          particlesContainer.className = 'particles-container';
+          document.body.appendChild(particlesContainer);
+
+          for (let i = 0; i < 50; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = Math.random() * 100 + 'vw';
+            particle.style.animationDelay = Math.random() * 5 + 's';
+            particle.style.animationDuration = Math.random() * 10 + 10 + 's';
+            particlesContainer.appendChild(particle);
+          }
+        }
+
+        function initNetworkCardAnimations() {
+          const networkCards = document.querySelectorAll('.network-card');
+          if (!networkCards.length) return;
+
+          function animateRandomCard() {
+            const randomIndex = Math.floor(Math.random() * networkCards.length);
+            const card = networkCards[randomIndex];
+            
+            card.classList.add('network-ping');
+            
+            const indicator = card.querySelector('.network-ping-indicator');
+            indicator.style.opacity = '1';
+            
+            setTimeout(() => {
+              card.classList.remove('network-ping');
+              indicator.style.opacity = '0';
+            }, 2000);
+          }
+
+          // Animate a random card every 3-7 seconds
+          setInterval(() => {
+            animateRandomCard();
+          }, Math.random() * 4000 + 3000);
+        }
 
         // ========== F) checkApiStatus to update status-dot for each API ========== 
         async function checkApiStatus() {
           try {
             const res = await fetch('/api/status');
             const data = await res.json();
-            // Example: if your /api/status returns { services: { sentiment: { status: 'healthy' }, token: { status: 'unhealthy' } } }
+            // D.A.I.L /api/status returns { services: { sentiment: { status: 'healthy' }, token: { status: 'unhealthy' } } }
             const sentimentStatus = data.services?.sentiment?.status || 'unhealthy';
             const tokenStatus = data.services?.token?.status || 'unhealthy';
 
@@ -2073,22 +2818,54 @@ function getDashboardScripts() {
   `;
 }
 
-const wss = new WebSocketServer({ port: 4001 });
-wss.on('connection', (client) => {
-  console.log('Client connected to WebSocket');
-  client.on('message', (msg) => console.log('Received:', msg));
-  client.on('close', () => console.log('Client disconnected'));
-});
+/**
+ * HELPER UTILITY FUNCTIONS
+ */
+function formatUptime(seconds) {
+  const totalSec = parseInt(seconds, 10);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  return `${days}d ${hours}h ${minutes}m`;
+}
 
-// Broadcast updated metrics every 15 mins
-setInterval(async () => {
-  const metrics = await fetchMetrics();
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(metrics));
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function getOverallPulse(services) {
+  const states = Object.entries(services).map(([svc, s]) => {
+    if (typeof s === 'object' && s !== null) {
+      if (svc === 'wallets' && s.overall) {
+        return s.overall; // for wallets we already aggregate overall status
+      } else if ('healthy' in s) {
+        return s.healthy ? 'healthy' : 'unhealthy';
+      }
+    } else if (typeof s === 'string') {
+      return s;
     }
+    return 'unhealthy';
   });
-}, 900000);
+
+  // If ANY is 'unhealthy' or 'partial', return warning.
+  if (states.includes('unhealthy') || states.includes('partial')) {
+    return 'warning';
+  }
+  return 'healthy';
+}
+
+function getServiceIcon(service) {
+  const icons = {
+    database: 'database',
+    wallets: 'wallet',
+    pumpFun: 'chart-line',    
+    priceAlerts: 'bell',
+    twitter: 'x-twitter',
+    kolMonitoring: 'user-secret',
+    default: 'cube'
+  };
+  return icons[service] || icons.default;
+}
 
 export { dashboardRouter as default, fetchMetrics as startMonitoringDashboard };
 

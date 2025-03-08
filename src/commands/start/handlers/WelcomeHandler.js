@@ -9,9 +9,9 @@ export class WelcomeHandler {
   /** Show Welcome Message */
   async showWelcome(chatId) {
     const startMessage = `
-# 🧠 D.A.I.L - Your Smart Companion for Crypto & Daily Digital Life 
+# 🧠 D.A.I.L - Your AI Companion for Crypto and Daily Tasks Automation
 
-**Live smarter, faster, better**
+**Task smarter. Trade faster. Live better**
 
 ---
 

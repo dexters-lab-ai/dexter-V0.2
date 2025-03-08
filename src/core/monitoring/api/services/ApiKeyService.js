@@ -15,7 +15,7 @@ const TIER_CONFIGS = {
   },
   enterprise: {
     quotaLimit: 100000,
-    validityDays: 30,
+    validityDays: 30, //30 days validity
     rateLimit: 1000 // per minute
   }
 };
@@ -48,17 +48,23 @@ export class ApiKeyService {
   static async validateKey(key) {
     const apiKey = await ApiKey.findValidKey(key);
     if (!apiKey) return false;
-
+  
+    // Ensure expiration check
+    if (new Date() > apiKey.expiresAt) {
+      await apiKey.deactivate();
+      return false;
+    }
+  
     // Check rate limit
     const recentUsage = await this.getRecentUsage(key);
     const config = TIER_CONFIGS[apiKey.tier];
-    
+  
     if (recentUsage >= config.rateLimit) {
       return false;
     }
-
+  
     return true;
-  }
+  }  
 
   static async getRecentUsage(key, timeWindowMs = 60000) {
     const since = new Date(Date.now() - timeWindowMs);

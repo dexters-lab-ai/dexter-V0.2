@@ -73,7 +73,7 @@ export class HealthMonitor extends EventEmitter {
 
   async checkRedisHealth() {
     try {
-      const redisClient = kolMonitor.client;
+      const redisClient = kolMonitorQueue.client;
       if (!redisClient || !redisClient.status === 'ready') {
         return {
           status: 'unhealthy',

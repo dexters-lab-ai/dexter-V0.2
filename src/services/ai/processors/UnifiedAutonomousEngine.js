@@ -1264,6 +1264,15 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         setup_flipper_mode: () => this.intentProcessor.setupFlipperMode(userId),
         start_flipper_mode: () => this.intentProcessor.startFlipperMode(userId, chatId, args),
         stop_flipper_mode: () => this.intentProcessor.stopFlipperMode(this.bot, userId),
+
+        // Pumpfun Funtions
+        subscribe_pumpfun_new_token: () => this.intentProcessor.subscribeNewToken(userId, chatId, args),
+        unsubscribe_pumpfun_new_token: () => this.intentProcessor.unsubscribeNewToken(userId),
+        subscribe_pumpfun_token_trade: () => this.intentProcessor.subscribeTokenTrade(userId, chatId, args.criteria, args.contractAddresses),
+        unsubscribe_pumpfun_token_trade: () => this.intentProcessor.unsubscribeTokenTrade(userId, args),
+        execute_pumpfun_trade: () => this.intentProcessor.executePumpfunTrade(userId, chatId, args),
+
+        // KOL Monitoring Functions
         monitor_kol: () => this.intentProcessor.startKOLMonitoring(userId, args),
         get_kol_monitor_positions: () => this.intentProcessor.getKOLMonitors(userId),
         delete_kol_monitor_position: () => this.intentProcessor.deleteKOLMonitoring(userId, args.handle),        

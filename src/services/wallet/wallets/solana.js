@@ -110,6 +110,16 @@ export class SolanaWallet {
     }
   }
 
+  async getLatestBlockhash() {
+    try {
+      const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+      return blockhash;
+    } catch (error) {
+      console.error('Error getting latest blockhash:', error);
+      throw error;
+    }
+  }  
+
   // Keep WebSocket setup for direct price monitoring
   async setupWebSocket() {
     if (!WS_ENDPOINT) throw new Error('No WebSocket endpoint available.');
@@ -285,3 +295,5 @@ export class SolanaWallet {
     console.log('✅ Cleaned up SolanaWallet resources.');
   }
 }
+
+export const solanaProvider = new SolanaWallet();
