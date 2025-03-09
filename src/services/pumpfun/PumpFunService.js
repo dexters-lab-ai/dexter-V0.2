@@ -111,7 +111,7 @@ class PumpFunService extends EventEmitter {
   }
 
   handleOpen() {
-    console.log(`✅ PumpFun WS connected to ${this.websocketEndpoint}`);
+    console.log(`✅ PumpFun⛽ WS connected to ${this.websocketEndpoint}`);
     this.reconnectAttempts = 0;
     this.isInitialized = true;
     this.flushQueue();

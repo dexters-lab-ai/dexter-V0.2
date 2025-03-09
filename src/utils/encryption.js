@@ -32,24 +32,29 @@ function getPossibleKeys() {
  * @returns {string} - The IV and encrypted data combined.
  */
 export function encrypt(text) {
-  if (!text) throw new Error('No text provided for encryption');
+  if (typeof text !== "string" || !text.trim()) {
+    console.error("❌ Encryption error: Input must be a non-empty string.", text);
+    throw new Error("Encryption failed: Input must be a valid string");
+  }
 
   try {
     const key = getParsedCurrentKey();
-    const iv = CryptoJS.lib.WordArray.random(16); // Generate a random 16-byte IV
+    const iv = CryptoJS.lib.WordArray.random(16);
 
-    // Perform AES encryption
-    const encrypted = CryptoJS.AES.encrypt(text, key, {
+    // Step 1: Remove spaces safely (replace " " with "__")
+    const normalizedText = text.replace(/ /g, "__");
+
+    // Step 2: Encrypt the modified text with no spaces 
+    const encrypted = CryptoJS.AES.encrypt(normalizedText, key, {
       iv: iv,
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.Pkcs7,
     });
 
-    // Return as IV:Ciphertext format (IV in Base64, Ciphertext as string)
     return `${CryptoJS.enc.Base64.stringify(iv)}:${encrypted.toString()}`;
   } catch (error) {
-    console.error('❌ Encryption error:', error.message || error);
-    throw new Error('Failed to encrypt data');
+    console.error("❌ Encryption error:", error.message || error);
+    throw new Error("Failed to encrypt data");
   }
 }
 
@@ -93,7 +98,8 @@ export function decrypt(ciphertext) {
         const decryptedText = tryDecrypt(encryptedData, candidate.key, options);
         if (decryptedText) {
           console.log(`✅ Successfully decrypted using key: ${candidate.label}`);
-          return decryptedText;
+          // Restore spaces from "__" back to " "
+          return decryptedText.replace(/__/g, " ");
         }
       }
     } catch (error) {

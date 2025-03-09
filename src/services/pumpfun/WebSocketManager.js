@@ -22,13 +22,13 @@ export class WebSocketManager extends EventEmitter {
       const ws = new WebSocket(endpoint, options);
       
       ws.on('open', () => {
-        console.log(`WebSocket connected to ${endpoint}`);
+        console.log(`💧⛽ WebSocket connected to ${endpoint}`);
         this.reconnectAttempts.set(key, 0);
         this.emit('connected', { endpoint });
       });
 
       ws.on('close', () => {
-        console.log(`WebSocket closed for ${endpoint}`);
+        console.log(`🏋️ WebSocket closed for ${endpoint}`);
         this.handleReconnect(endpoint, options);
       });
 

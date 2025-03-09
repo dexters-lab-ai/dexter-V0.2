@@ -1312,6 +1312,11 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         fetch_bridge_receipts: () => this.intentProcessor.handleFetchBridgeReceipts(args),
         // Wallet creation
         create_evm_wallet: () => this.intentProcessor.createEVMWallet(userId, args.network),
+
+        // Scrap the web info
+        trending_tokens_fallback_scrap: () => this.intentProcessor.trendingTokensScrapped(userId),
+        scrape_provided_url: () => this.intentProcessor.urlScrapper(userId, args),
+
         // Research and Tasks
         save_research: () => this.intentProcessor.processSaveResearchIntent(args, chatId),
         retrieve_research: () => this.intentProcessor.processRetrieveResearchIntent(args, chatId),

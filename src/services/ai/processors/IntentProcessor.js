@@ -6,6 +6,7 @@ import { config } from '../../../core/config.js';
 import { decrypt, encrypt } from "../../../utils/encryption.js";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58"; // For Base58 decoding
+import { normalizeNetwork, NETWORKS, NETWORK_DISPLAY_NAMES } from '../../../core/constants.js';
 
 // Service imports
 import { addressBookService } from '../../addressBook/AddressBookService.js';
@@ -29,6 +30,7 @@ import ResearchService from '../../research/ResearchService.js';
 import { tasksService } from '../../tasks/TasksService.js';
 import { searchCoin } from '../../coingecko/CoinGecko.js';
 import { pumpFunService } from '../../pumpfun/PumpFunService.js';
+import { networkScraper } from '../../fireCrawl/fireCrawl.js';
 
 // Google & SolanaPay
 import { sendEmail, searchEmails, replyEmail, readEmail } from '../../../controllers/gmailController.js';
@@ -1547,24 +1549,22 @@ export class IntentProcessor extends EventEmitter {
 
   // Trending
   async getTrendingTokensByChain(chatId, network) {
-    const supportedNetworks = ['ethereum', 'base', 'solana', 'avalanche'];
-
-    if (!supportedNetworks.includes(network.toLowerCase())) {
-      return "I only support Solana, Base, Avalanche & sadly Ethereum for now...\nTry bridge to one of those using our Wormhole bridge?";
-    }
-
+    console.log("==============network: ", network);
+    
+    // Normalize the input network name.
+    const normalizedNetwork = normalizeNetwork(network);
+    
+    // Get trending tokens from your trendingService
     const trendingTokens = await trendingService.getTrendingTokensByChain(network);
-    if (trendingTokens[0].fallback) {
-      const { url, prompt } = trendingTokens[0];
-      await this.safeSendMessage(this.bot, chatId, prompt, {
-        parse_mode: "Markdown",
-        reply_markup: { inline_keyboard: [[{ text: "🔥Trending on " + network, url }]] }
-      });      
-      return "**Suggest user click the button above Bot API 6.7 web app button to open the trending list.**";
-    } else {
-      // Process the trending tokens normally.
+  
+    // If the trending service indicates a fallback condition
+    if (trendingTokens && trendingTokens[0] && trendingTokens[0].fallback) {
+      // Fallback: scrape using networkScraper (passing the network if needed)
+      const trendingResult = await networkScraper.trendingNetworkScrap(network);
+      return trendingResult;
     }
-
+    
+    // Otherwise, return trending tokens as is
     return trendingTokens;
   }
 
@@ -2538,6 +2538,31 @@ export class IntentProcessor extends EventEmitter {
     } catch (error) {
         console.error("❌ Error in executePumpfunTrade:", error);
         return { success: false, error: error.message };
+    }
+  }
+
+  // Web Scrap - FireCrawl
+  async trendingTokensScrapped(userId) {
+    try {
+      // To scrape fixed URLs:
+      const trendingResult = await networkScraper.networkScrap();
+      // trendingResult.results will be an array of objects with each URL's scraped markdown and metadata.
+      return trendingResult;
+    } catch (error) {
+      console.error("Bot sendMessage error:", error.message);
+      return null;
+    }
+  }
+
+  async urlScrapper(userId, input) {
+    try {
+      // To scrape fixed URLs:
+      const scrapResult = await networkScraper.scrapeProvidedUrl(input);
+      // scrapResult.results will be an array of objects with each URL's scraped markdown and metadata.
+      return scrapResult;
+    } catch (error) {
+      console.error("Bot sendMessage error:", error.message);
+      return null;
     }
   }
 

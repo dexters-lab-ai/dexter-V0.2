@@ -47,6 +47,115 @@ export const NETWORK_DISPLAY_NAMES = {
   [NETWORKS.OMNI]: 'Omni',
 };
 
+export const NETWORK_ALIASES = {
+  // Sonic
+  "sonic": "sonic",
+  "sonic network": "sonic",
+
+  // Ethereum
+  "ethereum": "ethereum",
+  "eth": "ethereum",
+  "etherium": "ethereum",
+  "ethreum": "ethereum",
+
+  // Base
+  "base": "base",
+  "base network": "base",
+  "base layer": "base",
+
+  // Solana
+  "solana": "solana",
+  "sol": "solana",
+  "solan": "solana",
+
+  // Avalanche
+  "avalanche": "avalanche",
+  "ava": "avalanche",
+  "avax": "avalanche",
+  "avalanche network": "avalanche",
+
+  // Polygon
+  "polygon": "polygon",
+  "poly": "polygon",
+  "matic": "polygon",
+  "matic network": "polygon",
+
+  // Binance Smart Chain – normalize all variants to "bsc"
+  "bsc": "bsc",
+  "binance": "bsc",
+  "baince": "bsc",
+  "binance smart chain": "bsc",
+
+  // Arbitrum
+  "arbitrum": "arbitrum",
+  "arb": "arbitrum",
+  "arbitrum one": "arbitrum",
+
+  // Optimism
+  "optimism": "optimism",
+  "opt": "optimism",
+
+  // Fantom
+  "fantom": "fantom",
+  "ftm": "fantom",
+
+  // Linear
+  "linear": "linear",
+
+  // Cyber
+  "cyber": "cyber",
+  "cyber network": "cyber",
+
+  // Berachain
+  "berachain": "berachain",
+  "bera": "berachain",
+  "bera chain": "berachain",
+
+  // Nova
+  "nova": "nova",
+  "solana nova": "nova",
+
+  // ZK-EVM
+  "zkevm": "zkevm",
+  "zk-evm": "zkevm",
+  "zk evm": "zkevm",
+
+  // Scroll
+  "scroll": "scroll",
+  "scroll network": "scroll",
+
+  // Celo
+  "celo": "celo",
+
+  // Worldchain
+  "worldchain": "worldchain",
+
+  // Mantle
+  "mantle": "mantle",
+  "mantle chain": "mantle",
+
+  // ZkSync
+  "zksync": "zksync",
+  "zk-sync": "zksync",
+  "zk sync": "zksync",
+
+  // Omni
+  "omni": "omni",
+  "omnichain": "omni"
+};
+
+/**
+ * Normalizes a given network string to the standard value.
+ * @param {string} input - The network name (or alias) provided by the user.
+ * @returns {string|null} The normalized network value, or null if not recognized.
+ */
+export function normalizeNetwork(input) {
+  if (!input || typeof input !== "string") return null;
+  const lower = input.trim().toLowerCase();
+  return NETWORK_ALIASES[lower] || null;
+}
+
+
 // User States
 export const USER_STATES = {
   AWAITING_REGISTRATION: 'AWAITING_REGISTRATION',

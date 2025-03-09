@@ -7,7 +7,7 @@ import { config } from "../../core/config.js";
 dotenv.config();
 
 const defaultConfig = {
-  ethereumEndpoint: config.etherEndpoint, 
+  ethereumEndpoint: config.ethereumEndpoint, 
   aggregatorEndpoint: config.ethereumAggregatorEndpoint || null, // Optional aggregator endpoint
 };
 

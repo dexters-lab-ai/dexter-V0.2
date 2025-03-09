@@ -299,7 +299,7 @@ export const AIFunctions = [
           properties: {
             network: {
               type: "string",
-              enum: ["ethereum","avalanche","base","linear","cyber","fantom","arbitrum","berachain","nova","optimism","zkevm","scroll","polygon","bsc","celo","worldchain","mantle","zksync","omni"],
+              enum: ["sonic","avalanche","base","linear","cyber","ethereum","arbitrum","berachain","nova","optimism","zkevm","scroll","polygon","bsc","celo","worldchain","mantle","zksync","omni"],
               description: "The blockchain network to use."
             },
             action: {
@@ -615,8 +615,30 @@ export const AIFunctions = [
       {
         name: "fetch_trending_tokens_by_chain",
         description: `Fetches trending tokens for a specific blockchain network.
-        Chains supported, match this format or keywords when preparing network query:
-        - solana, base, avalanche, ethereum, bsc, sui, ton, pulsechain, berachain, arbitrum, fantom, mode, zksync, tron, polygon`,
+        Supported Networks (case-sensitive, correct common typos to match these chains):
+        - **sonic**
+        - **ethereum** (convert from: *ether*, *etherum*)
+        - **base**
+        - **solana**
+        - **avalanche**
+        - **polygon**
+        - **bsc** (convert from: *binance*, *baince*)
+        - **arbitrum**
+        - **optimism**
+        - **fantom**
+        - **linear**
+        - **cyber**
+        - **berachain**
+        - **nova**
+        - **zkevm**
+        - **scroll**
+        - **celo**
+        - **worldchain**
+        - **mantle**
+        - **zksync**
+        - **omni**
+        etc for other chains like "sui" and "aptos"
+        `,
         parameters: {
           type: "object",
           properties: {

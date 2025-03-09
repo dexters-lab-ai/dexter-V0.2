@@ -175,16 +175,30 @@ export class SolanaWallet {
   }
 
   async createWallet() {
-    const mnemonic = bip39.generateMnemonic();
-    const seed = await bip39.mnemonicToSeed(mnemonic);
-    const hdkey = HDKey.fromMasterSeed(seed).derive("m/44'/501'/0'/0'");
-    const keypair = Keypair.fromSeed(hdkey.privateKey);
-    await this.setupTokenReception(keypair.publicKey.toString());
-    return {
-      address: keypair.publicKey.toString(),
-      privateKey: Buffer.from(keypair.secretKey).toString('hex'),
-      mnemonic,
-    };
+    try {
+      console.log("🔄 Creating new Solana wallet...");
+
+      // Generate mnemonic & seed
+      const mnemonic = bip39.generateMnemonic();
+      const seed = await bip39.mnemonicToSeed(mnemonic);
+      
+      // Derive keypair from seed
+      const hdkey = HDKey.fromMasterSeed(seed).derive("m/44'/501'/0'/0'");
+      const keypair = Keypair.fromSeed(hdkey.privateKey);
+
+      // Construct and return wallet object
+      const walletData = {
+        address: keypair.publicKey.toString(),
+        privateKey: Buffer.from(keypair.secretKey).toString('hex'),
+        mnemonic,
+      };
+
+      console.log("✅ Solana Wallet Created:", walletData.address);
+      return walletData;
+    } catch (error) {
+      console.error("❌ Error creating Solana wallet:", error);
+      throw new Error("Failed to create Solana wallet");
+    }
   }
 
   async setupTokenReception(walletAddress) {

@@ -115,7 +115,7 @@ class FlipperMode extends EventEmitter {
       await this.countDocumentsWithTimeout(this.systemMetricsCollection);
       this.snapshotSystemMetrics();
       this.initialized = true;
-      console.log('FlipperMode initialized successfully.');
+      console.log('🟢 FlipperMode initialized successfully.');
     } catch (error) {
       console.error('Error during FlipperMode initialization:', error);
       throw error;
@@ -125,7 +125,7 @@ class FlipperMode extends EventEmitter {
   async countDocumentsWithTimeout(collection, retries = 3, timeoutMS = 30000) {
     try {
       const result = await collection.countDocuments({}, { maxTimeMS: timeoutMS });
-      console.log(`Document count for ${collection.collectionName}:`, result);
+      console.log(`🚰 Document count for ${collection.collectionName}:`, result);
       return result;
     } catch (error) {
       console.error(`Error counting documents in ${collection.collectionName}:`, error);

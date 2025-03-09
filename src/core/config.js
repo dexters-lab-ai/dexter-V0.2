@@ -42,6 +42,7 @@ class Config {
     this.moralisAPIKey = process.env.MORALIS_API_KEY;
     this.coingeckoAPIKey = process.env.COINGECKO_API_KEY;
     this.wormholeKey = process.env.WORMHOLE_KEY;
+    this.firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
 
     // Node-Redis v4 style: If you need a dedicated client
     this.redisClient = {
@@ -72,7 +73,7 @@ class Config {
     this.solanaEndpoint = process.env.QUICKNODE_SOLANA_ENDPOINT;
     this.baseEndpoint = process.env.QUICKNODE_BASE_RPC;
     this.avaxEndpoint = process.env.QUICKNODE_AVAX_RPC;
-    this.etherEndpoint = process.env.QUICKNODE_ETH_RPC;
+    this.ethereumEndpoint = process.env.QUICKNODE_ETH_RPC;
     this.linearEndpoint = process.env.QUICKNODE_LINEAR_ENDPOINT;
     this.cyberEndpoint = process.env.QUICKNODE_CYBER_ENDPOINT;
     this.fantomEndpoint = process.env.QUICKNODE_FANTOM_ENDPOINT;
@@ -83,7 +84,7 @@ class Config {
     this.zkevmEndpoint = process.env.QUICKNODE_ZKEVM_ENDPOINT;
     this.scrollEndpoint = process.env.QUICKNODE_SCROLL_ENDPOINT;
     this.polygonEndpoint = process.env.QUICKNODE_POLYGON_ENDPOINT;
-    this.binanceEndpoint = process.env.QUICKNODE_BINANCE_ENDPOINT;
+    this.bscEndpoint = process.env.QUICKNODE_BINANCE_ENDPOINT;
     this.celoEndpoint = process.env.QUICKNODE_CELO_ENDPOINT;
     this.worldchainEndpoint = process.env.QUICKNODE_WORLDCHAIN_ENDPOINT;
     this.mantleEndpoint = process.env.QUICKNODE_MANTLE_QUICKNODE;

@@ -170,7 +170,6 @@ export class StartCommand extends Command {
   async handleRegistration(msg) {
     // Normalize the callback query so that msg.chat and msg.from exist
     msg = this.normalizeCallbackQuery(msg);
-    console.log('====>>>>',msg);
     
     const chatId = msg.message.chat.id;
     const userInfo = msg.from;
@@ -214,14 +213,20 @@ export class StartCommand extends Command {
    * @param {object} query - Callback query object.
    */
   async handleCallback(query) {
-    // Here we expect query.data and query.message.chat.id to be present.
+    // Immediately answer the callback query
+    try {
+      await this.bot.answerCallbackQuery(query.id, { text: "🧑‍🚀 Processing...", show_alert: false });
+    } catch (error) {
+      console.error("Error answering callback query:", error.message);
+    }
+    
+    // Now process the callback (e.g., emit event to handle registration)
     const action = query.data;
-    // Emit the action to the event handler. (It will call registered callbacks.)
     const handled = this.eventHandler.emit(action, query);
     if (!handled) {
       console.warn(`Unhandled callback action: ${action}`);
     }
-  }
+  }  
 
   /**
    * A helper to catch errors in a given function and delegate to ErrorHandler.

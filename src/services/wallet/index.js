@@ -143,6 +143,9 @@ class WalletService extends EventEmitter {
    * @param {string} network - The network on which to create the wallet.
    */
   async createWallet(userId, network) {
+    // Default: use the provider's createWallet method
+    console.log("🏗️🔑 Generating a new wallet for @", userId, " on network: ", network);
+
     try {
       let wallet;
       if (network.toLowerCase() === "solana") {
@@ -153,11 +156,7 @@ class WalletService extends EventEmitter {
       } else if (network.toLowerCase() === "avalanche") {
         // Use the dedicated Avalanche wallet creation method
         wallet = await this.createAvalancheWallet();
-      } else {
-        // Default: use the provider's createWallet method
-        console.log(" > > > creating wallet for ", userId, " on network: ", network);
-
-        // Create a new random wallet
+      } else {// Create a new random wallet
         const newWallet = ethers.Wallet.createRandom();
         wallet = newWallet;
 
@@ -165,17 +164,14 @@ class WalletService extends EventEmitter {
         const provider = await this.getProvider(network);
         const connectedWallet = newWallet.connect(provider);
 
-        console.log(`New wallet address: ${connectedWallet.address}`);
-        //console.log(`New wallet private key: ${newWallet.privateKey}`);
+        console.log(`🌞🔹New wallet address: ${connectedWallet.address}`);
+        console.log(`📂🔏New wallet private key: ${newWallet.privateKey}`);
       }
+      // Log fresh wallet
+      console.log('Wallet In full: ', wallet);
 
-      const encryptedData = {
-        address: wallet.address,
-        encryptedPrivateKey: encrypt(wallet.privateKey),
-        encryptedMnemonic: encrypt(wallet.mnemonic || ""),
-        createdAt: new Date(),
-      };
-
+      // Remove spaces for encryption on mnemonic * encrypt
+      const encryptedData = this.formatWallet(wallet);
       await this.usersCollection.updateOne(
         { telegramId: userId.toString() },
         { $push: { [`wallets.${network}`]: encryptedData } },
@@ -191,6 +187,20 @@ class WalletService extends EventEmitter {
       throw error;
     }
   }
+
+  /**
+   * Formats wallet data for storage.
+   * @param {Object} wallet - Wallet object.
+   * @returns {Object} - Formatted wallet object with encrypted keys.
+   */
+  formatWallet(wallet) {
+    return {
+      address: wallet.address,
+      encryptedPrivateKey: encrypt(wallet.privateKey), 
+      encryptedMnemonic: encrypt(wallet.mnemonic?.phrase || "No Mnemonic for this wallet"), 
+      createdAt: new Date(),
+    };
+  } 
 
   async createAvalancheWallet() {
     try {

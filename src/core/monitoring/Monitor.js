@@ -43,7 +43,7 @@ class MonitoringSystem extends EventEmitter {
   registerComponent(componentName, { getMetrics, getHealth }) {
     if (!this.components.has(componentName)) {
       this.components.set(componentName, { getMetrics, getHealth });
-      console.log(`Component ${componentName} registered for monitoring`);
+      console.log(`💧 Component ${componentName} registered for monitoring`);
     }
   }
 

@@ -130,7 +130,7 @@ async function sendQuoteDetails(bot, axiosInstance, provider, userId, quote, inp
 export async function getDetailedFormattedBalancesETH(wallet, tokenList = [], provider) {
   // For ETH, we use the ETH endpoint from config.
   const axiosInstance = axios.create({
-    baseURL: config.etherEndpoint,
+    baseURL: config.ethereumEndpoint,
     headers: { "Content-Type": "application/json" }
   });
 

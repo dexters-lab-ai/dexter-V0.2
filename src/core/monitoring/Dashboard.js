@@ -620,7 +620,7 @@ function renderAIMetrics(ai) {
           <div class="metric-icon">
             <i class="fas fa-comments"></i>
           </div>
-          <div class="metric-info">
+          <div class="metric-info small-ai-stat">
             <h3>Message Stats</h3>
             <p>Total: ${ai.messages.total || 0}</p>
             <p>Text: ${ai.messages.text || 0} | Audio: ${ai.messages.audio || 0}</p>
@@ -1741,7 +1741,7 @@ function getDashboardStyles() {
       }
 
       .small-ai-stat {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.05);
         padding: 4px 6px;
         font-size: 0.85rem;
         margin: 2px 0;

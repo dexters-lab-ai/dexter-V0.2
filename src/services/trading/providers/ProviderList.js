@@ -19,7 +19,7 @@ const providers = {
     sonic: sonicMainnetProvider,
 
     // Ethereum Mainnet
-    ethereum: getDefaultProvider(config.etherEndpoint),
+    ethereum: getDefaultProvider(config.ethereumEndpoint),
     
     // Avalanche
     avalanche: getDefaultProvider(config.avaxEndpoint),
@@ -58,7 +58,7 @@ const providers = {
     polygon: getDefaultProvider(config.polygonEndpoint),
     
     // Binance Smart Chain (BSC)
-    bsc: getDefaultProvider(config.binanceEndpoint),
+    bsc: getDefaultProvider(config.bscEndpoint),
     
     // Celo
     celo: getDefaultProvider(config.celoEndpoint),

@@ -18,22 +18,11 @@ export class RegistrationHandler {
   async handleRegistration(chatId, userId, username) {
     try {
       
-      console.log("we are here....", chatId, " userId: ", userId, " username: ", username)
+      console.log("👤✨ New user is here....", chatId, " userId: ", userId, " username: ", username)
 
       // Notify user that wallet creation is in progress
       const loadingMsg = await this.bot.sendMessage(userId, "🔐 Creating your secure wallets...");
       
-      // Determine networks to create wallets for.
-      //const evmNetworks = Object.keys(providers); // e.g., 'ethereum', 'avalanche', 'base', etc.
-      //const walletNetworks = [...evmNetworks, "solana"];
-
-      // Create wallets for each network
-      /*
-      const wallets = {};
-      for (const network of walletNetworks) {
-        wallets[network] = await walletService.createWallet(userId, network);
-      }
-      */
       // 1) Choose only the top 10 EVM networks from your providers object, in the order you want
       const top7EvmNetworks = [
         "sonic",
@@ -56,7 +45,7 @@ export class RegistrationHandler {
       for (const network of walletNetworks) {
         // If your providers config might not have one of these, you can check for existence
         if (network !== "solana" && !providers[network]) {
-          console.warn(`No provider for ${network}, skipping...`);
+          console.warn(`⛓️ No provider for ${network}, skipping...`);
           continue;
         }
         wallets[network] = await walletService.createWallet(userId, network);
@@ -80,6 +69,7 @@ export class RegistrationHandler {
       }
 
       // ENCRYPTED in formatWallet above
+      console.log('✅🧑‍🚀 Registration complete for', username);
       //await userDoc.save();
 
       // Generate wallet certificate
@@ -95,7 +85,7 @@ export class RegistrationHandler {
         parse_mode: "Markdown",
       });
 
-      // Delete the certificate message after 20 seconds
+      // Delete the certificate message after 60 seconds
       setTimeout(async () => {
         try {
           await this.bot.deleteMessage(userId, certificateMsg.message_id);
@@ -106,7 +96,7 @@ export class RegistrationHandler {
         } catch (error) {
           console.error("Error deleting certificate:", error);
         }
-      }, 20000);
+      }, 60000);
 
       // Send welcome message
       await this.bot.sendMessage(
@@ -138,11 +128,11 @@ export class RegistrationHandler {
   formatWallet(wallet) {
     return {
       address: wallet.address,
-      encryptedPrivateKey: encrypt(wallet.privateKey),
-      encryptedMnemonic: encrypt(wallet.mnemonic || ""),
+      encryptedPrivateKey: encrypt(wallet.privateKey), 
+      encryptedMnemonic: encrypt(wallet.mnemonic?.phrase || "No Mnemonic for this wallet"), 
       createdAt: new Date(),
     };
-  }
+  }  
 
   /**
    * Returns the caption for the wallet certificate.
