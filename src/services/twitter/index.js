@@ -86,11 +86,20 @@ class TwitterService extends EventEmitter {
     if (this.initialized) return;
     try {
       await queueService.initialize();
-      const kolQueue = queueService.getQueue('kolMonitor');
-      kolQueue.process(async (job) => {
-        const { userId, handle, amount } = job.data;
-        await this.checkNewTweets(userId, handle, amount);
-      });
+      if (queueService.degraded) {
+        console.warn('⚠️ QueueService is degraded. KOL monitoring jobs will not be scheduled.');
+      } else {
+        const kolQueue = queueService.getQueue('kolMonitor');
+        kolQueue.process(async (job) => {
+          const { userId, handle, amount } = job.data;
+          try {
+            await this.checkNewTweets(userId, handle, amount);
+          } catch (error) {
+            console.error(`Error processing KOL monitor job for @${handle}:`, error);
+            await ErrorHandler.handle(error);
+          }
+        });
+      }
       await this.restoreActiveMonitors();
       await queueService.logQueueContents('kolMonitor');
       //await this.triggerImmediateChecks();

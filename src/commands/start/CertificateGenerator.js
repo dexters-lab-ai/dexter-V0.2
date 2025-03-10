@@ -277,10 +277,10 @@ export class CertificateGenerator {
   }
 
   drawWalletCard(x, y, width, height, network, wallet) {
-    // Draw container matching your UI cards
+    // Draw the card container with your clean UI
     this.drawModernContainer(x, y, width, height);
     
-    // Network indicator with green checkmark like your "Healthy" indicators
+    // Green checkmark for network success indicator
     this.ctx.save();
     this.ctx.fillStyle = '#4caf50';
     this.ctx.shadowColor = 'rgba(76, 175, 80, 0.6)';
@@ -288,8 +288,8 @@ export class CertificateGenerator {
     this.ctx.beginPath();
     this.ctx.arc(x + 25, y + 30, 10, 0, Math.PI * 2);
     this.ctx.fill();
-    
-    // Add checkmark
+
+    // White checkmark
     this.ctx.strokeStyle = '#ffffff';
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
@@ -298,102 +298,97 @@ export class CertificateGenerator {
     this.ctx.lineTo(x + 30, y + 25);
     this.ctx.stroke();
     this.ctx.restore();
-    
-    // Network name with capitalized first letter
+
+    // Network name formatting
     const networkName = network.charAt(0).toUpperCase() + network.slice(1);
     this.ctx.font = `bold 18px ${this.font}`;
     this.ctx.fillStyle = '#ffffff';
     this.ctx.textAlign = 'left';
     this.ctx.fillText(networkName, x + 45, y + 30);
-    
-    // Wallet address
+
+    // Wallet Address (Truncated for readability)
     this.ctx.font = `normal 16px ${this.font}`;
     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    
-    // Truncate address for cleaner display
     const address = wallet.address;
     const truncatedAddress = address.substring(0, 8) + '...' + address.substring(address.length - 6);
     this.ctx.fillText(`Address: ${truncatedAddress}`, x + 45, y + 60);
-    
-    // Private/Public key (based on network type)
+
+    // Private or Public Key display (depending on network)
     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     let keyType, keyValue;
-    
+
     if (network === 'solana' || network === 'avalanche') {
-      keyType = 'Private Key:';
-      keyValue = wallet.privateKey;
+        keyType = 'Private Key:';
+        keyValue = wallet.privateKey;
     } else {
-      keyType = 'Public Key:';
-      keyValue = wallet.publicKey;
+        keyType = 'Public Key:';
+        keyValue = wallet.publicKey;
     }
-    
+
     // Implement text wrapping for the key
     const maxWidth = width - 60;
     const lineHeight = 24;
-    let keyY = y + 90;
-    
-    // Draw the key type (label)
+    let keyY = y + 90; // Start position for the key
+
+    // Draw the key type label first
     this.ctx.fillText(keyType, x + 45, keyY);
     
-    // Calculate the width of the key type text to determine the starting point for the key value
+    // Calculate where the key value should start after the label
     const keyTypeWidth = this.ctx.measureText(keyType).width;
-    const startX = x + 45 + keyTypeWidth + 5; // Add a small space after the label
-    
-    // Wrap and draw the key value
-    this.wrapText(this.ctx, keyValue, startX, keyY, maxWidth, lineHeight);
-    
-    // Update keyY to account for possible multiple lines from the wrapped key
-    // Assuming the key might take up to 2 lines (adjust as needed)
-    keyY += (network === 'solana' || network === 'avalanche' ? lineHeight * 2 : lineHeight);
-    
-    // Add mnemonic if available
-    if (wallet.mnemonic) {
-      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-      const mnemonicPhrase = typeof wallet.mnemonic === 'string' ? 
-        wallet.mnemonic : 
-        (wallet.mnemonic.phrase || 'N/A');
-        
-      // Format mnemonic to fit in two lines if needed
-      const words = mnemonicPhrase.split(' ');
-      const firstLine = words.slice(0, 6).join(' ');
-      const secondLine = words.slice(6).join(' ');
-      
-      this.ctx.fillText(`Mnemonic: ${firstLine}`, x + 45, keyY + 30);
-      if (secondLine) {
-        this.ctx.fillText(`${secondLine}`, x + 125, keyY + 60);
-      }
-    }
-}
+    const startX = x + 45 + keyTypeWidth + 5;
 
-// Add this helper method to your class
-wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-    // First determine if text needs wrapping
-    const textWidth = ctx.measureText(text).width;
+    // Wrap and draw the key value
+    const linesUsed = this.wrapText(this.ctx, keyValue, startX, keyY, maxWidth, lineHeight);
     
-    if (textWidth <= maxWidth) {
-        // Text fits in one line
-        ctx.fillText(text, x, y);
-        return 1; // Return line count
-    } else {
-        // Determine a good breaking point
-        let breakPoint = Math.floor(text.length * (maxWidth / textWidth));
+    // Dynamically adjust position for the mnemonic based on key height
+    keyY += lineHeight * linesUsed + 10;
+
+    // Mnemonic handling with better spacing and alignment
+    if (wallet.mnemonic) {
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+        const mnemonicPhrase = typeof wallet.mnemonic === 'string' ? 
+            wallet.mnemonic : 
+            (wallet.mnemonic.phrase || 'N/A');
+
+        // 🔹 Split into two lines if needed
+        const words = mnemonicPhrase.split(' ');
+        const firstLine = words.slice(0, 6).join(' ');
+        const secondLine = words.slice(6).join(' ');
+
+        // Move Mnemonic label closer to the key
+        this.ctx.fillText(`Mnemonic: ${firstLine}`, x + 45, keyY);
         
-        // Ensure we don't break in the middle of a character (particularly important for hex strings)
-        if (breakPoint > 0 && breakPoint < text.length) {
-            // For crypto keys, breaking at character level is fine
-            ctx.fillText(text.substring(0, breakPoint), x, y);
-            
-            // Move to the beginning of next line (align with label indent)
-            const labelIndent = x - 5 - ctx.measureText("Private Key:").width; // Adjustable
-            ctx.fillText(text.substring(breakPoint), labelIndent, y + lineHeight);
-            
-            return 2; // Return line count
-        } else {
-            // Text fits in one line after all
-            ctx.fillText(text, x, y);
-            return 1;
+        // If there's a second line, place it closer (aligned properly)
+        if (secondLine) {
+            this.ctx.fillText(`${secondLine}`, x + 125, keyY + lineHeight);
         }
     }
+  }
+
+  /**
+   * Ensures private keys/mnemonic wrap properly while keeping a readable format.
+   */
+  wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    let words = text.split(" ");
+    let line = "";
+    let lines = 0;
+
+    for (let i = 0; i < words.length; i++) {
+        let testLine = line + words[i] + " ";
+        let metrics = ctx.measureText(testLine);
+        let testWidth = metrics.width;
+
+        if (testWidth > maxWidth && i > 0) {
+            ctx.fillText(line, x, y);
+            line = words[i] + " ";
+            y += lineHeight;
+            lines++;
+        } else {
+            line = testLine;
+        }
+    }
+    ctx.fillText(line, x, y);
+    return lines + 1; // Return total lines used  
   }
 
   async drawFooter() {

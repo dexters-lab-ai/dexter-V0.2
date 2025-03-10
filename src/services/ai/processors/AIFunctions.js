@@ -1419,7 +1419,7 @@ export const AIFunctions = [
       // Pumpfun Service
       {
         name: "subscribe_pumpfun_new_token",
-        description: "Subscribe a user for new token notifications via PumpFun service.",
+        description: "Start or Subscribe a user for new token notifications via PumpFun service. This allows you to auto detect all tokens on Pumpfun as they launch. Start it for user to monitor tokens",
         parameters: {
           type: "object",
           properties: {

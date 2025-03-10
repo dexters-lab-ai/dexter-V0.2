@@ -25,7 +25,7 @@ export class HealthMonitor extends EventEmitter {
       console.log('🔧 Initializing HealthMonitor dependencies...');
       
       // Initialize dependencies (lazy loading or setup as needed)
-      await aiMetricsService.initialize()
+      await aiMetricsService.initialize();
 
       console.log('✅ Dependencies initialized. Setting up health checks...');
       
@@ -68,29 +68,6 @@ export class HealthMonitor extends EventEmitter {
       throw new Error(`Health check not implemented for service ${service.constructor.name}`);
     } catch (error) {
       throw new Error(`${service.constructor.name} unreachable: ${error.message}`);
-    }
-  }
-
-  async checkRedisHealth() {
-    try {
-      const redisClient = kolMonitorQueue.client;
-      if (!redisClient || !redisClient.status === 'ready') {
-        return {
-          status: 'unhealthy',
-          error: 'Redis client not connected'
-        };
-      }
-
-      await redisClient.ping();
-      return {
-        status: 'healthy',
-        timestamp: new Date()
-      };
-    } catch (error) {
-      return {
-        status: 'unhealthy',
-        error: error.message
-      };
     }
   }
 
@@ -137,17 +114,17 @@ export class HealthMonitor extends EventEmitter {
 
   async restartService(serviceName) {
     const restartCount = this.restartAttempts.get(serviceName) || 0;
-
     if (restartCount >= this.maxRestartAttempts) {
       console.warn(`Max restart attempts reached for service: ${serviceName}`);
       return;
     }
-
+  
     console.warn(`Attempting to restart service: ${serviceName} (Attempt ${restartCount + 1})`);
-
+  
+    // Only try to restart queue-dependent services (or Redis) without overwhelming connections.
     const exponentialDelay = Math.min(1000 * 2 ** restartCount, 30000);
     this.restartAttempts.set(serviceName, restartCount + 1);
-
+  
     setTimeout(async () => {
       try {
         const service = this.getServiceInstance(serviceName);
@@ -160,10 +137,11 @@ export class HealthMonitor extends EventEmitter {
         }
       } catch (error) {
         console.error(`Failed to restart service: ${serviceName}`, error);
+        // Instead of continuous restart attempts, log the error and wait for the next health check cycle.
         await ErrorHandler.handle(error);
       }
     }, exponentialDelay);
-  }
+  }  
 
   getServiceInstance(serviceName) {
     const serviceMap = {

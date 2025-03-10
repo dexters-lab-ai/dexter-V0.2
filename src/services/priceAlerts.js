@@ -27,21 +27,29 @@ class PriceAlertService extends EventEmitter {
     if (this.initializationPromise) {
       return this.initializationPromise;
     }
-
+  
     this.initializationPromise = (async () => {
       try {
-        // Initialize queue service
+        // Initialize the shared queue service.
         await queueService.initialize();
         
-        // Get dedicated queue for price alerts
-        this.alertQueue = queueService.getQueue(this.QUEUE_NAME);
-        
-        // Set up job processors
-        await this.setupJobProcessors();
-        
-        // Start the global monitoring interval
-        this.priceMonitoringService.startMonitoring();
-
+        // Check if the queue service is in degraded mode.
+        if (queueService.degraded) {
+          console.warn('⚠️ QueueService is degraded. Price alert jobs will be run in fallback mode.');
+          // In degraded mode, you might choose to trigger direct polling.
+          // For example, start a fallback price monitoring interval:
+          this.startFallbackMonitoring();
+        } else {
+          // Get dedicated queue for price alerts
+          this.alertQueue = queueService.getQueue(this.QUEUE_NAME);
+          
+          // Set up job processors for scheduled jobs
+          await this.setupJobProcessors();
+          
+          // Start the global monitoring interval through the PriceMonitoringService
+          this.priceMonitoringService.startMonitoring();
+        }
+  
         this.initialized = true;
         this.emit('initialized');
         return true;
@@ -51,9 +59,9 @@ class PriceAlertService extends EventEmitter {
         throw error;
       }
     })();
-
+  
     return this.initializationPromise;
-  }
+  }  
 
   async setupJobProcessors() {
     // Process alert execution jobs

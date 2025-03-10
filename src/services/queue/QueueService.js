@@ -36,56 +36,71 @@ class QueueService extends EventEmitter {
           reconnectStrategy: (times) => Math.min(times * 100, 2000)
         }
       });
-
+  
       this.redisClient.on('error', async (error) => {
         console.error('❌ Redis connection error:', error);
         await ErrorHandler.handle(error);
+        // Optionally, mark as degraded so that queue-dependent services can later check this flag
+        this.degraded = true;
       });
-
+  
       this.redisClient.on('connect', () => {
         console.log('✅ Redis client connected');
+        this.degraded = false; // Reset degraded state on connect
       });
-
-      await this.waitForRedis(30000);
-
-      // Create default queues
-      await this.createQueue('tasks');
-      await this.createQueue('priceAlerts');
-      await this.createQueue('kolMonitor');
-
-      // Hard reset all queues on startup to clear past jobs
-      // await this.resetAllQueues();
-
-      // Start health checks and queue monitoring
-      this.startHealthChecks();
-      this.startQueueMonitoring();
-
+  
+      // Attempt to wait for Redis connection with limited attempts
+      try {
+        await this.waitForRedis(30000);
+      } catch (err) {
+        console.error('❌ Redis did not connect in time. Running in degraded mode.');
+        this.degraded = true;
+        // Do not throw error—allow the system to continue running.
+      }
+  
+      // Only create queues if Redis is available (non-degraded)
+      if (!this.degraded) {
+        await this.createQueue('tasks');
+        await this.createQueue('priceAlerts');
+        await this.createQueue('kolMonitor');
+        // Optionally, start health checks and monitoring only when not degraded.
+        this.startHealthChecks();
+        this.startQueueMonitoring();
+      } else {
+        console.warn('⚠️ QueueService is running in degraded mode due to Redis unavailability.');
+      }
+  
       this.initialized = true;
       console.log('✅ QueueService initialized');
     } catch (error) {
       console.error('❌ Error initializing QueueService:', error);
-      throw error;
+      // Do not crash the entire system – rethrow only if absolutely necessary.
+      // throw error;
     }
-  }
+  }  
 
-  async waitForRedis(timeout = 30000) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('Redis connection timeout'));
-      }, timeout);
-
-      this.redisClient.once('ready', () => {
-        clearTimeout(timer);
-        console.log('✅ Redis client is ready!');
-        resolve();
-      });
-
-      this.redisClient.connect().catch((err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
-  }
+  async waitForRedis(timeout = 30000, maxAttempts = 3) {
+    let attempts = 0;
+    const startTime = Date.now();
+    while (attempts < maxAttempts && (Date.now() - startTime) < timeout) {
+      try {
+        if (!this.redisClient.isReady) {
+          console.log(`Attempt ${attempts + 1}: Waiting for Redis to be ready...`);
+          await this.redisClient.connect();
+        }
+        if (this.redisClient.isReady) {
+          console.log('✅ Redis client is ready!');
+          return;
+        }
+      } catch (err) {
+        attempts++;
+        console.error(`❌ Redis connection attempt ${attempts} failed:`, err.message);
+        // Wait a bit before retrying (exponential backoff)
+        await new Promise(res => setTimeout(res, Math.min(1000 * 2 ** attempts, 5000)));
+      }
+    }
+    throw new Error('Redis connection failed after maximum attempts.');
+  }  
 
   async createQueue(name, options = {}) {
     if (this.queues.has(name)) {

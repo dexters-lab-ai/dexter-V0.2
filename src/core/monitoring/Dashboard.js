@@ -297,13 +297,18 @@ function renderHeader() {
         <img src="${baseUrl}/images/dail.png" alt="D.A.I.L" class="logo" />
         <h1>D.A.I.L</h1>
       </div>
-      <div class="nav-links">
-        <a href="${baseUrl}" class="nav-link">API Landing</a>
+      
+      <!-- Mobile Menu Button -->
+      <button class="mobile-menu-toggle" id="mobileMenuToggle">
+        <i class="fas fa-bars"></i>
+      </button>
+
+      <div class="nav-links" id="navLinks">
+        <a href="${baseUrl}" class="nav-link">API Service</a>
         <a href="https://t.me/the_ai_lab_announcements" class="nav-link">Telegram</a>
         <a href="https://x.com/dexters_ai_lab" class="nav-link">Twitter</a>
       </div>
     </nav>
-    <div style="margin-top:7rem;"></div>
   `;
 }
 
@@ -958,8 +963,8 @@ function renderApiSection() {
         <p>Select a tier to generate your API key:</p>
         <div class="tier-cards">
           <div class="tier-card">
-            <h4>Basic</h4>
-            <p class="price">$49/month</p>
+            <h4>Test</h4>
+            <p class="price">$/month</p>
             <ul>
               <li>1,000 calls/month</li>
               <li>Standard rate limits</li>
@@ -968,8 +973,8 @@ function renderApiSection() {
             <button class="tier-button" data-tier="basic">Get Basic API Key</button>
           </div>
           <div class="tier-card featured">
-            <h4>Pro</h4>
-            <p class="price">$199/month</p>
+            <h4>Basic</h4>
+            <p class="price">$49/month</p>
             <ul>
               <li>10,000 calls/month</li>
               <li>Higher rate limits</li>
@@ -1207,21 +1212,20 @@ function getDashboardStyles() {
        ************************************************************/
       .glass-nav {
         position: fixed;
-        top: 0; left: 0;
+        top: 0;
+        left: 0;
         width: 100%;
         padding: 1rem 2rem;
         background: rgba(0, 0, 0, 0.45);
         backdrop-filter: blur(15px) saturate(150%);
-        box-shadow: 0 0 25px rgba(0, 255, 255, 0.3), 
-                    0 0 60px rgba(0, 255, 255, 0.2) inset;
-        border- bottom: 1px solid rgba(255, 255, 255, 0.2);
+        /* box-shadow: 0 0 25px rgba(0, 255, 255, 0.3), 0 0 60px rgba(0, 255, 255, 0.2) inset; */
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
         z-index: 1000;
         display: flex;
         align-items: center;
         justify-content: space-between;
         overflow: visible;
-        animation: navFadeIn 1s ease;
-        position: relative; /* for nav-glow-border */
+        font-size: 1rem;
       }
       @keyframes navFadeIn {
         0% { opacity: 0; transform: translateY(-10px); }
@@ -1263,7 +1267,7 @@ function getDashboardStyles() {
       }
       /* Enforceed */
       .nav-brand img.logo {
-        height: 40px;       /* fixed height so it's not huge */
+        height: 50px;       /* fixed height so it's not huge */
         width: auto;        /* keep aspect ratio */
         object-fit: contain;
         filter: drop-shadow(0 0 6px rgba(0, 255, 255, 0.8));
@@ -1316,6 +1320,48 @@ function getDashboardStyles() {
         background: rgba(0, 255, 255, 0.1);
       }
 
+      /* Hide the menu on smaller screens */
+      @media (max-width: 768px) {
+        .nav-links {
+          position: absolute;
+          top: 60px;
+          right: 0;
+          background: rgba(0, 0, 0, 0.9);
+          flex-direction: column;
+          width: 200px;
+          padding: 1rem;
+          box-shadow: -5px 5px 15px rgba(0, 255, 255, 0.3);
+          display: none;
+        }
+
+        .nav-links a {
+          padding: 0.75rem;
+          text-align: center;
+          display: block;
+        }
+
+        /* Show when active */
+        .nav-links.active {
+          display: flex;
+        }
+
+        /* Mobile menu button */
+        .mobile-menu-toggle {
+          display: block;
+          background: none;
+          border: none;
+          font-size: 1.5rem;
+          color: #ffffff;
+          cursor: pointer;
+        }
+      }
+
+      @media (min-width: 769px) {
+        .mobile-menu-toggle {
+          display: none;
+        }
+      }
+
       /* Dashboard Container with Glass & Neon Effects */
       .dashboard-container {
         max-width: 1400px;
@@ -1323,13 +1369,13 @@ function getDashboardStyles() {
         padding: 2rem;
         background: var(--glass);
         /* backdrop-filter: blur(10px); */
-        background: inherit;
+        background: #09162e;
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 20px;
+        border-radius: 24px;
         position: relative;
         z-index: 2;
         overflow: hidden;
-        box-shadow: 0 0 10px var(--neon);
+        box-shadow: 0 0 1px var(--neon);
       }
       .dashboard-container::before {
         content: "";
@@ -1469,6 +1515,37 @@ function getDashboardStyles() {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-5px); }
       }
+      
+      /* Adjust test tube for mobile */
+      @media (max-width: 768px) {
+        .test-tube {
+          width: 30px; /* Reduce width */
+          height: 120px; /* Reduce height */
+          right: 5%; /* Adjust position */
+        }
+      }
+
+      @media (max-width: 480px) {
+        .test-tube {
+          width: 25px; /* Even smaller for very small screens */
+          height: 100px;
+          right: 3%;
+        }
+      }
+
+      /* Smaller liquid for mobile */
+      @media (max-width: 768px) {
+        .test-tube .liquid {
+          height: 50%;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .test-tube .liquid {
+          height: 40%;
+        }
+      }
+
       /* Cyberpunk Background Layers */
       .lab-container {
         position: fixed;
@@ -2589,6 +2666,16 @@ function getDashboardScripts() {
         // 2) DOMContentLoaded: set up all your event listeners
         //
         document.addEventListener('DOMContentLoaded', () => {
+          // Menu scripts
+          const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+          const navLinks = document.getElementById('navLinks');
+
+          if (mobileMenuToggle && navLinks) {
+            mobileMenuToggle.addEventListener('click', () => {
+              navLinks.classList.toggle('active');
+            });
+          }
+
           createMatrixBackground();
           //createLabEffects();
           initParticles();

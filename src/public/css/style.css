@@ -23,6 +23,16 @@
     color: var(--text);
     line-height: 1.6;
   }
+
+  .app-container {
+    overflow: hidden;    
+  }
+
+  @media (max-width: 768px) {
+    .app-container {
+        padding: 10px;
+    }
+  }
   
   /* Glass Morphism Effect */
   .glass-nav {
@@ -31,10 +41,11 @@
     left: 0;
     width: 100%;
     padding: 1rem 2rem;
+    box-sizing: border-box;
     background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(15px) saturate(150%);
-    box-shadow: 0 0 25px rgba(0, 255, 255, 0.3), 0 0 60px rgba(0, 255, 255, 0.2) inset;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    /* box-shadow: 0 0 25px rgba(0, 255, 255, 0.3), 0 0 60px rgba(0, 255, 255, 0.2) inset; */
+    border-bottom: 0.5px solid rgba(255, 255, 255, 0.2);
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -61,7 +72,7 @@
   }
   
   .nav-brand img.logo {
-    height: 40px;
+    height: 50px;
     width: auto;
     object-fit: contain;
     filter: drop-shadow(0 0 6px rgba(0, 255, 255, 0.8));
@@ -92,6 +103,37 @@
   .nav-link:hover {
     background: rgba(255, 255, 255, 0.1);
   }
+
+  /* Mobile Styles */
+  @media (max-width: 768px) {
+    .nav-links {
+        display: none; /* Hide nav links on small screens */
+        flex-direction: column;
+        position: absolute;
+        top: 60px;
+        left: 0;
+        width: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 10px;
+        text-align: center;
+    }
+
+    .nav-links.active {
+        display: flex; /* Show menu when active */
+    }
+
+    .mobile-menu-toggle {
+      display: block;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      position: absolute;
+      top: 15px;
+      right: 20px;
+    }
+  }
   
   /* Hero Section */
   .hero {
@@ -114,6 +156,190 @@
     background: linear-gradient(45deg, var(--primary), var(--secondary));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+  }
+
+  /* Tesseract */
+  .hero-container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      perspective: 1000px;
+  }
+
+  .btn {
+      padding: 12px 24px;
+      background: transparent;
+      color: white;
+      border: 2px solid white;
+      border-radius: 4px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  }
+
+  .btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+  }
+
+  .tesseract {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      animation: rotate 60s infinite linear;
+  }
+
+  .grid {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+  }
+
+  .grid-line {
+      position: absolute;
+      background: rgba(100, 100, 255, 0.2);
+      box-shadow: 0 0 10px rgba(100, 200, 255, 0.8);
+  }
+
+  .horizontal-line {
+      width: 100%;
+      height: 2px;
+  }
+
+  .vertical-line {
+      width: 2px;
+      height: 100%;
+  }
+
+  .cube-face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border: 2px solid;
+      opacity: 0.7;
+      backface-visibility: visible;
+  }
+
+  .front {
+      transform: translateZ(25px);
+  }
+
+  .back {
+      transform: translateZ(-25px) rotateY(180deg);
+  }
+
+  .left {
+      transform: translateX(-25px) rotateY(-90deg);
+  }
+
+  .right {
+      transform: translateX(25px) rotateY(90deg);
+  }
+
+  .top {
+      transform: translateY(-25px) rotateX(90deg);
+  }
+
+  .bottom {
+      transform: translateY(25px) rotateX(-90deg);
+  }
+
+  /*
+  @keyframes rotate {
+    0% {
+        transform: rotateX(0) rotateY(0);
+    }
+    100% {
+        transform: rotateX(360deg) rotateY(360deg);
+    }
+  }
+
+  @keyframes float {
+    0%, 100% {
+        transform: translateY(0) translateZ(var(--cube-depth));
+    }
+    50% {
+        transform: translateY(-20px) translateZ(var(--cube-depth));
+    }
+  }
+    */
+  /* ALT Animation - disable float and roate above & enable this togther with the script disabled in head: grid is static & cubes move around in 3D
+    - if above is disabled then below is enabled
+  
+  */
+  @keyframes floatAndRotate {
+    0% {
+        transform: rotateX(var(--cube-rot-x))
+                   rotateY(var(--cube-rot-y))
+                   translateY(0)
+                   translateZ(var(--cube-depth));
+    }
+    50% {
+        transform: rotateX(calc(var(--cube-rot-x) + 180deg))
+                   rotateY(calc(var(--cube-rot-y) + 180deg))
+                   translateY(-20px)
+                   translateZ(var(--cube-depth));
+    }
+    100% {
+        transform: rotateX(calc(var(--cube-rot-x) + 360deg))
+                   rotateY(calc(var(--cube-rot-y) + 360deg))
+                   translateY(0)
+                   translateZ(var(--cube-depth));
+    }
+  }
+  .cube {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      transform-style: preserve-3d;
+      animation: floatAndRotate 7s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hanging-cable {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 4px;
+      height: 200px;
+      background: linear-gradient(to bottom, var(--primary-color), var(--secondary-color));
+      box-shadow: 0 0 15px var(--primary-color);
+      cursor: pointer;
+      z-index: 10;
+      transform-origin: top center;
+      animation: swing 4s infinite ease-in-out;
+  }
+
+  .cable-end {
+    position: absolute;
+    bottom: -15px;
+    left: -8px;
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(to bottom, var(--primary-color), var(--secondary-color));
+    border-radius: 50%;
+    box-shadow: 0 0 15px var(--primary-color);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  .cable-end:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 25px var(--primary-color);
+  }  
+
+  @keyframes swing {
+      0%, 100% {
+          transform: rotate(-2deg);
+      }
+      50% {
+          transform: rotate(2deg);
+      }
   }
 
   /* Testtube animation */

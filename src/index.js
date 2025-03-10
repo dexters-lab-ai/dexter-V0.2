@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
+import cors from 'cors';
 
 import WebSocket, { WebSocketServer } from 'ws';
 import express from 'express';
@@ -63,8 +64,30 @@ class ServerManager {
   
     // Health check endpoint
     this.app.get('/health', (req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*'); // Allow any requesting domain
+      res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.json({ status: 'healthy', uptime: process.uptime() });
-    });
+    });      
+
+    // Allow all origins (or restrict to Netlify domain)
+    this.app.use(cors({
+      //origin: ['https://dexter-ai.io', 'https://dail-agent.ngrok.app'],
+      origin: '*', // Allow any domain
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      allowedHeaders: 'Content-Type,Authorization',
+      credentials: true,
+    }));
+
+    // OR Restrict only to our Netlify site for security
+    /*
+    app.use(cors({
+      origin: 'https://dexter-ai.io',
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      allowedHeaders: 'Content-Type,Authorization',
+    }));
+    */
   
     // Handle 404s
     this.app.use((req, res) => {

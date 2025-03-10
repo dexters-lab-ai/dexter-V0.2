@@ -70,7 +70,7 @@ export class RegistrationHandler {
 
       // ENCRYPTED in formatWallet above
       console.log('✅🧑‍🚀 Registration complete for', username);
-      //await userDoc.save();
+      await userDoc.save();
 
       // Generate wallet certificate
       const certificateBuffer = await this.certificateGenerator.generate({
