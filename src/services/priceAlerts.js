@@ -23,6 +23,30 @@ class PriceAlertService extends EventEmitter {
     };
   }
 
+  startFallbackMonitoring() {
+    // Example: Check all active alerts every minute
+    this.fallbackInterval = setInterval(async () => {
+      try {
+        // Fetch all active alerts (or a subset for performance)
+        const activeAlerts = await PriceAlert.find({ isActive: true }).lean();
+        for (const alert of activeAlerts) {
+          // Call the price check method directly (without queuing)
+          await this.checkAlertPrice(alert._id);
+        }
+      } catch (error) {
+        console.error('Error in fallback price monitoring:', error);
+        await ErrorHandler.handle(error);
+      }
+    }, 60 * 1000); // every minute
+  }
+  
+  stopFallbackMonitoring() {
+    if (this.fallbackInterval) {
+      clearInterval(this.fallbackInterval);
+      this.fallbackInterval = null;
+    }
+  }  
+
   async initialize() {
     if (this.initializationPromise) {
       return this.initializationPromise;
@@ -36,8 +60,8 @@ class PriceAlertService extends EventEmitter {
         // Check if the queue service is in degraded mode.
         if (queueService.degraded) {
           console.warn('⚠️ QueueService is degraded. Price alert jobs will be run in fallback mode.');
-          // In degraded mode, you might choose to trigger direct polling.
-          // For example, start a fallback price monitoring interval:
+          // In degraded mode, trigger direct polling.
+          // start a fallback price monitoring interval:
           this.startFallbackMonitoring();
         } else {
           // Get dedicated queue for price alerts
@@ -49,7 +73,8 @@ class PriceAlertService extends EventEmitter {
           // Start the global monitoring interval through the PriceMonitoringService
           this.priceMonitoringService.startMonitoring();
         }
-  
+        
+        this.priceCache = new Map();  
         this.initialized = true;
         this.emit('initialized');
         return true;
@@ -127,39 +152,43 @@ class PriceAlertService extends EventEmitter {
 
   async scheduleAlertCheck(alertId) {
     try {
+      // If queue service is degraded, skip job scheduling and trigger a direct check.
+      if (queueService.degraded || !this.alertQueue) {
+        console.warn('⚠️ QueueService is degraded; running immediate price check directly.');
+        await this.checkAlertPrice(alertId);
+        return { fallback: true };
+      }
+  
       // Add immediate price check job
       const immediateJob = await this.alertQueue.add(
         this.JOB_TYPES.CHECK_PRICE,
         { alertId },
         {
           attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 5000
-          },
+          backoff: { type: 'exponential', delay: 5000 },
           removeOnComplete: true,
           jobId: `check_${alertId}_${Date.now()}`
         }
       );
-
-      // Add recurring price check (every minute)
+  
+      // Schedule recurring job – use your repeatable job method (assuming addRecurringJob is implemented)
       const recurringJob = await queueService.addRecurringJob(
         this.QUEUE_NAME,
         this.JOB_TYPES.CHECK_PRICE,
         { alertId },
-        '* * * * *', // Every minute
+        '* * * * *', // every minute
         {
           jobId: `recurring_check_${alertId}`,
           removeOnComplete: true
         }
       );
-
+  
       return { immediateJob, recurringJob };
     } catch (error) {
       await ErrorHandler.handle(error);
       throw error;
     }
-  }
+  }  
 
   async checkAlertPrice(alertId) {
     try {
@@ -198,19 +227,33 @@ class PriceAlertService extends EventEmitter {
 
   async getCurrentPrice(tokenAddress) {
     try {
+      // Check if the price is cached (simple in-memory cache)
+      if (!this.priceCache) {
+        this.priceCache = new Map();
+      }
+      const now = Date.now();
+      const cached = this.priceCache.get(tokenAddress);
+      // Cache duration: 30 seconds
+      if (cached && (now - cached.timestamp) < 30000) {
+        return cached.price;
+      }
+  
       const quote = await this.jupiterQuickNode.getCachedQuote({
         inputMint: tokenAddress,
         outputMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
         amount: '1000000000' // 1 unit in smallest denomination
       });
-
+  
       if (!quote?.outAmount) return null;
-      return parseFloat(quote.outAmount) / 1000000000;
+      const price = parseFloat(quote.outAmount) / 1000000000;
+      // Save in cache
+      this.priceCache.set(tokenAddress, { price, timestamp: now });
+      return price;
     } catch (error) {
       console.error(`Error fetching price for ${tokenAddress}:`, error);
       return null;
     }
-  }
+  }  
 
   async executeAlert(alert, currentPrice) {
     try {
@@ -540,25 +583,26 @@ class PriceAlertService extends EventEmitter {
   async cleanup() {
     // Stop price monitoring
     this.priceMonitoringService.stopMonitoring();
-
-    // Clean up all jobs
+    this.stopFallbackMonitoring(); // Stop fallback timer if active
+  
+    // Clean up all jobs in the queue (if available)
     if (this.alertQueue) {
       await this.alertQueue.clean(0, 'completed');
       await this.alertQueue.clean(0, 'failed');
-
+  
       // Remove all repeatable jobs
       const repeatableJobs = await this.alertQueue.getRepeatableJobs();
       await Promise.all(
         repeatableJobs.map(job => this.alertQueue.removeRepeatableByKey(job.key))
       );
     }
-
+  
     // Remove all listeners
     this.removeAllListeners();
     
     this.initialized = false;
     this.initializationPromise = null;
-  }
+  }  
 }
 
 export const priceAlertService = new PriceAlertService();
