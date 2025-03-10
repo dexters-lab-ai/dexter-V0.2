@@ -37,23 +37,30 @@ class TasksService extends EventEmitter {
     try {
       // 1) Ensure queue service is ready
       await queueService.initialize();
-
-      // 2) Grab or create the "tasks" queue
-      this.taskQueue = queueService.getQueue(this.BULL_QUEUE_NAME);
-
-      // 3) Define how jobs in the "tasks" queue are processed
-      this.taskQueue.process(async (job) => {
-        const { telegramId, taskId } = job.data;
-        await this.executeTask({ telegramId, taskId });
-      });
-
+  
+      // Check if the queue service is running in degraded mode.
+      if (queueService.degraded) {
+        console.warn('⚠️ QueueService is degraded. Tasks will be executed via fallback (synchronously).');
+        // Instead of obtaining the queue, you may opt to process tasks using a fallback method.
+        // Lets set up a global polling mechanism to process due tasks.
+      } else {
+        // 2) Grab or create the "tasks" queue if available
+        this.taskQueue = queueService.getQueue(this.BULL_QUEUE_NAME);
+  
+        // 3) Define how jobs in the "tasks" queue are processed
+        this.taskQueue.process(async (job) => {
+          const { telegramId, taskId } = job.data;
+          await this.executeTask({ telegramId, taskId });
+        });
+      }
+  
       this.initialized = true;
       console.log('✅ TasksService initialized');
     } catch (error) {
       console.error('❌ Error initializing TasksService:', error);
       throw error;
     }
-  }
+  }  
 
   /**
    * Creates a Task document in MongoDB, then schedules it with the queue.
@@ -122,13 +129,12 @@ class TasksService extends EventEmitter {
    * Uses standardized job IDs.
    */
   async scheduleTask(task) {
-    // In case it's in the past, use a 0ms delay (exec ASAP)
+    // In case it's in the past, use a 0ms delay (execute ASAP)
     const now = new Date();
     const delayMs = Math.max(0, task.dueTime.getTime() - now.getTime());
-    const queue = queueService.getQueue(this.BULL_QUEUE_NAME);
   
     // Helper function to check for duplicate job by ID.
-    async function jobExists(jobId, isRepeatable = false) {
+    async function jobExists(queue, jobId, isRepeatable = false) {
       if (isRepeatable) {
         const repeatableJobs = await queue.getRepeatableJobs();
         return repeatableJobs.some(j => j.id === jobId);
@@ -138,10 +144,25 @@ class TasksService extends EventEmitter {
       }
     }
   
-    // If it's a one-time task
+    // If the queue service is degraded, fall back to a direct setTimeout call.
+    if (queueService.degraded || !this.taskQueue) {
+      console.warn('⚠️ QueueService is degraded; executing task directly after delay:', delayMs);
+      setTimeout(async () => {
+        try {
+          await this.executeTask({ telegramId: task.telegramId, taskId: task._id });
+        } catch (error) {
+          console.error('❌ Error executing task in fallback mode:', error);
+        }
+      }, delayMs);
+      return;
+    }
+  
+    const queue = this.taskQueue;
+    
+    // Determine job ID and schedule based on recurrence.
     if (task.recurrence === "none") {
       const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'execute');
-      if (await jobExists(jobId)) {
+      if (await jobExists(queue, jobId)) {
         console.log(`Job ${jobId} already exists for one-time task ${task._id}. Skipping scheduling.`);
         return;
       }
@@ -157,15 +178,13 @@ class TasksService extends EventEmitter {
         }
       );
       console.log(`✅ Scheduled one-time task ${task._id} with job ID ${jobId}`);
-  
-    // If it's a daily recurring task
     } else if (task.recurrence === "daily") {
       const dateObj = new Date(task.dueTime);
       const hour = dateObj.getHours();
       const minute = dateObj.getMinutes();
       const dailyCron = `${minute} ${hour} * * *`;
       const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'daily');
-      if (await jobExists(jobId, true)) {
+      if (await jobExists(queue, jobId, true)) {
         console.log(`Job ${jobId} already exists for daily task ${task._id}. Skipping scheduling.`);
         return;
       }
@@ -179,12 +198,10 @@ class TasksService extends EventEmitter {
         jobId
       );
       console.log(`✅ Scheduled daily task ${task._id} with job ID ${jobId} (cron: ${dailyCron})`);
-  
-    // If it's an interval task (numeric recurrence in minutes)
     } else if (typeof task.recurrence === "number" && task.recurrence > 0) {
       const intervalCron = `*/${task.recurrence} * * * *`;
       const jobId = generateJobId(this.SERVICE_NAME, task._id.toString(), 'interval');
-      if (await jobExists(jobId, true)) {
+      if (await jobExists(queue, jobId, true)) {
         console.log(`Job ${jobId} already exists for interval task ${task._id}. Skipping scheduling.`);
         return;
       }
@@ -199,7 +216,7 @@ class TasksService extends EventEmitter {
       );
       console.log(`✅ Scheduled interval task ${task._id} with job ID ${jobId} (cron: ${intervalCron})`);
     }
-  }  
+  }    
 
   /**
    * Retrieves tasks. If "taskId" is provided, returns just that one. Otherwise returns all tasks for the user.
@@ -316,21 +333,28 @@ class TasksService extends EventEmitter {
    */
   async processDueTasks(bot) {
     if (!this.initialized) await this.initialize();
-
+  
     const now = new Date();
     const dueTasks = await Task.find({
       dueTime: { $lte: now },
       status: "PENDING"
     }).sort({ dueTime: 1 }).exec();
-
+  
     for (const task of dueTasks) {
       const preview = task.content.substring(0, 100) + (task.content.length > 100 ? "..." : "");
       console.log(`⚡ Task Due Alert: Heading: ${task.heading}, Preview: ${preview}`);
-
+  
       const alertMsg = `⏱ *Task Notification!*\n💭*Task:* ${task.heading}\n💭*Spec:* ${preview}\n\n🤖 taking over task...`;
       try {
         await bot.sendMessage(task.telegramId, alertMsg, { parse_mode: "Markdown" });
-        await this.executeTask({ telegramId: task.telegramId, taskId: task._id });
+        // If queue is degraded, execute directly
+        if (queueService.degraded) {
+          console.warn('⚠️ QueueService degraded; processing due task synchronously.');
+          await this.executeTask({ telegramId: task.telegramId, taskId: task._id });
+        } else {
+          // Otherwise, rely on the scheduled Bull job
+          console.log(`Task ${task._id} is scheduled via the queue.`);
+        }
         await bot.sendMessage(task.telegramId, `✅ Task ${task._id} executed successfully.`);
       } catch (err) {
         console.error(`Error executing task ${task._id}:`, err);
@@ -338,7 +362,7 @@ class TasksService extends EventEmitter {
       }
     }
     return dueTasks.length;
-  }
+  }  
 
   /**
    * deleteTask
