@@ -45,13 +45,14 @@ class PumpFunService extends EventEmitter {
     this.apiEndpoint = 'https://pumpportal.fun/api/trade-local';
     this.apiKey = config.pumpFunApiKey;
     
-    // Solana connection and other services remain unchanged…
+    // Solana connection and other services
     this.connection = new Connection(networkConfig.rpcUrl, 'confirmed');
     this.wsManager = wsManager;
     this.ws = null;
     this.tokenDetector = tokenLaunchDetector;
+    
     // Subscriptions and queues
-    this.newTokenSubscriptions = new Map();
+    this.newTokenSubscriptions = new Map();  // key: userId, value: { telegramChatId, criteria, batch, batchTimer }
     this.tokenTradeSubscriptions = new Map();
     this.tokenTradeQueue = new Set();
     this.messageQueue = [];
@@ -87,7 +88,6 @@ class PumpFunService extends EventEmitter {
       console.log(`✅ PumpFunService connected to ${this.websocketEndpoint}`);
       this.isInitialized = true;
       this.emit('connected');
-      // Immediately flush any pending messages and start heartbeat.
       this.flushQueue();
       this.startHeartbeat();
     } catch (error) {
@@ -96,12 +96,15 @@ class PumpFunService extends EventEmitter {
     }
   }
 
+  // When the connection opens, subscribe automatically to new token events.
   handleOpen() {
     console.log(`✅ PumpFun⛽ WS connected to ${this.websocketEndpoint}`);
     this.reconnectAttempts = 0;
     this.isInitialized = true;
     this.flushQueue();
     this.startHeartbeat();
+    // SYSTEM SUBSCRIPTION: Automatically subscribe to new token events.
+    this.send({ method: "subscribeNewToken" });
     this.emit('connected');
   }
 
@@ -132,11 +135,14 @@ class PumpFunService extends EventEmitter {
     console.warn('🔌 PumpFun WS connection closed.');
     this.isInitialized = false;
     this.stopHeartbeat();
+    // Let wsManager handle reconnection
+    this.emit('closed');
   }
 
   handleError(error) {
     console.error('❌ PumpFun WS error:', error);
     this.emit('error', error);
+    // Reconnection is managed by wsManager if needed.
   }
 
   handleReconnect() {
@@ -197,11 +203,15 @@ class PumpFunService extends EventEmitter {
   /* ────────────────────────────────
      Public API for User Subscriptions
   ──────────────────────────────── */
-
   subscribeNewToken(userId, telegramChatId, criteria = {}) {
     try {
-      this.newTokenSubscriptions.set(userId, { telegramChatId, criteria });
-      // Activate WS subscription if not already active
+      // Initialize subscription object with batching support.
+      this.newTokenSubscriptions.set(userId, { 
+        telegramChatId, 
+        criteria, 
+        batch: [], 
+        batchTimer: null 
+      });
       this.send({ method: "subscribeNewToken" });
       return { success: true, message: "Subscribed to new token notifications." };
     } catch (error) {
@@ -212,6 +222,10 @@ class PumpFunService extends EventEmitter {
 
   unsubscribeNewToken(userId) {
     try {
+      const sub = this.newTokenSubscriptions.get(userId);
+      if (sub && sub.batchTimer) {
+        clearTimeout(sub.batchTimer);
+      }
       this.newTokenSubscriptions.delete(userId);
       if (this.newTokenSubscriptions.size === 0) {
         this.send({ method: "unsubscribeNewToken" });
@@ -281,12 +295,10 @@ class PumpFunService extends EventEmitter {
   /* ────────────────────────────────
      Handlers for Incoming WS Messages
   ──────────────────────────────── */
-
   handleCreateMessage(message) {
     try {
       console.log('🎉 Handling new token message:', message);
       const { signature, mint, traderPublicKey, initialBuy, marketCapSol, name, symbol, uri } = message;
-      // Increment token launch count
       this.tokenLaunchCount++;
 
       const formattedMsg = `
@@ -301,18 +313,43 @@ class PumpFunService extends EventEmitter {
 *Tx:* https://solscan.io/tx/${signature}
       `.trim();
 
-      // Emit event for internal listeners
       this.emit('newTokenCreated', { message: formattedMsg, raw: message });
 
-      // Notify subscribers (filtering by criteria)
-      this.newTokenSubscriptions.forEach(async (sub, userId) => {
+      // Use batched notifications for new token subscribers
+      const BATCH_SIZE = 10;
+      const BATCH_INTERVAL = 60000; // 60 seconds
+
+      this.newTokenSubscriptions.forEach((sub, userId) => {
+        // Filter based on criteria if defined.
         if (sub.criteria.minLiquidity && Number(marketCapSol) < Number(sub.criteria.minLiquidity)) {
           return;
         }
-        await sendTelegramNotification(sub.telegramChatId, formattedMsg);
+
+        // Add the formatted message to this subscription's batch.
+        sub.batch.push(formattedMsg);
+
+        // If the batch size reaches the threshold, send immediately.
+        if (sub.batch.length >= BATCH_SIZE) {
+          const aggregatedMsg = sub.batch.join('\n\n');
+          sendTelegramNotification(sub.telegramChatId, aggregatedMsg);
+          sub.batch = [];
+          if (sub.batchTimer) {
+            clearTimeout(sub.batchTimer);
+            sub.batchTimer = null;
+          }
+        } 
+        // Otherwise, if no timer is set, schedule a batch send after BATCH_INTERVAL.
+        else if (!sub.batchTimer) {
+          sub.batchTimer = setTimeout(() => {
+            const aggregatedMsg = sub.batch.join('\n\n');
+            sendTelegramNotification(sub.telegramChatId, aggregatedMsg);
+            sub.batch = [];
+            sub.batchTimer = null;
+          }, BATCH_INTERVAL);
+        }
       });
 
-      // Save the token event to the in-memory cache
+      // Save token event to the in-memory cache for later DB flush.
       this.tokenCache.push({ signature, mint, traderPublicKey, initialBuy, marketCapSol, name, symbol, uri, timestamp: new Date() });
       console.log('✅ Processed new token message.');
     } catch (error) {
@@ -322,7 +359,6 @@ class PumpFunService extends EventEmitter {
 
   handleTokenTradeMessage(message) {
     try {
-      // Adjust field extraction based on your WS message schema.
       const { token, tradeAmount, tradeType, signature } = message;
       const formattedMsg = `
 💱 *Token Trade Alert!*
@@ -347,10 +383,6 @@ class PumpFunService extends EventEmitter {
   /* ────────────────────────────────
      Token Cache Management
   ──────────────────────────────── */
-
-  /**
-   * Flush the in-memory token cache to the database.
-   */
   async flushTokenCache() {
     if (this.tokenCache.length === 0) return;
     try {
@@ -360,14 +392,9 @@ class PumpFunService extends EventEmitter {
       this.tokenCache = [];
     } catch (error) {
       console.error("❌ Error flushing token cache:", error);
-      // Optionally: implement a retry or log the failed tokens count.
     }
   }
 
-  /**
-   * Retrieve all tokens stored in the DB within a given period.
-   * (This function remains as is for custom queries.)
-   */
   async getTokensByPeriod(startTime, endTime) {
     try {
       const tokens = await PumpFunTokenModel.find({
@@ -380,18 +407,12 @@ class PumpFunService extends EventEmitter {
     }
   }
 
-  /**
-   * Check health using available endpoints.
-   * Returns WS status, endpoint, tokens launched, reconnect attempts, cached tokens count,
-   * and additionally, the 300 most recent tokens (chronologically ordered).
-   */
   async checkHealth() {
     try {
       let status = "unhealthy";
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         status = "healthy";
       }
-      // Fetch last 300 tokens (most recent first), then reverse to get chronological order.
       const tokens = await PumpFunTokenModel.find({})
         .sort({ timestamp: -1 })
         .limit(300)
@@ -410,9 +431,6 @@ class PumpFunService extends EventEmitter {
     }
   }
 
-  /* ────────────────────────────────
-     Cleanup & Shutdown
-  ──────────────────────────────── */ 
   cleanup() {
     console.log('🧹 Cleaning up PumpFunService...');
     if (this.ws) {
@@ -420,7 +438,6 @@ class PumpFunService extends EventEmitter {
     }
     this.stopHeartbeat();
     clearInterval(this.cacheFlushInterval);
-    // Flush remaining tokens on shutdown
     this.flushTokenCache();
     this.removeAllListeners();
     this.isInitialized = false;
