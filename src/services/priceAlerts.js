@@ -10,7 +10,6 @@ import { JupiterQuickNode } from './trading/JupiterQuickNode.js';
 import { queueService } from './queue/QueueService.js';
 import { dexscreener } from './dexscreener/index.js';
 import { getPriceCoinGecko } from './coingecko/CoinGecko.js';
-intent
 
 // --- Logging Helpers ---
 function logInfo(context, message, extra = {}) {

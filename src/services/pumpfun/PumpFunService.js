@@ -132,13 +132,11 @@ class PumpFunService extends EventEmitter {
     console.warn('🔌 PumpFun WS connection closed.');
     this.isInitialized = false;
     this.stopHeartbeat();
-    this.handleReconnect();
   }
 
   handleError(error) {
     console.error('❌ PumpFun WS error:', error);
     this.emit('error', error);
-    this.handleReconnect();
   }
 
   handleReconnect() {
@@ -164,7 +162,7 @@ class PumpFunService extends EventEmitter {
           this.handleReconnect();
         }, 5000);
       }
-    }, 600000);
+    }, 300000);
   }
 
   stopHeartbeat() {
