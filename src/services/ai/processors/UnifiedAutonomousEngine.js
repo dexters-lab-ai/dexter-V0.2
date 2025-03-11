@@ -355,7 +355,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
           3. Finally, combine results and present rich token suggestions broken in categories by search          
 
       - **Trending Tokens & Investment Suggestions:**
-          1. Use both CookieDAO suggest_token_investments_dominating and Trending Tokens combined function fetch_trending_tokens_unified.
+          1. Use both CookieDAO suggest_token_investments_dominating and Trending Tokens combined function fetch_trending_tokens_all_sources.
           2. Fetch from both sources Twitter and Trending Tokens Combined unless user specifies chain
 
       - **Safe and popular Investment Suggestions:**
@@ -431,10 +431,10 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
           function_call: "auto",
           functions: this.functions,
           max_tokens: 500,
-          temperature: 0.6,
+          temperature: 0.3,
           top_p: 1,
-          frequency_penalty: 0.5,
-          presence_penalty: 0.5,
+          frequency_penalty: 0.3,
+          presence_penalty: 0.7,
           n: 1,
         });
       } else {
@@ -456,10 +456,10 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
             function_call: "auto",
             functions: this.functions,
             max_tokens: 500,
-            temperature: 0.6,
+            temperature: 0.3,
             top_p: 1,
-            frequency_penalty: 0.5,
-            presence_penalty: 0.5,
+            frequency_penalty: 0.3,
+            presence_penalty: 0.7,
             n: 1,
           });
         }
@@ -687,11 +687,11 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
       const aiResponse = await openAIService.createChatCompletion({
         model: "gpt-4o-mini",
         messages: finalPrompt,
-        max_tokens: 700,          // Reduce max tokens for cost saving & response time
-        temperature: 0.6,         // Moderate creativity
+        max_tokens: 500,          // Reduce max tokens for cost saving & response time
+        temperature: 0.3,         // Moderate creativity
         top_p: 1,               // Probability distribution, variety to responses
-        frequency_penalty: 0.3,   // his moderate penalty discourages over‑repetition of specific tokens without suppressing useful repeated keywords in a domain like crypto trading.
-        presence_penalty: 0.2,    // nudges the model to introduce new concepts and examples while still staying on topic—useful when we want varied scenarios and examples
+        frequency_penalty: 0,   // his moderate penalty discourages over‑repetition of specific tokens without suppressing useful repeated keywords in a domain like crypto trading.
+        presence_penalty: 0,    // nudges the model to introduce new concepts and examples while still staying on topic—useful when we want varied scenarios and examples
         n: 1,                     // Single response
       });
 
@@ -1245,15 +1245,15 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         search_twitter_by_address: () => this.intentProcessor.processSearchTweets(args.query),
         get_token_market_sentiment_changes: () => this.intentProcessor.processSentimentShift(args.queryStr, args.interval),
         get_cookiedao_api_authorization_status: () => this.intentProcessor.processAuthorizationCheck(),// still Cookie.fun
-        fetch_trending_tokens_unified: () => this.intentProcessor.getTrendingTokens(),
+        fetch_trending_tokens_all_sources: () => this.intentProcessor.getTrendingTokens(),
         fetch_trending_tokens_by_chain: () => this.intentProcessor.getTrendingTokensByChain(chatId, args.network),
         fetch_trending_tokens_coingecko: () => this.intentProcessor.getTrendingTokensCoinGecko(),
         fetch_trending_tokens_dextools: () => this.intentProcessor.getTrendingTokensDextools(),
         fetch_trending_tokens_dexscreener: () => this.intentProcessor.getTrendingTokensDexscreener(),
         fetch_trending_tokens_twitter: () => this.intentProcessor.getTrendingTokensTwitter(),
-        fetch_trending_tokens_solscan:()=> this.intentProcessor.getTrendingTokensSolscan(),
+        fetch_trending_tokens_solscan:()=> this.intentProcessor.getTrendingTokensDexscreener(),
         create_price_alert: () => this.intentProcessor.createPriceAlert(userId, chatId, args),
-        view_price_alerts: () => this.intentProcessor.viewPriceAlerts(),
+        view_price_alerts: () => this.intentProcessor.viewPriceAlerts(userId),
         edit_price_alert: () => this.intentProcessor.editPriceAlert(args.alertId),
         view_price_alert: () => this.intentProcessor.getPriceAlert(args.alertId),
         delete_price_alert: () => this.intentProcessor.deletePriceAlert(args.alertId),
@@ -1266,8 +1266,8 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         stop_flipper_mode: () => this.intentProcessor.stopFlipperMode(this.bot, userId),
 
         // Pumpfun Funtions
-        subscribe_pumpfun_new_token: () => this.intentProcessor.subscribeNewToken(userId, chatId, args),
-        unsubscribe_pumpfun_new_token: () => this.intentProcessor.unsubscribeNewToken(userId),
+        listen_to_new_token_listings: () => this.intentProcessor.subscribeNewToken(userId, chatId, args),
+        unlisten_to_new_token_listings: () => this.intentProcessor.unsubscribeNewToken(userId),
         subscribe_pumpfun_token_trade: () => this.intentProcessor.subscribeTokenTrade(userId, chatId, args.criteria, args.contractAddresses),
         unsubscribe_pumpfun_token_trade: () => this.intentProcessor.unsubscribeTokenTrade(userId, args),
         execute_pumpfun_trade: () => this.intentProcessor.executePumpfunTrade(userId, chatId, args),
@@ -1283,7 +1283,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         search_twitter_using_multi_parameter_options: () => this.intentProcessor.processMultiDimensionalTwitterSearch(args),
         get_trench_chatter: () => this.intentProcessor.getTrenchChatterCached(),
         search_internet: () => this.intentProcessor.performInternetSearch(chatId, args.query),
-        token_price_dexscreener: () => this.intentProcessor.performTokenPriceCheck(args.query),
+        fetch_token_price_in_usd: () => this.intentProcessor.performTokenPriceCheck(args.query),
         token_price_coingecko: () => this.intentProcessor.getTokenInfoFromCoinGecko(args.query),
         
         // Google API Functions
@@ -1376,7 +1376,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
     }
 
     try {
-      const maxLength = 7000;
+      const maxLength = 5000;
       const resultStr = JSON.stringify(stepResult);
       const compressed = resultStr.length > maxLength ?
         resultStr.slice(0, maxLength) + `\n\n⚠️ [Carry over Results from ${resultStr.length} chars]` :
@@ -1392,8 +1392,8 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         messages: fullMessages,
         functions: this.functions,
         function_call: "auto",
-        max_tokens: 700,
-        temperature: 0.4,
+        max_tokens: 500,
+        temperature: 0.3,
         top_p: 1.0,
         frequency_penalty: 0.3,
         presence_penalty: 0.2,

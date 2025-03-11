@@ -75,6 +75,30 @@ router.post('/v1/token', validateApiKey, async (req, res) => {
 });
 
 /**
+ * GET /downloadPumpFunTokens
+ * Download the last 300 PumpFun tokens as JSON.
+ */
+router.get('/downloadPumpFunTokens', async (req, res) => {
+  try {
+    const tokensResult = await pumpFunService.getTokensByPeriod(new Date(0), new Date());
+    if (!tokensResult.success) {
+      throw new Error(tokensResult.error);
+    }
+    const tokens = tokensResult.tokens
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 300)
+      .reverse();
+    console.log(`📥 Downloading ${tokens.length} PumpFun tokens from DB`);
+    res.setHeader('Content-Disposition', 'attachment; filename=pumpfun_tokens.json');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(tokens, null, 2));
+  } catch (error) {
+    console.error('❌ Error in /downloadPumpFunTokens:', error);
+    res.status(500).send({ error: error.message });
+  }
+});
+
+/**
  * GET /status
  * Returns the health status of various services and system uptime.
 */

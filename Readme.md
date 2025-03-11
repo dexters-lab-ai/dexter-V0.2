@@ -154,7 +154,7 @@ Dexter AI includes a large suite of executable functions across multiple domains
 ### Market Analysis & Sentiment Tracking
 ```json
 {
-  "name": "fetch_trending_tokens_unified",
+  "name": "fetch_trending_tokens_all_sources",
   "description": "Fetch top trending tokens across sources: dextools, dexscreener, coingecko, Twitter.",
   "parameters": { "sources": "array" },
   "required": []

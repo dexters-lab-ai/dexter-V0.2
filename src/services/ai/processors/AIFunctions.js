@@ -614,7 +614,7 @@ export const AIFunctions = [
       // Market Analysis Functions
       {
         name: "fetch_trending_tokens_by_chain",
-        description: `Fetches trending tokens for a specific blockchain network.
+        description: `Fetches trending tokens for each specific blockchain or chain.
         Supported Networks (case-sensitive, correct common typos to match these chains):
         - **sonic**
         - **ethereum** (convert from: *ether*, *etherum*)
@@ -649,36 +649,11 @@ export const AIFunctions = [
             }
           },
           required: ["network"]
-        },
-        returns: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string", description: "Token name" },
-              address: { type: "string", description: "Token address on the specified network" },
-              network: { type: "string", description: "Blockchain network" },
-              volume24h: { type: "number", description: "24-hour trading volume of the token" },
-              description: { type: "string", description: "Short description of the token" },
-              links: {
-                type: "object",
-                properties: {
-                  website: { type: "string", description: "Official website URL" },
-                  twitter: { type: "string", description: "Twitter URL" },
-                  telegram: { type: "string", description: "Telegram group URL" }
-                }
-              },
-              sources: {
-                type: "array",
-                items: { type: "string", description: "Source where the token is trending (e.g., 'dextools', 'dexscreener')" }
-              }
-            }
-          }
         }
       }, 
   
       {
-        name: "fetch_trending_tokens_unified",
+        name: "fetch_trending_tokens_all_sources",
         description: "Fetch top 25 trending/popular tokens combined from multiple sources: dextools, dexscreener, coingecko, and twitter.",
         parameters: {
           type: "object",
@@ -714,12 +689,6 @@ export const AIFunctions = [
       {
         name: "fetch_trending_tokens_twitter",
         description: "Discover new tokens/trends/narratives/what to buy from Twitter tweets. No parameters required to call this.",
-        parameters: { type: "object", properties: {}, required: [] }
-      },
-  
-      {
-        name: "fetch_trending_tokens_solscan",
-        description: "Fetch Solana trending tokens only, using Solscan. No parameters required to call this.",
         parameters: { type: "object", properties: {}, required: [] }
       },
       
@@ -790,21 +759,29 @@ export const AIFunctions = [
       // Price Alerts
       {
           name: "create_price_alert",
-          description: "Create a price alert for a token",
+          description: `Create a price alert for a token specified by user from results or context or address inputed by user
+                First, extract only the wallet address or token address from returned URLs or chat context if available
+                - Ask User to confirm: target price, wallet address, swap action, amount and swap action if not available
+                - Use full token address.
+                - Use full wallet address for User. Determine chain of the token address from context, or ask user, then fetch User's wallet address for the network specified
+                - Swap action is optional, leave out if user does not require a buy or sell on price trigger`,
           parameters: {
           type: "object",
           properties: {
+              walletAddress: { 
+                type: "string", 
+                description: `User wallet address to execute action on price alert trigger
+                - For example, FQKReZitEUYKFAAm6g6qWQ5j7UghUECgpi1Am7fpump
+                - Always include Wallet address, ask user or fetch user's wallet address based on the token address network specified
+              `},
               tokenAddress: { 
                 type: "string", 
-                description: `When processing function call results, extract only the wallet address or token address from returned URLs. Do not use full links; extract only the address part from the URL.
-              - If an EVM address, it will be a 42-character hexadecimal string (0xB24C..)
-              - If a Solana address, it will be a Base58 string (typically 32-44 characters eg HwQfC1W3Fuvp8Cqay).
-              - If any other blockchain format is present, ignore it unless explicitly required.
-              - Example:
-                  - Given: "https://etherscan.io/token/0x123456789abcdef..."
-                  - Extracted: "0x123456789abcdef"
-                  - Given: "https://solscan.io/token/HwQfC1W3Fuvp8Cqay..."
-                  - Extracted: "HwQfC1W3Fuvp8Cqay..."
+                description: `Token address of the token to set price alert for
+              - Extract from results or context if available. Example:
+                  - Given: "https://etherscan.io/token/0x98d0baa52b2D063E780DE12F615f963Fe8537553"
+                  - Extracted: "0x98d0baa52b2D063E780DE12F615f963Fe8537553"
+                  - Given: "https://solscan.io/token/FQKReZitEUYKFAAm6g6qWQ5j7UghUECgpi1Am7fpump"
+                  - Extracted: "FQKReZitEUYKFAAm6g6qWQ5j7UghUECgpi1Am7fpump"
               `},
               targetPrice: { type: "number", description: "Target price" },
               condition: { type: "string", enum: ["above", "below"] },
@@ -817,7 +794,7 @@ export const AIFunctions = [
               }
               }
           },
-          required: ["tokenAddress", "targetPrice", "condition"]
+          required: ["walletAddress", "tokenAddress", "targetPrice", "condition"]
           }
       },
   
@@ -1036,19 +1013,19 @@ export const AIFunctions = [
   
       // Token Price Search Integration
       {
-        name: "token_price_dexscreener",
-        description: "Fetch token prices using DexScreener. Use for tokens with known activity on DexScreener. Both 'query' and 'queries' cannot be present for 'token_price_dexscreener'. Use one: choose query for single string search, use queries for batch/multi strings searches",
+        name: "fetch_token_price_in_usd",
+        description: "Fetch token prices in USD $. Search for tokens on Solana, Ethereum, Base, Avalanche, Sonic, Berachain, BSC, Binance, Polygon, Linear, Arbitrum, Celo, Omni, Fantom. Both 'query' and 'queries' cannot be present as parameters for a query, use one: choose query for single string search, use queries for batch/multi strings searches",
         parameters: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "Token symbol or address for single query, e.g., 'BTC' or '0xc0041ef357b183448b235a8ea73ce4e4ec8c265f'."
+              description: "For single querying. Token symbol or address e.g., 'BTC' or '0xc0041ef357b183448b235a8ea73ce4e4ec8c265f'."
             },
             queries: {
               type: "array",
               items: { type: "string" },
-              description: "Array of token symbols or addresses for batch processing, e.g., ['BTC', 'FTM', 'BNB']."
+              description: "For batch querying. Array of token symbols or addresses e.g., ['BTC', 'FTM', 'BNB']."
             }
           },
           required: []
@@ -1057,7 +1034,7 @@ export const AIFunctions = [
   
       {
         name: "token_price_coingecko",
-        description: "Fetch token prices from CoinGecko as the primary source. Use for most token queries. Both 'query' and 'queries' cannot be present for 'token_price_coingecko'. Use one: choose query for single string search, use queries for batch/multi strings searches",
+        description: "Fallback to fetch_token_price_in_usd. Fetch token prices from CoinGecko as the primary source. Use for most token queries. Both 'query' and 'queries' cannot be present for 'token_price_coingecko'. Use one: choose query for single string search, use queries for batch/multi strings searches. Attribute source Coingecko with results.",
         parameters: {
           type: "object",
           properties: {
@@ -1418,8 +1395,8 @@ export const AIFunctions = [
 
       // Pumpfun Service
       {
-        name: "subscribe_pumpfun_new_token",
-        description: "Start or Subscribe a user for new token notifications via PumpFun service. This allows you to auto detect all tokens on Pumpfun as they launch. Start it for user to monitor tokens",
+        name: "listen_to_new_token_listings",
+        description: "Listen or Subscribe a user for new Solana token launch notifications via PumpFun service. This allows you to auto detect all tokens on Pumpfun as they launch. Start it for user to monitor tokens",
         parameters: {
           type: "object",
           properties: {
@@ -1440,8 +1417,8 @@ export const AIFunctions = [
       },
       
       {
-        name: "unsubscribe_pumpfun_new_token",
-        description: "Unsubscribe a user from new token notifications via PumpFun service.",
+        name: "unlisten_to_new_token_listings",
+        description: "Unsubscribe a user from new token notifications via PumpFun service. Stop monitoring new token listings",
         parameters: {
           type: "object",
           properties: {},
@@ -1530,7 +1507,7 @@ export const AIFunctions = [
       // Web Scrapping
       {
         name: "trending_tokens_fallback_scrap",
-        description: "Scrape a fixed list of 10 dexscreener URLs for trending tokens across various chains and return the results in markdown format.",
+        description: "Fallback for trending tokens combined. Scrape a fixed list of 10 dexscreener URLs for trending tokens across various chains and return the results in markdown format.",
         parameters: {
           type: "object",
           properties: {}

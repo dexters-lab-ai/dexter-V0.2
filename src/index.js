@@ -213,7 +213,7 @@ class Application {
         twitterService.initialize(),
         // Initialize FlipperMode for DB collections in Dashboard
         flipperMode.initialize(),
-        pumpFunService.connect()
+        pumpFunService.connect(),
       ]);
   
       console.log('✅ Core services initialized successfully');
@@ -244,15 +244,19 @@ class Application {
   setupErrorHandlers() {
     process.on('SIGINT', async () => {
       console.log('🛑 SIGINT received. Shutting down...');
+      console.log('🛑 Flushing PumpFun token cache before exit...');
+      await pumpFunService.cleanup();
       await this.serverManager.shutdown();
       process.exit(0);
     });
-
+    
     process.on('SIGTERM', async () => {
       console.log('🛑 SIGTERM received. Shutting down...');
+      console.log('🛑 Flushing PumpFun token cache before exit...');
+      await pumpFunService.cleanup();
       await this.serverManager.shutdown();
       process.exit(0);
-    });
+    });    
 
     process.on('uncaughtException', async (error) => {
       console.error('❌ Uncaught Exception:', error);

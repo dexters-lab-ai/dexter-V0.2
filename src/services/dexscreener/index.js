@@ -292,6 +292,30 @@ class DexScreenerService {
     }
   }
 
+  async getTokenPriceByAddress(query) {
+    try {
+      const rawResponse = await this.fetchWithCache(
+        `/latest/dex/search?q=${query}`,
+        {},
+        `dexscreener:tokenInfo:${query}`
+      );
+    
+      console.log('Dexscreener Token Price by address:', JSON.stringify(rawResponse, null, 2));
+      
+      if (rawResponse?.pairs?.length > 0) {
+        const tokenData = rawResponse.pairs[0];
+        const priceUsd = parseFloat(tokenData.priceUsd);
+        if (!isNaN(priceUsd) && priceUsd > 0) {
+          console.log(`✅ Found price on DexScreener for ${query}: $${priceUsd}`);
+          return priceUsd;
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching token price:', error);
+      return 0;
+    }
+  }  
+
   async getBoostedPairs() {
     try {
       // Fetch the latest boosted pairs data with caching

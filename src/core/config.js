@@ -53,7 +53,7 @@ class Config {
         port: parseInt(process.env.REDIS_PORT, 10) || 19992
       },
       // Optional advanced v4 options...
-      retryStrategy: (times) => Math.min(times * 50, 2000),
+      retryStrategy: (times) => Math.min(times * 50, 10000),
       // etc.
     };
 
@@ -64,8 +64,8 @@ class Config {
       port: parseInt(process.env.REDIS_PORT, 10) || 19992,
       password: process.env.REDIS_PASSWORD || 'mCi2vxdEZXsGYcMr4WW7wnvQyQSuxCBZ',
       // Critical to avoid the "not permitted" error
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
     };
 
     // Blockchains Endpoints for direct usage (if needed)

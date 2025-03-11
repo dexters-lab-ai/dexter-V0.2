@@ -1,9 +1,22 @@
 import { PriceAlert } from '../../models/PriceAlert.js';
 import { JupiterQuickNode } from './JupiterQuickNode.js';
 import dotenv from 'dotenv';
+import { bot } from '../../core/bot.js';
+import { dexscreener } from '../dexscreener/index.js';
 
 // Load environment variables
 dotenv.config();
+
+// --- Logging Helpers ---
+function logInfo(context, message, extra = {}) {
+  console.log(JSON.stringify({ level: 'info', context, message, ...extra }));
+}
+function logWarn(context, message, extra = {}) {
+  console.warn(JSON.stringify({ level: 'warn', context, message, ...extra }));
+}
+function logError(context, message, extra = {}) {
+  console.error(JSON.stringify({ level: 'error', context, message, ...extra }));
+}
 
 /**
  * A polling-based price monitoring service that periodically:
@@ -12,19 +25,29 @@ dotenv.config();
  *  3. Checks if each alert has been triggered
  *  4. Calls priceAlertService.executeAlert for triggered alerts
  */
+let IntentProcessor;
 export class PriceMonitoringService {
   constructor(priceAlertService) {
+    // Import dynamically to break circular dependency
+    import('../ai/processors/IntentProcessor.js').then(module => {
+      IntentProcessor = module.IntentProcessor;
+      this.intentProcessor = new IntentProcessor(bot);
+    });
+
     // priceAlertService is passed so we can call its `executeAlert` method
     this.priceAlertService = priceAlertService;
 
-    // How often to poll, in milliseconds
-    this.alertCheckInterval = 300000; // 1 minute
+    // How often to poll, in milliseconds (currently set to 5 minutes; adjust if needed)
+    this.alertCheckInterval = 300000;
 
-    // Will hold the setInterval() ID so we can stop monitoring
+    // Holds the setInterval() ID so we can stop monitoring later
     this.monitoringIntervalId = null;
 
     // Jupiter client for price fetching
     this.jupiterQuickNode = new JupiterQuickNode();
+
+    // Easy token info check
+    this.dexscreener = dexscreener;
   }
 
   /**
@@ -36,6 +59,14 @@ export class PriceMonitoringService {
       return;
     }    
     console.log(`💲 [PriceMonitoring] Started polling every ${this.alertCheckInterval} ms`);
+
+    // Optionally, run monitorPrices immediately
+    this.monitorPrices();
+
+    // Start the polling loop
+    this.monitoringIntervalId = setInterval(() => {
+      this.monitorPrices();
+    }, this.alertCheckInterval);
   }
 
   /**
@@ -54,126 +85,145 @@ export class PriceMonitoringService {
    * using 1 USDC as the "input" to find out how much 1 token costs in USD.
    */
   async fetchTokenPrices(alerts) {
-    // Gather unique token addresses from the alerts
-    const tokenAddresses = [...new Set(alerts.map((alert) => alert.tokenAddress))];
-    // console.log('[PriceMonitoring] Unique token addresses:', tokenAddresses);
-  
-    // We'll use 1 USDC as the input amount to get price in USD
+    // Gather unique token addresses from the alerts, trimming each address.
+    const tokenAddresses = [
+        ...new Set(alerts.map(alert => alert.tokenAddress.trim()))
+    ];
+
+    // Use 1 USDC as input amount (adjust these values as needed)
     const usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // USDC on Solana
-    const oneUsdcAmount = 1_000_000; // 1 USDC = 10^6 in lamports (6 decimals)
-  
+    const oneUsdcAmount = 1_000_000; // 1 USDC in lamports (6 decimals)
+
     try {
-      // Filter out any blacklisted or unwanted tokens if needed
-      const filteredTokens = tokenAddresses.filter(
-        (t) => t !== 'BkYAUVMar1gwuFLv2n5cmB6HhcNtvd86kU3gqAypump'
-      );
-  
-      // For each token, ask Jupiter: "If I swap 1 USDC, how many tokens do I get?"
-      const pricePromises = filteredTokens.map(async (tokenMint) => {
-        try {
-          const quoteParams = {
-            inputMint: usdcMint,   // we are giving USDC
-            outputMint: tokenMint, // we want that token
-            amount: oneUsdcAmount, // exactly 1 USDC in lamports
-          };
-  
-          const response = await this.jupiterQuickNode.getCachedQuote(quoteParams);
-          // console.log('[PriceMonitoring] Jupiter Quote:', response);
-  
-          // If "response" is not nested, parse ratio from outAmount / inAmount
-          const inAmount = parseFloat(response.inAmount);
-          const outAmount = parseFloat(response.outAmount);
-  
-          if (!inAmount || !outAmount || inAmount <= 0 || outAmount <= 0) {
-            return { token: tokenMint, price: null };
-          }
-  
-          // ratio = how many tokens per 1 USDC
-          const ratio = outAmount / inAmount; 
-          // priceInUsdFor1Token = 1 / ratio
-          const tokenPriceInUsd = 1 / ratio;
-  
-          return { token: tokenMint, price: tokenPriceInUsd };
-        } catch (error) {
-          console.error(`❌ Error fetching price for ${tokenMint}:`, error.message);
-          return { token: tokenMint, price: null };
-        }
-      });
-  
-      // Resolve all promises
-      const results = await Promise.all(pricePromises);
-  
-      // Convert array of { token, price } into an object map { [token]: price }
-      const prices = results.reduce((acc, { token, price }) => {
-        if (price !== null && !Number.isNaN(price)) {
-          acc[token] = price;
-        }
-        return acc;
-      }, {});
-  
-      // Log the final prices map for verification
-      // console.log('[PriceMonitoring] Fetched token prices (USD):', prices);
-  
-      return prices;
+        // Filter out any blacklisted tokens if necessary.
+        const filteredTokens = tokenAddresses.filter(
+            (t) => t !== 'BkYAUVMar1gwuFLv2n5cmB6HhcNtvd86kU3gqAypump'
+        );
+
+        // For each token, first try DexScreener, then fall back to Jupiter
+        const pricePromises = filteredTokens.map(async (tokenMint) => {
+            try {
+                console.log(`🔍 Checking DexScreener for: ${tokenMint}`);
+
+                // Attempt to get token info from DexScreener
+                const priceRaw = await this.dexscreener.getTokenPriceByAddress(tokenMint);
+                console.log(`🔍 Token Found: ${priceRaw}`);
+                const priceUsd = parseFloat(priceRaw);
+
+                if (!isNaN(priceUsd) && priceUsd > 0) {
+                    console.log(`✅ Found price on DexScreener for ${tokenMint}: $${priceUsd}`);
+                    return { token: tokenMint.trim(), price: priceUsd };
+                }
+                
+
+                console.log(`⚠️ DexScreener data missing or invalid for ${tokenMint}, falling back to Jupiter`);
+
+                // Fall back to Jupiter
+                const quoteParams = {
+                    inputMint: usdcMint,
+                    outputMint: tokenMint.trim(),
+                    amount: oneUsdcAmount,
+                };
+
+                console.log(`>>> Fetching Jupiter quote for: ${tokenMint}`);
+                const response = await this.jupiterQuickNode.getCachedQuote(quoteParams);
+                const inAmount = parseFloat(response.inAmount);
+                const outAmount = parseFloat(response.outAmount);
+
+                if (!inAmount || !outAmount || inAmount <= 0 || outAmount <= 0) {
+                    throw new Error('Invalid Jupiter quote received');
+                }
+
+                // Calculate price: 1 / (tokens received per 1 USDC)
+                const ratio = outAmount / inAmount;
+                const tokenPriceInUsd = 1 / ratio;
+                console.log(`✅ Fallback Jupiter price for ${tokenMint}: $${tokenPriceInUsd}`);
+
+                return { token: tokenMint.trim(), price: tokenPriceInUsd };
+            } catch (error) {
+                console.error(`❌ Error fetching price for ${tokenMint}:`, error.message);
+                return { token: tokenMint.trim(), price: null };
+            }
+        });
+
+        const results = await Promise.all(pricePromises);
+        const prices = results.reduce((acc, { token, price }) => {
+            if (price !== null && !Number.isNaN(price)) {
+                acc[token] = price;
+            }
+            return acc;
+        }, {});
+
+        return prices;
     } catch (error) {
-      console.error('❌ Error fetching prices from Jupiter:', error.message);
-      return null;
+        console.error('❌ Error fetching token prices:', error.message);
+        return null;
     }
-  }  
+  }
 
   /**
    * Main polling method: fetch alerts, get prices, trigger alerts if conditions are met.
    */
   async monitorPrices() {
     try {
-      // 1. Get all active alerts
+      // 1. Fetch all active alerts from the database.
       const activeAlerts = await PriceAlert.find({ isActive: true }).lean();
+      logInfo('PriceMonitoring', `Found ${activeAlerts.length} active alerts in DB.`);
       if (!activeAlerts.length) {
-        return; // Nothing to do
+        return;
       }
-
-      // 2. Fetch token prices in bulk
+  
+      // 2. Fetch token prices in bulk.
       const prices = await this.fetchTokenPrices(activeAlerts);
-      if (!prices) {
-        return; // Could not fetch prices, skip
+      if (!prices || Object.keys(prices).length === 0) {
+        logWarn('PriceMonitoring', 'No token prices fetched.');
+        return;
       }
-
-      // 3. Check trigger conditions for each alert
+      logInfo('PriceMonitoring', 'Fetched token prices', { prices });
+  
+      // 3. Check each alert against the current price.
       for (const alert of activeAlerts) {
-        const currentPrice = prices[alert.tokenAddress];
+        // Use the trimmed token address to access the price map.
+        const tokenKey = alert.tokenAddress.trim();
+        const currentPrice = prices[tokenKey];
         if (typeof currentPrice !== 'number') {
-          // If no price was found for this token
+          logWarn('PriceMonitoring', `No valid price found for token ${tokenKey} in alert ${alert._id}`);
           continue;
         }
-
-        // Log the comparison for debug
-        console.log(
-          `💲 [PriceMonitoring] Checking alert ID ${alert._id} for token ${alert.tokenAddress}:\n` +
-          `  targetPrice=${alert.targetPrice}, currentPrice=${currentPrice}, condition=${alert.condition}`
-        );
-
-        const meetsAbove =
-          alert.condition === 'above' && currentPrice >= alert.targetPrice;
-        const meetsBelow =
-          alert.condition === 'below' && currentPrice <= alert.targetPrice;
-
+        
+        logInfo('PriceMonitoring', `Checking alert ${alert._id}`, {
+          token: tokenKey,
+          targetPrice: alert.targetPrice,
+          currentPrice,
+          condition: alert.condition
+        });
+        
+        const meetsAbove = alert.condition === 'above' && currentPrice >= alert.targetPrice;
+        const meetsBelow = alert.condition === 'below' && currentPrice <= alert.targetPrice;
+        
+        // Trigger the alert if either condition is met.
         if (meetsAbove || meetsBelow) {
-          // 4. Mark the alert as inactive in an atomic update to avoid double-processing
+          // 4. Atomically mark the alert as inactive to prevent duplicate processing.
           const updatedAlert = await PriceAlert.findOneAndUpdate(
             { _id: alert._id, isActive: true },
             { $set: { isActive: false } },
             { new: true }
           );
-
-          // If another process already claimed it, updatedAlert will be null
+  
+          console.log("Triggered alert update:", updatedAlert);
+  
           if (updatedAlert) {
-            // Trigger the actual alert execution (trade, logging, etc.)
+            logInfo('PriceMonitoring', `Alert ${alert._id} triggered; executing alert with currentPrice ${currentPrice}.`);
             await this.priceAlertService.executeAlert(updatedAlert, currentPrice);
+          } else {
+            logWarn('PriceMonitoring', `Alert ${alert._id} was already claimed by another process.`);
           }
         }
       }
     } catch (error) {
-      console.error('💲 [PriceMonitoring] Error in monitorPrices:', error.message);
+      logError('PriceMonitoring', 'Error in monitorPrices', { error: error.message });
     }
   }
+  
+  
 }

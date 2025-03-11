@@ -57,14 +57,41 @@ function cacheWrapperOneHour(fn, cacheKeyGenerator) {
  * _searchCoin
  * -----------
  * Searches CoinGecko for coins matching the provided query.
- * The response includes coins with properties such as id, name, api_symbol, symbol, market_cap_rank, thumb, large, etc.
  */
-// - change to pro-api.coingecko.com on payment
 async function _searchCoin(query) {
   const url = `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`;
   const data = await universalFetch(url);
   return { source: 'CoinGecko Search API', data };
 }
 
-// Export the cached function. The cache key is built using the query.
+// Export the cached search function. The cache key is built using the query.
 export const searchCoin = cacheWrapperOneHour(_searchCoin, (query) => `searchCoin:${query}`);
+
+
+/**
+ * _getPriceCoinGecko
+ * ------------------
+ * Fetches the token price (in USD) for the given contract address.
+ * The response structure is:
+ * {
+ *   "0xabc...": { usd: 123.45 }
+ * }
+ *
+ * Note: The contract address is converted to lowercase since CoinGecko returns keys in lowercase.
+ */
+async function _getPriceCoinGecko(contractAddress) {
+  const lowerAddress = contractAddress.toLowerCase();
+  const url = `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${lowerAddress}&vs_currencies=usd`;
+  const result = await universalFetch(url);
+  const tokenData = result[lowerAddress];
+  if (!tokenData || typeof tokenData.usd === 'undefined') {
+    throw new Error(`No price data found for contract: ${contractAddress}`);
+  }
+  return tokenData.usd;
+}
+
+// Export the cached price function. The cache key is built using the contract address.
+export const getPriceCoinGecko = cacheWrapperOneHour(
+  _getPriceCoinGecko,
+  (contractAddress) => `getPriceCoinGecko:${contractAddress}`
+);

@@ -4,8 +4,75 @@ body {
     margin: 40px;
     background: #1a1a1a;
     color: #fff;
+    color: #081c41;
+    color: rgb(4, 29, 49);
 }
+
+.app-container-api {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+@media (max-width: 768px) {
+    .app-container-api {
+        padding: 10px;
+    }
+}
+
 .container {
     max-width: 800px;
     margin: 0 auto;
 }
+
+/* Base Navigation */
+.nav-links {
+    display: flex;
+    gap: 15px;
+}
+
+/* Mobile Styles */
+@media (max-width: 768px) {
+    .nav-links {
+        display: none; /* Hide nav links on small screens */
+        flex-direction: column;
+        position: absolute;
+        top: 60px;
+        left: 0;
+        width: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 10px;
+        text-align: center;
+    }
+
+    .nav-links.active {
+        display: flex; /* Show menu when active */
+    }
+
+    .mobile-menu-toggle {
+        display: block;
+        background: none;
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        position: absolute;
+        top: 15px;
+        right: 20px;
+    }
+}
+
+.test-tube {
+    width: 150px;  /* Default size */
+    height: 300px;
+    position: relative;
+    margin: auto;
+}
+
+@media (max-width: 768px) {
+    .test-tube {
+        width: 100px;  /* Adjust for smaller screens */
+        height: 200px;
+    }
+}
+        

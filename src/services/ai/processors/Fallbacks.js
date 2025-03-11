@@ -9,10 +9,10 @@ export const fallbackMap = {
     /**
     * Address Input Handling, 
     * Primary: start of by structured handling handle_address_only_pasted
-    * Fallbacks: token_price_dexscreener, analyze_token_by_address
+    * Fallbacks: fetch_token_price_in_usd, analyze_token_by_address
     */
     handle_address_only_pasted: [
-      "token_price_dexscreener",
+      "fetch_token_price_in_usd",
       "analyze_token_by_address",
     ],
 
@@ -33,7 +33,7 @@ export const fallbackMap = {
      * Fallbacks: DexScreener, Dextools
      */
     token_price_coingecko: [
-      "token_price_dexscreener",
+      "fetch_token_price_in_usd",
       "check_token_mindshare_on_market",
       "search_twitter_by_address",
     ],
@@ -41,7 +41,7 @@ export const fallbackMap = {
     /**
      * If DexScreener price check fails, fallback to Coingecko or Dextools
      */
-    token_price_dexscreener: [
+    fetch_token_price_in_usd: [
       "token_price_coingecko",
       "check_token_mindshare_on_market",
       "search_twitter_by_address",
@@ -52,7 +52,7 @@ export const fallbackMap = {
      * fallback to DexScreener or Coingecko
      */
     token_price_dextools: [
-      "token_price_dexscreener",
+      "fetch_token_price_in_usd",
       "token_price_coingecko",
       "check_token_mindshare_on_market",
     ],
@@ -98,7 +98,7 @@ export const fallbackMap = {
      */
     fetch_trending_tokens_coingecko: [
       "fetch_trending_tokens_dexscreener",
-      "fetch_trending_tokens_unified"
+      "fetch_trending_tokens_all_sources"
     ],
   
     /**
@@ -106,7 +106,7 @@ export const fallbackMap = {
      */
     fetch_trending_tokens_dextools: [
       "fetch_trending_tokens_dexscreener",
-      "fetch_trending_tokens_unified"
+      "fetch_trending_tokens_all_sources"
     ],
   
     /**
@@ -120,7 +120,7 @@ export const fallbackMap = {
     /**
      * If the "unified" aggregator fails, fallback to direct sources
      */
-    fetch_trending_tokens_unified: [
+    fetch_trending_tokens_all_sources: [
       "fetch_trending_tokens_coingecko",
       "fetch_trending_tokens_twitter"
     ],
@@ -142,7 +142,7 @@ export const fallbackMap = {
     ],
   
     /**
-     * If "search_internet" fails => we might fallback to "fetch_trending_tokens_unified",
+     * If "search_internet" fails => we might fallback to "fetch_trending_tokens_all_sources",
      * or "fetch_trending_tokens_twitter" if user is looking for public sentiment.
      */
     search_internet: [

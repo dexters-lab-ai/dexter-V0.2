@@ -12,6 +12,7 @@ const JupiterQuoteSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now } // Auto-store when it was cached
 });
 
-JupiterQuoteSchema.index({ inputMint: 1, outputMint: 1 }, { unique: true });
+// Update the index to include inAmount as part of the unique key.
+JupiterQuoteSchema.index({ inputMint: 1, outputMint: 1, inAmount: 1 }, { unique: true });
 
 export const JupiterQuote = mongoose.model("JupiterQuote", JupiterQuoteSchema);

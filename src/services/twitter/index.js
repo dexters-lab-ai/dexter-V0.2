@@ -10,11 +10,10 @@ import { queueService } from '../queue/QueueService.js';
 import { SwapController } from '../ai/processors/swapController.js';
 import { aiMetricsService } from '../aiMetricsService.js';
 
+// --- Utility Functions ---
+
 /**
- * Normalize the tweet date string.
- * Apify returns dates in the format:
- *   "Tue Feb 25 21:33:51 +0000 2025"
- * We insert a comma after the weekday to help the built‑in Date parser.
+ * Normalizes a tweet date string.
  */
 function normalizeTweetDate(dateStr) {
   if (!dateStr) return dateStr;
@@ -25,92 +24,122 @@ function normalizeTweetDate(dateStr) {
 }
 
 /**
- * Parse the tweet’s createdAt string into a Date object.
- * Returns a Date that reflects the local time.
+ * Parses the normalized tweet date into a Date object.
  */
 function parseTweetDate(dateStr) {
   const normalized = normalizeTweetDate(dateStr);
   const dt = new Date(normalized);
   if (isNaN(dt.getTime())) {
-    console.warn(`Failed to parse tweet date. Original: "${dateStr}", Normalized: "${normalized}"`);
+    console.warn(`Failed to parse tweet date: "${dateStr}"`);
   }
   return dt;
 }
 
-/** Helper: Reorder the tweet timestamp into a format that Date.parse() can reliably parse.
-* Example:
-*   Input:  "Tue Feb 25 21:33:51 +0000 2025"
-*   Output: "Tue, 25 Feb 2025 21:33:51 +0000"
-*/
-function reorderTweetDate(dateStr) {
-  if (!dateStr) return dateStr;
-  const parts = dateStr.split(' ');
-  if (parts.length !== 6) {
-    console.warn(`Unexpected tweet date format: "${dateStr}"`);
-    return dateStr;
-  }
-  // parts: [weekday, month, day, time, timezone, year]
-  return `${parts[0]}, ${parts[2]} ${parts[1]} ${parts[5]} ${parts[3]} ${parts[4]}`;
+/**
+ * Structured logging helpers to standardize log output.
+ */
+function logInfo(context, message, extra = {}) {
+  console.log(JSON.stringify({ level: 'info', context, message, ...extra }));
 }
+
+function logWarn(context, message, extra = {}) {
+  console.warn(JSON.stringify({ level: 'warn', context, message, ...extra }));
+}
+
+function logError(context, message, extra = {}) {
+  console.error(JSON.stringify({ level: 'error', context, message, ...extra }));
+}
+
+// --- Twitter Service Class ---
 
 class TwitterService extends EventEmitter {
   constructor() {
     super();
     this.apifyClient = new ApifyClient({ token: config.apifyApiKey });
-    this.searchCache = new Map();
-    this.searchCounts = new Map();
-    this.lastResetTime = Date.now();
+    // Cache for storing recent tweets per handle (expires after a minute)
+    this.tweetCache = new Map(); // key: normalized handle, value: { timestamp, tweets: [...] }
+    // Track last API call per handle to enforce rate limiting
+    this.apiRateLimitTimestamps = new Map();
+    // Fallback flag if queue service is degraded
+    this.fallbackMode = false;
+    // Active monitors in memory (keyed by job id)
     this.activeMonitors = new Map();
     this.initialized = false;
     this.swapController = new SwapController(bot);
-
-     // Initialize intentProcessor as null
     this._intentProcessor = null;
+    // Limit event listeners to prevent memory leaks
+    this.setMaxListeners(20);
+    // Define minimum interval between API calls per handle (1 minute)
+    this.apiCallInterval = 60 * 1000;
   }
 
   get intentProcessor() {
     if (!this._intentProcessor) {
-      try {
-        // Dynamic import to avoid circular dependency
-        const { intentProcessor } = import('../ai/processors/IntentProcessor.js');
-        this._intentProcessor = intentProcessor;
-      } catch (error) {
-        console.error("Failed to load intentProcessor:", error);
-        throw new Error("Failed to load intentProcessor. This is a critical dependency.");
-      }
+      import('../ai/processors/IntentProcessor.js')
+        .then(module => { this._intentProcessor = module.intentProcessor; })
+        .catch(error => {
+          logError('TwitterService', 'Failed to load intentProcessor', { error: error.message });
+        });
     }
     return this._intentProcessor;
   }
 
+  /**
+   * Initializes the Twitter service. It ensures the queue service is ready,
+   * sets up job processing with concurrency/priority and falls back to direct processing if needed.
+   */
   async initialize() {
     if (this.initialized) return;
     try {
+      // Ensure the shared queue is initialized
       await queueService.initialize();
+
       if (queueService.degraded) {
-        console.warn('⚠️ QueueService is degraded. KOL monitoring jobs will not be scheduled.');
+        logWarn('TwitterService', 'QueueService is degraded. Entering fallback mode for KOL monitoring.');
+        this.fallbackMode = true;
       } else {
+        // Set up robust job processing for KOL monitoring with a concurrency limit of 5.
         const kolQueue = queueService.getQueue('kolMonitor');
-        kolQueue.process(async (job) => {
+        kolQueue.process(5, async (job) => {
           const { userId, handle, amount } = job.data;
+          const jobPriority = job.opts.priority || 2; // default if not specified
           try {
+            if (!userId || !handle) {
+              logWarn('TwitterService', 'Invalid job data for KOL monitor, missing userId or handle', { jobId: job.id });
+              return { success: false, error: 'Invalid job data' };
+            }
+            const startTime = Date.now();
             await this.checkNewTweets(userId, handle, amount);
+            const duration = Date.now() - startTime;
+            logInfo('TwitterService', `Processed KOL monitor job for @${handle}`, { jobId: job.id, duration });
+            return { success: true };
           } catch (error) {
-            console.error(`Error processing KOL monitor job for @${handle}:`, error);
+            logError('TwitterService', `Error processing KOL monitor job for @${handle}`, { jobId: job.id, error: error.message });
             await ErrorHandler.handle(error);
+            return { success: false, error: error.message };
           }
         });
       }
+
+      // Restore monitors from the database and schedule jobs as needed
       await this.restoreActiveMonitors();
-      await queueService.logQueueContents('kolMonitor');
-      //await this.triggerImmediateChecks();
+
+      if (!this.fallbackMode) {
+        await queueService.logQueueContents('kolMonitor');
+      }
+
       this.initialized = true;
-      console.log('✅ TwitterService initialized');
+      logInfo('TwitterService', 'TwitterService initialized successfully');
     } catch (error) {
-      console.error('❌ Error initializing TwitterService:', error);
-      throw error;
+      logError('TwitterService', 'Error during initialization', { error: error.message });
+      await ErrorHandler.handle(error);
+      // Do not throw so that fallback mode can take over if necessary
     }
   }
 
+  /**
+   * Restores active monitors from user settings in the database.
+   */
   async restoreActiveMonitors() {
     try {
       const users = await User.find({
@@ -125,17 +154,25 @@ class TwitterService extends EventEmitter {
         }
       }
     } catch (error) {
+      logError('TwitterService', 'Error restoring active monitors', { error: error.message });
       await ErrorHandler.handle(error);
     }
   }
 
+  /**
+   * Triggers immediate tweet checks for all active monitors.
+   */
   async triggerImmediateChecks() {
     for (const [jobId, monitor] of this.activeMonitors) {
-      console.log(`Triggering immediate check for monitor ${jobId}`);
+      logInfo('TwitterService', `Triggering immediate check for monitor ${jobId}`);
       await this.checkNewTweets(monitor.userId, monitor.handle, monitor.amount);
     }
   }
 
+  /**
+   * Starts KOL monitoring for a given user and Twitter handle.
+   * Schedules a repeatable job or processes directly if in fallback mode.
+   */
   async startKOLMonitoring(userId, handle, amount) {
     try {
       handle = handle.replace(/^@+/, "").trim();
@@ -153,7 +190,6 @@ class TwitterService extends EventEmitter {
         monitor = { handle, amount: amount || 0, enabled: true };
         monitorsArray.push(monitor);
       }
-      // Update monitor values regardless.
       monitor.enabled = true;
       monitor.amount = amount || 0;
       await User.updateOne(
@@ -166,54 +202,73 @@ class TwitterService extends EventEmitter {
         },
         { runValidators: false }
       );
-      // Schedule the monitor job only if one doesn't already exist.
       const jobId = `kolMonitor:${userId}:${handle}`;
       if (!this.activeMonitors.has(jobId)) {
         await this._scheduleKOLMonitorJob(userId, handle, monitor.amount);
       } else {
-        console.log(`Job ${jobId} already exists. Skipping duplicate scheduling.`);
+        logInfo('TwitterService', `Job ${jobId} already exists. Skipping duplicate scheduling.`);
       }
-      // Immediately trigger a tweet check.
+      // Trigger an immediate tweet check even in fallback mode.
       await this.checkNewTweets(userId, handle, monitor.amount);
-      console.log(`✅ Started monitoring @${handle} for user => ${userId}`);
+      logInfo('TwitterService', `Started monitoring @${handle} for user ${userId}`);
       return { success: true, message: `Monitoring handle => ${handle}` };
     } catch (error) {
+      logError('TwitterService', 'Error starting KOL monitoring', { error: error.message });
       await ErrorHandler.handle(error);
       return { success: false, message: error.message || 'Error starting monitoring' };
     }
   }
-  
+
+  /**
+   * Schedules a repeatable job for KOL monitoring. In fallback mode, it runs the check directly.
+   */
   async _scheduleKOLMonitorJob(userId, handle, amount) {
     const jobId = `kolMonitor:${userId}:${handle}`;
     try {
-      // Check if the job is already scheduled in our active monitors map.
       if (this.activeMonitors.has(jobId)) {
-        console.log(`Job ${jobId} already scheduled. Skipping new scheduling.`);
+        logInfo('TwitterService', `Job ${jobId} already scheduled. Skipping new scheduling.`);
         return;
       }
-      // Set the desired interval (e.g., 30 minutes)
-      const intervalMs = 30 * 60 * 1000;
+      const intervalMs = 30 * 60 * 1000; // every 30 minutes
+      if (this.fallbackMode) {
+        logWarn('TwitterService', `Fallback mode active. Processing KOL monitor job for @${handle} directly.`);
+        await this.checkNewTweets(userId, handle, amount);
+      } else {
+        // Schedule a repeatable job with high priority (priority: 1)
+        await queueService.addRepeatableJob(
+          'kolMonitor',
+          { userId, handle, amount },
+          { every: intervalMs },
+          jobId,
+          { priority: 1 }
+        );
+      }
       await queueService.addRepeatableJob(
-        'kolMonitor',
-        { userId, handle, amount },
-        { every: intervalMs },
-        jobId
+        'kolMonitor',               // queue name
+        'KOL_MONITOR',             // <-- job name
+        { userId, handle, amount }, // data
+        { every: intervalMs },      // repeatOptions
+        jobId,                      // jobId (e.g. "kolMonitor:12345:@VitalikButerin")
+        { priority: 1 }             // moreOptions
       );
-      // Store the job in our in‑memory map.
+      
       this.activeMonitors.set(jobId, {
         userId,
         handle,
         amount,
         lastScheduled: new Date()
       });
-      console.log(`✅ Scheduled KOL job => ${jobId} (every ${intervalMs} ms)`);
+      logInfo('TwitterService', `Scheduled KOL job ${jobId} (every ${intervalMs} ms)`);
     } catch (error) {
-      console.error(`❌ Error scheduling KOL job => ${jobId}`, error);
+      logError('TwitterService', `Error scheduling KOL job ${jobId}`, { error: error.message });
       await ErrorHandler.handle(error);
       throw error;
     }
   }
-  
+
+  /**
+   * Stops KOL monitoring for a given user and handle.
+   */
   async stopKOLMonitoring(userId, handle) {
     try {
       handle = handle.replace(/^@+/, "").trim();
@@ -223,19 +278,23 @@ class TwitterService extends EventEmitter {
         { arrayFilters: [{ 'm.handle': handle }], runValidators: false }
       );
       const jobId = `kolMonitor:${userId}:${handle}`;
-      await queueService.removeRepeatableJobById('kolMonitor', jobId);
+      if (!this.fallbackMode) {
+        await queueService.removeRepeatableJobById('kolMonitor', jobId);
+      }
       this.activeMonitors.delete(jobId);
-      console.log(`✅ Stopped monitoring => @${handle} (user: ${userId})`);
+      logInfo('TwitterService', `Stopped monitoring @${handle} for user ${userId}`);
     } catch (error) {
+      logError('TwitterService', `Error stopping KOL monitoring for @${handle}`, { error: error.message });
       await ErrorHandler.handle(error);
     }
   }
 
+  /**
+   * Deletes a KOL monitor – removes it from the user settings and cleans up any associated jobs.
+   */
   async deleteKOLMonitor(userId, handle) {
     try {
       handle = handle.replace(/^@+/, "").trim();
-      
-      // Step 1: Remove the monitor from the user document and verify removal.
       let user;
       let attempts = 0;
       do {
@@ -247,204 +306,93 @@ class TwitterService extends EventEmitter {
         user = await User.findOne({ telegramId: userId.toString() });
         attempts++;
         if (!user || !user.settings || !user.settings.kol || !user.settings.kol.monitors.find(m => m.handle === handle)) {
-          console.log(`User document: Monitor @${handle} successfully removed after ${attempts} attempt(s).`);
+          logInfo('TwitterService', `Monitor @${handle} removed after ${attempts} attempt(s).`);
           break;
         }
-        console.log(`Monitor @${handle} still exists in user document. Retrying deletion...`);
+        logWarn('TwitterService', `Monitor @${handle} still exists. Retrying deletion...`);
       } while (attempts < 3);
-      
-      // Step 2: Remove the queue job(s) and verify they are gone.
+
       const jobId = `kolMonitor:${userId}:${handle}`;
       let removalAttempts = 0;
       let jobsRemaining = true;
       const kolQueue = queueService.getQueue('kolMonitor');
       while (jobsRemaining && removalAttempts < 3) {
         try {
-          // Remove the repeatable job.
           await queueService.removeRepeatableJobById('kolMonitor', jobId);
-          // Also remove any active/waiting/delayed jobs with matching handle and userId.
           const activeJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
           for (const job of activeJobs) {
-            if (job.data && job.data.handle === handle && job.data.userId === userId) {
+            // We check job.name === 'KOL_MONITOR' to be extra certain
+            if (
+              job.name === 'KOL_MONITOR' &&
+              job.data &&
+              job.data.handle === handle &&
+              job.data.userId === userId
+            ) {
               await job.remove();
-              console.log(`Removed additional job ${job.id} for KOL monitor @${handle}`);
             }
           }
         } catch (queueError) {
-          console.error(`Error during removal attempt ${removalAttempts + 1} for queue job @${handle}:`, queueError);
+          logError('TwitterService', `Error during removal attempt ${removalAttempts + 1} for @${handle}`, { error: queueError.message });
         }
-        // Verify that no matching job remains.
         const remainingJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
         jobsRemaining = remainingJobs.some(job => job.data && job.data.handle === handle && job.data.userId === userId);
         removalAttempts++;
         if (jobsRemaining) {
-          console.log(`Queue jobs for @${handle} still exist. Retrying removal...`);
+          logWarn('TwitterService', `Queue jobs for @${handle} still exist. Retrying removal...`);
         }
       }
       if (jobsRemaining) {
-        console.warn(`Some queue jobs for @${handle} still remain after ${removalAttempts} attempts.`);
+        logWarn('TwitterService', `Some queue jobs for @${handle} remain after ${removalAttempts} attempts.`);
       } else {
-        console.log(`Queue: All jobs for @${handle} have been removed after ${removalAttempts} attempt(s).`);
+        logInfo('TwitterService', `All queue jobs for @${handle} removed after ${removalAttempts} attempts.`);
       }
-      
-      // Step 3: Clean up the active monitors record.
       this.activeMonitors.delete(jobId);
-      console.log(`✅ Deleted KOL monitor => @${handle} (user: ${userId})`);
-      return { success: true, message: `Deleted monitor => @${handle}` };
+      logInfo('TwitterService', `Deleted KOL monitor for @${handle} (user: ${userId})`);
+      return { success: true, message: `Deleted monitor for @${handle}` };
     } catch (error) {
-      console.error(`❌ Error deleting monitor => @${handle}:`, error);
+      logError('TwitterService', `Error deleting monitor for @${handle}`, { error: error.message });
       await ErrorHandler.handle(error);
       return { success: false, message: error.message || 'Error deleting KOL monitor' };
     }
   }
 
-  /*
-  async deleteKOLMonitor(userId, handle) {
-    try {
-      handle = handle.replace(/^@+/, "").trim();
-      
-      // Step 1: Remove the monitor from the user document and verify removal.
-      let user;
-      let attempts = 0;
-      do {
-        await User.updateOne(
-          { telegramId: userId.toString() },
-          { $pull: { 'settings.kol.monitors': { handle } } },
-          { runValidators: false }
-        );
-        user = await User.findOne({ telegramId: userId.toString() });
-        attempts++;
-        if (!user || !user.settings || !user.settings.kol || !user.settings.kol.monitors.find(m => m.handle === handle)) {
-          console.log(`User document: Monitor @${handle} successfully removed after ${attempts} attempt(s).`);
-          break;
-        }
-        console.log(`Monitor @${handle} still exists in user document. Retrying deletion...`);
-      } while (attempts < 3);
-  
-      // Step 2: Remove the queue job(s) and verify they are gone.
-      const jobId = `kolMonitor:${userId}:${handle}`;
-      let removalAttempts = 0;
-      let jobsRemaining = true;
-      const kolQueue = queueService.getQueue('kolMonitor');
-      while (jobsRemaining && removalAttempts < 3) {
-        try {
-          // Remove the repeatable job.
-          await queueService.removeRepeatableJobById('kolMonitor', jobId);
-          
-          // Also remove any active/waiting/delayed jobs with matching handle/userId.
-          const activeJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
-          for (const job of activeJobs) {
-            if (job.data && job.data.handle === handle && job.data.userId === userId) {
-              await job.remove();
-              console.log(`Removed additional job ${job.id} for KOL monitor @${handle}`);
-            }
-          }
-        } catch (queueError) {
-          console.error(`Error during removal attempt ${removalAttempts + 1} for queue job @${handle}:`, queueError);
-        }
-        
-        // Verify that no matching job remains.
-        const remainingJobs = await kolQueue.getJobs(['active', 'waiting', 'delayed']);
-        jobsRemaining = remainingJobs.some(job => job.data && job.data.handle === handle && job.data.userId === userId);
-        removalAttempts++;
-        if (jobsRemaining) {
-          console.log(`Queue jobs for @${handle} still exist. Retrying removal...`);
-        }
-      }
-  
-      if (jobsRemaining) {
-        console.warn(`Some queue jobs for @${handle} still remain after ${removalAttempts} attempts.`);
-      } else {
-        console.log(`Queue: All jobs for @${handle} have been removed after ${removalAttempts} attempt(s).`);
-      }
-      
-      // Clean up the active monitors record.
-      this.activeMonitors.delete(jobId);
-      console.log(`✅ Deleted KOL monitor => @${handle} (user: ${userId})`);
-      return { success: true, message: `Deleted monitor => @${handle}` };
-    } catch (error) {
-      console.error(`❌ Error deleting monitor => @${handle}:`, error);
-      await ErrorHandler.handle(error);
-      return { success: false, message: error.message || 'Error deleting KOL monitor' };
-    }
-  }
-    */  
-/*
-  async deleteKOLMonitorID(userId, monitorId) {
-    try {
-      const user = await User.findOne({ telegramId: userId.toString() });
-      if (!user) throw new Error(`User not found => ${userId}`);
-      const monitorsArr = user.settings?.kol?.monitors || [];
-      const index = monitorsArr.findIndex(m => m._id?.toString() === monitorId);
-      if (index < 0) throw new Error(`Monitor _id=${monitorId} not found`);
-      const handle = monitorsArr[index].handle.replace(/^@+/, "").trim();
-      await User.updateOne(
-        { telegramId: userId.toString() },
-        { $pull: { 'settings.kol.monitors': { _id: monitorId } } },
-        { runValidators: false }
-      );
-      const jobId = `kolMonitor:${userId}:${handle}`;
-      await queueService.removeRepeatableJobById('kolMonitor', jobId);
-      this.activeMonitors.delete(jobId);
-      console.log(`✅ Deleted monitor => handle="${handle}", user=${userId}, _id=${monitorId}`);
-      return { success: true, message: `Deleted KOL monitor => handle="${handle}"` };
-    } catch (error) {
-      console.error(`❌ Error deleting by ID => ${monitorId}`, error);
-      await ErrorHandler.handle(error);
-      return { success: false, message: error.message || 'Error deleting KOL monitor by ID' };
-    }
-  }
-*/
+  /**
+   * Retrieves the KOL monitors for a user and enriches each with the latest tweet (from cache or Apify).
+   */
   async getKOLsMonitored(userId) {
     try {
-      console.log(`[getKOLsMonitored] Starting for userId => ${userId}`);
+      logInfo('TwitterService', `Getting monitored KOLs for user ${userId}`);
       const user = await User.findOne({ telegramId: userId.toString() });
       if (!user) {
-        console.warn(`[getKOLsMonitored] User not found => ${userId}`);
+        logWarn('TwitterService', `User not found: ${userId}`);
         return [];
       }
-      console.log(
-        `[getKOLsMonitored] Found user => ${JSON.stringify({ telegramId: user.telegramId, kolSettings: user.settings?.kol }, null, 2)}`
-      );
       if (!user.settings?.kol?.monitors) {
-        console.warn(`[getKOLsMonitored] No monitors found for user => ${userId}`);
+        logWarn('TwitterService', `No monitors found for user: ${userId}`);
         return [];
       }
       const activeMonitors = user.settings.kol.monitors.filter(m => m.enabled);
       if (activeMonitors.length === 0) {
-        console.log(`[getKOLsMonitored] User ${userId} has no enabled monitors.`);
+        logInfo('TwitterService', `No enabled monitors for user ${userId}`);
         return [];
       }
-      console.log(`[getKOLsMonitored] Found ${activeMonitors.length} enabled monitors.`);
-  
-      // Reference time: 24 hours ago (in milliseconds)
       const oneDayAgoMs = Date.now() - 24 * 3600 * 1000;
-      console.log(`[getKOLsMonitored] Reference time (oneDayAgo): ${new Date(oneDayAgoMs).toUTCString()}`);
-  
       const monitorsWithTweets = await Promise.all(
-        activeMonitors.map(async (monitor, idx) => {
+        activeMonitors.map(async (monitor) => {
           try {
-            console.log(`[getKOLsMonitored] Processing monitor #${idx + 1}: ${JSON.stringify(monitor, null, 2)}`);
             const normalizedHandle = monitor.handle.replace(/^@+/, '').trim();
             if (!normalizedHandle) {
-              console.warn(`[getKOLsMonitored] Normalized handle is empty; skipping monitor.`);
+              logWarn('TwitterService', 'Empty normalized handle, skipping monitor');
               return monitor;
             }
-            console.log(`[getKOLsMonitored] Final handle => "${normalizedHandle}" for user => ${userId}`);
-  
             let latestTweet = null;
             let source = '';
-  
-            // First, try using cached tweets.
-            const cached = await this._getCachedTweets(normalizedHandle, 10);
-            if (cached) {
-              console.log(`[getKOLsMonitored] Using cached tweets for => ${normalizedHandle}`);
-              const validTweets = cached.items.filter(tweet => {
-                const reordered = reorderTweetDate(tweet.createdAt);
-                const parsedTime = Date.parse(reordered);
-                console.log(
-                  `[getKOLsMonitored] (Cache) Tweet id=${tweet.id} orig="${tweet.createdAt}" reordered="${reordered}" parsed=${!isNaN(parsedTime) ? new Date(parsedTime).toUTCString() : 'INVALID'}`
-                );
+            // Check if cached tweets are available and still fresh (valid for 60 seconds)
+            const cached = this.tweetCache.get(normalizedHandle);
+            if (cached && (Date.now() - cached.timestamp) < 60 * 1000) {
+              logInfo('TwitterService', `Using cached tweets for ${normalizedHandle}`);
+              const validTweets = cached.tweets.filter(tweet => {
+                const parsedTime = Date.parse(normalizeTweetDate(tweet.createdAt));
                 return !isNaN(parsedTime) && parsedTime > oneDayAgoMs;
               });
               if (validTweets.length > 0) {
@@ -452,26 +400,22 @@ class TwitterService extends EventEmitter {
                 source = 'cache';
               }
             }
-  
-            // If not found in cache, fetch from Apify.
-            if (!latestTweet) {
+            // If no cached valid tweet, fetch from Apify if not rate-limited
+            const lastCall = this.apiRateLimitTimestamps.get(normalizedHandle) || 0;
+            if (!latestTweet && (Date.now() - lastCall) >= this.apiCallInterval) {
               const input = {
                 cookies: [config.apifyCookieToken],
                 maxItems: 50,
                 searchTerms: [`from:${normalizedHandle}`],
                 sortBy: "Latest"
               };
-              console.log(`[getKOLsMonitored] Apify input for => ${normalizedHandle}: ${JSON.stringify(input, null, 2)}`);
+              logInfo('TwitterService', `Fetching tweets from Apify for ${normalizedHandle}`, { input });
               const run = await this.apifyClient.actor("apidojo/tweet-scraper").call(input);
               const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
-              await this._cacheTweets(normalizedHandle, items);
-              console.log(`[getKOLsMonitored] Cached ${items.length} tweets for ${normalizedHandle}`);
+              this.tweetCache.set(normalizedHandle, { timestamp: Date.now(), tweets: items });
+              this.apiRateLimitTimestamps.set(normalizedHandle, Date.now());
               const validTweets = items.filter(tweet => {
-                const reordered = reorderTweetDate(tweet.createdAt);
-                const parsedTime = Date.parse(reordered);
-                console.log(
-                  `[getKOLsMonitored] (Apify) Tweet id=${tweet.id} orig="${tweet.createdAt}" reordered="${reordered}" parsed=${!isNaN(parsedTime) ? new Date(parsedTime).toUTCString() : 'INVALID'}`
-                );
+                const parsedTime = Date.parse(normalizeTweetDate(tweet.createdAt));
                 return !isNaN(parsedTime) && parsedTime > oneDayAgoMs;
               });
               if (validTweets.length > 0) {
@@ -479,36 +423,42 @@ class TwitterService extends EventEmitter {
                 source = 'apify';
               }
             }
-  
             if (latestTweet) {
-              console.log(`[getKOLsMonitored] Latest tweet for ${normalizedHandle} from ${source}: ${JSON.stringify(latestTweet, null, 2)}`);
+              logInfo('TwitterService', `Latest tweet for ${normalizedHandle} from ${source}`, { tweet: latestTweet });
             } else {
-              console.log(`[getKOLsMonitored] No valid tweet found for ${normalizedHandle}`);
+              logWarn('TwitterService', `No valid tweet found for ${normalizedHandle}`);
             }
             return {
               ...monitor,
-              lastTweet: latestTweet
-                ? { text: latestTweet.text, url: latestTweet.url, createdAt: latestTweet.createdAt }
-                : null
+              lastTweet: latestTweet ? { text: latestTweet.text, url: latestTweet.url, createdAt: latestTweet.createdAt } : null
             };
           } catch (error) {
-            console.warn(`[getKOLsMonitored] Error for monitor => ${JSON.stringify(monitor)}`, error);
+            logError('TwitterService', `Error processing monitor for ${monitor.handle}`, { error: error.message });
             return monitor;
           }
         })
       );
-      console.log(`[getKOLsMonitored] Successfully processed monitors for user => ${userId}`);
+      logInfo('TwitterService', `Processed monitors for user ${userId}`);
       return monitorsWithTweets;
     } catch (error) {
-      console.error(`[getKOLsMonitored] Unexpected error =>`, error);
+      logError('TwitterService', 'Unexpected error in getKOLsMonitored', { error: error.message });
       await ErrorHandler.handle(error);
       return [];
     }
   }
-  
-  // --- checkNewTweets ---
+
+  /**
+   * Checks for new tweets for a given Twitter handle. Enforces rate limiting and updates the cache.
+   */
   async checkNewTweets(userId, handle, amount) {
     try {
+      const normalizedHandle = handle.replace(/^@+/, '').trim();
+      const lastCall = this.apiRateLimitTimestamps.get(normalizedHandle) || 0;
+      if ((Date.now() - lastCall) < this.apiCallInterval) {
+        logInfo('TwitterService', `Skipping API call for ${normalizedHandle} due to rate limiting`);
+        return;
+      }
+      
       // Clean up the handle.
       handle = handle.replace(/^@+/, '').trim();
       console.log(`[checkNewTweets] user=${userId}, handle=${handle}, amount=${amount}`);
@@ -625,6 +575,7 @@ class TwitterService extends EventEmitter {
       } else {
         await this._updateMonitorLastChecked(userId, handle, new Date());
       }
+      this.apiRateLimitTimestamps.set(normalizedHandle, Date.now());
       return { success: true, message: `Processed ${newTweets.length} new tweets` };
     } catch (error) {
       console.error('[checkNewTweets] Error =>', error);

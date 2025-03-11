@@ -197,12 +197,12 @@ export class HelperFunctions {
   
     // We'll detect if the user wants repeated calls.
     // For example, user calls "search_internet" with an array of queries.
-    // Or "token_price_dexscreener" with multiple queries, etc.
+    // Or "fetch_token_price_in_usd" with multiple queries, etc.
   
     // 1) For "search_internet"
     if (
       (fnName === "search_internet" && Array.isArray(args.queries)) ||
-      (fnName === "token_price_dexscreener" && Array.isArray(args.queries)) ||
+      (fnName === "fetch_token_price_in_usd" && Array.isArray(args.queries)) ||
       (fnName === "token_price_coingecko" && Array.isArray(args.queries)) ||
       (fnName === "analyze_token_by_symbol" && Array.isArray(args.queries)) ||
       (fnName === "analyze_token_by_address" && Array.isArray(args.queries)) 

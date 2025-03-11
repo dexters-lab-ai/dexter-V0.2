@@ -268,20 +268,23 @@ dashboardRouter.get('/fragment', async (req, res) => {
 // IMP: Download the last 300 Pumpfun launches from our cache
 dashboardRouter.get('/downloadPumpFunTokens', async (req, res) => {
   try {
-    // Fetch all tokens from the beginning until now, then limit to 300 most recent
+    // Retrieve all tokens from the beginning until now
     const tokensResult = await pumpFunService.getTokensByPeriod(new Date(0), new Date());
     if (!tokensResult.success) {
       throw new Error(tokensResult.error);
     }
-    // Sort descending by timestamp and take the top 300
+    // Sort tokens descending by timestamp, take the 300 most recent, then reverse to chronological order
     const tokens = tokensResult.tokens
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, 300)
-      .reverse(); // reverse to chronological order
+      .reverse();
+      
+    console.log(`📥 Downloading ${tokens.length} PumpFun tokens from DB`);
     res.setHeader('Content-Disposition', 'attachment; filename=pumpfun_tokens.json');
     res.setHeader('Content-Type', 'application/json');
     res.send(JSON.stringify(tokens, null, 2));
   } catch (error) {
+    console.error('❌ Error in /downloadPumpFunTokens:', error);
     res.status(500).send({ error: error.message });
   }
 });

@@ -342,38 +342,38 @@ export class JupiterQuickNode {
      */
     async getCachedQuote(quoteRequest) {
         try {
-        const { inputMint, outputMint, inAmount } = quoteRequest;
-
-        // Check if we have a cached quote within the last 60 seconds
-        const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
-        const cachedQuote = await JupiterQuote.findOne({
+          const { inputMint, outputMint, inAmount } = quoteRequest;
+      
+          // Check if we have a cached quote within the last 60 seconds
+          const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+          const cachedQuote = await JupiterQuote.findOne({
             inputMint,
             outputMint,
             inAmount,
             timestamp: { $gte: oneMinuteAgo }
-        });
-
-        if (cachedQuote) {
+          });
+      
+          if (cachedQuote) {
             console.log("✅ Returning Cached Quote:", cachedQuote);
             return cachedQuote;
-        }
-
-        // console.log("⚡ Fetching new quote from Jupiter...");
-        const newQuote = await this.getQuote(quoteRequest);
-
-        // Store the fresh quote in MongoDB
-        await JupiterQuote.findOneAndUpdate(
+          }
+      
+          // No recent cached quote; fetch a new one
+          const newQuote = await this.getQuote(quoteRequest);
+      
+          // Store the fresh quote in MongoDB and return the updated document
+          const updatedQuote = await JupiterQuote.findOneAndUpdate(
             { inputMint, outputMint, inAmount },
             { ...newQuote, timestamp: new Date() },
             { upsert: true, new: true }
-        );
-
-        return newQuote;
+          );
+      
+          return updatedQuote;
         } catch (error) {
-        console.error("❌ Error in getCachedQuote:", error.message);
-        throw error;
+          console.error("❌ Error in getCachedQuote:", error.message);
+          throw error;
         }
-    }
+      }      
 
     /**
      * Wrapper for quoteGet that applies restrictions and dynamic slippage.
@@ -400,7 +400,7 @@ export class JupiterQuickNode {
             console.log("📜 Jupiter Quote:", quote);
             return quote;
         } catch (error) {
-            console.error(`Quote fetch attempt ${attempt} failed: ${error.message}`);
+            console.error(`Quote fetch attempt ${attempt} failed: ${error}`);
             if (attempt < maxRetries) await sleep(delay);
             else throw error;
         }

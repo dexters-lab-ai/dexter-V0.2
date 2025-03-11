@@ -28,7 +28,7 @@ import WormholeBridgeService from '../../Wormhole/WormholeBridgeService.js';
 import cookieFun from '../../cookieDAO/CookieFun.js';
 import ResearchService from '../../research/ResearchService.js';
 import { tasksService } from '../../tasks/TasksService.js';
-import { searchCoin } from '../../coingecko/CoinGecko.js';
+import { searchCoin, getPriceCoinGecko } from '../../coingecko/CoinGecko.js';
 import { pumpFunService } from '../../pumpfun/PumpFunService.js';
 import { networkScraper } from '../../fireCrawl/fireCrawl.js';
 
@@ -736,17 +736,23 @@ export class IntentProcessor extends EventEmitter {
       }
 
       const { network, tokenInfo } = tokenData;
+      console.log(tokenData);
       const tokenSymbol = tokenInfo.symbol || tokenInfo.token_symbol || tokenInfo.mint || "N/A";
       const tokenAddress = tokenInfo.address || tokenInfo.token_address || tokenInfo.mint || "N/A";
       await log(chatId, `✅ Network determined: ${network}\n\nToken Info:\n- Symbol: ${tokenSymbol}\n- Address: ${tokenAddress}`);
 
-      const wallets = await walletService.getWalletsByNetwork(userId, network);
-      if (!wallets.length) {
-        throw new Error(`No wallets found for network ${network}. Please add a wallet for this network.`);
-      }
+      let walletAddress;
+      if (!params.walletAddress) {
+        const wallets = await walletService.getWalletsByNetwork(userId, network);
+        if (!wallets.length) {
+          throw new Error(`No wallets found for network ${network}. Please add a wallet for this network.`);
+        }
 
-      const walletAddress = wallets[0].address;
-      await log(chatId, `✅ Using wallet: ${walletAddress}`);
+        walletAddress = wallets[0].address;
+        await log(chatId, `✅ Using wallet: ${walletAddress}`);
+      } else {
+        walletAddress = params.walletAddress.trim().replace(/[\u0000-\u001F\u007F]/g, "");        
+      }
 
       if (!params.targetPrice || typeof params.targetPrice !== 'number' || params.targetPrice <= 0) {
         throw new Error('Invalid target price. It must be a positive number.');
@@ -843,9 +849,9 @@ export class IntentProcessor extends EventEmitter {
     return null;
   }
 
-  async viewPriceAlerts() {
+  async viewPriceAlerts(userId) {
     try {
-      return await priceAlertService.viewAlerts();
+      return await priceAlertService.viewAlerts(userId);
     } catch (error) {
       console.error("Error fetching price alerts", error.message);
       throw error;
@@ -1834,51 +1840,26 @@ export class IntentProcessor extends EventEmitter {
   async performTokenPriceCheck(token) {
     if (typeof token !== "string") token = String(token);
     const sanitizedToken = token.trim().replace(/[\u0000-\u001F\u007F]/g, "");
-    const isAddress = /^[a-zA-Z0-9]{35,44}$/.test(sanitizedToken);
-    const isSymbol = /^[a-zA-Z0-9]{2,10}$/.test(sanitizedToken);
   
-    const results = {};
-    // Iterate over all networks in evmChainMapping
-    for (const net of Object.keys(evmChainMapping)) {
-      try {
-        let data;
-        if (isAddress) {
-          data = await getTokenPrice(net, sanitizedToken);
-        } else if (isSymbol) {
-          data = await searchTokens(sanitizedToken, net);
-        }
-        if (data && data.data) {
-          results[net] = data;
-        }
-      } catch (err) {
-        console.warn(`Moralis fetch for ${net} failed: ${err.message}`);
-      }
-    }
-    if (Object.keys(results).length > 0) return results;
-  
-    // Fallback: DexScreener
-    let dexscreenerData;
+    // DexScreener
+    let priceUsd;
     try {
-      if (isAddress) {
-        dexscreenerData = await this.dexscreener.getTokenInfoByAddress(sanitizedToken);
-      } else if (isSymbol) {
-        dexscreenerData = await this.dexscreener.getTokenInfoBySymbol(sanitizedToken);
-      }
+        priceUsd = await this.dexscreener.getTokenPriceByAddress(sanitizedToken);//aslo accepts symbol
+     
     } catch (err) {
       console.warn("DexScreener fetch failed:", err.message);
-      dexscreenerData = null;
     }
-    if (dexscreenerData) {
-      const extracted = this.extractFirstObject(dexscreenerData);
-      if (extracted) return { fallback: { source: "DexScreener", data: extracted } };
+    if (priceUsd) {
+      return `$${priceUsd}`;
     }
   
     // Fallback: CoinGecko
     try {
-      const coingeckoData = await this.getTokenInfoFromCoinGecko(sanitizedToken);
-      if (coingeckoData) return { fallback: { source: "CoinGecko", data: coingeckoData } };
+      const coingeckoPrice = await getPriceCoinGecko(sanitizedToken);
+      // returns usd price in units
+      if (coingeckoPrice) return `$${coingeckoPrice}`;
     } catch (err) {
-      console.error("CoinGecko also failed:", err.message);
+      console.error("Price fetch failed on Dexscreener & CoinGecko:", err.message);
     }
     return { error: "Failed to retrieve token data from all sources." };
   }  
@@ -1930,8 +1911,10 @@ export class IntentProcessor extends EventEmitter {
     } catch (error) {
       console.warn("CoinGecko fetch failed:", error.message);
     }
+
+
   
-    // Iterate over all networks in evmChainMapping.
+    // Fallback - Iterate over all networks in evmChainMapping.
     let moralisData = null;
     const networks = Object.keys(evmChainMapping);
     for (const net of networks) {
@@ -1947,19 +1930,6 @@ export class IntentProcessor extends EventEmitter {
     }
     if (moralisData && moralisData.data && moralisData.data.result && moralisData.data.result.length > 0) {
       return moralisData.data.result[0].tokenAddress;
-    }
-  
-    // Fallback to DexScreener.
-    try {
-      const dexscreenerData = await this.dexscreener.getTokenInfoBySymbol(symbol);
-      // Return the base token address instead of symbol.
-      if (dexscreenerData && dexscreenerData.baseToken && dexscreenerData.baseToken.address) {
-        return dexscreenerData.baseToken.address;
-      }
-      throw new Error('DexScreener data is incomplete or undefined');
-    } catch (fallbackError) {
-      console.warn("DexScreener fetch failed:", fallbackError.message);
-      return "NONE";
     }
   }  
 

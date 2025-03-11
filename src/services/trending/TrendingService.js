@@ -95,7 +95,7 @@ class TrendingService extends EventEmitter {
     const cacheKey = `trending:chain:${network}`;
     try {
       const cached = await cacheService.get(cacheKey);
-      if (cached && Array.isArray(cached) && cached.length > 0) return cached.slice(0, 5);
+      if (cached && Array.isArray(cached) && cached.length > 0) return cached.slice(0, 15);
       
       const tokens = await dextools.fetchTrendingTokens(network);
       
@@ -107,7 +107,7 @@ class TrendingService extends EventEmitter {
       if (tokens.length === 0) return [this.getTrendingFallback(network)];
       
       const formatted = tokens.map(token => this.formatterNeeded(token));
-      const limited = formatted.slice(0, 5);
+      const limited = formatted.slice(0, 15);
       await cacheService.set(cacheKey, limited, CACHE_DURATION);
       return limited;
     } catch (error) {

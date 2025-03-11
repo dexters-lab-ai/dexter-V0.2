@@ -22,74 +22,56 @@ export async function sendTelegramNotification(telegramChatId, message) {
 
 /* --- Mongoose Schema for saving PumpFun token events --- */
 const pumpFunTokenSchema = new mongoose.Schema({
-  signature: String,
-  mint: String,
-  traderPublicKey: String,
-  initialBuy: Number,
-  marketCapSol: Number,
-  name: String,
-  symbol: String,
-  uri: String,
+  signature: { type: String, required: true },
+  mint: { type: String, required: true },
+  traderPublicKey: { type: String },
+  initialBuy: { type: Number },
+  marketCapSol: { type: Number },
+  name: { type: String },
+  symbol: { type: String },
+  uri: { type: String },
   timestamp: { type: Date, default: Date.now }
 });
+// Indexed timestamp field for faster retrieval.
+pumpFunTokenSchema.index({ timestamp: 1 });
 const PumpFunTokenModel = mongoose.model('PumpFunToken', pumpFunTokenSchema);
 
 class PumpFunService extends EventEmitter {
   constructor(networkConfig = { rpcUrl: config.solanaEndpoint }) {
     super();
-
+    console.log('🚀 Starting PumpFunService...');
     // WebSocket and API endpoints
     this.websocketEndpoint = 'wss://pumpportal.fun/api/data';
     this.apiEndpoint = 'https://pumpportal.fun/api/trade-local';
     this.apiKey = config.pumpFunApiKey;
-
-    // Solana connection
+    
+    // Solana connection and other services remain unchanged…
     this.connection = new Connection(networkConfig.rpcUrl, 'confirmed');
-
-    // WebSocket manager for a single connection instance
     this.wsManager = wsManager;
     this.ws = null;
-
-    // Optional token launch detector
     this.tokenDetector = tokenLaunchDetector;
-
-    // Subscription maps for per-user subscriptions
-    this.newTokenSubscriptions = new Map(); // key: userId, value: { telegramChatId, criteria }
-    this.tokenTradeSubscriptions = new Map(); // key: userId, value: { telegramChatId, criteria }
-
-    // Global set of contract addresses to monitor for token trades
+    // Subscriptions and queues
+    this.newTokenSubscriptions = new Map();
+    this.tokenTradeSubscriptions = new Map();
     this.tokenTradeQueue = new Set();
-
-    // Message queue for outgoing messages (when WS is not ready)
     this.messageQueue = [];
-
-    // Reconnection and heartbeat management
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
     this.heartbeatInterval = null;
     this.heartbeatTimeout = null;
-
-    // Track total tokens launched (incremented on new token messages)
     this.tokenLaunchCount = 0;
-
-    // Token cache: store every token event (new token) received
     this.tokenCache = [];
-
-    // Start periodic flush of token cache to the DB every 2mins
+    
+    // Start periodic flush of token cache to DB every 2 mins
     this.cacheFlushInterval = setInterval(() => this.flushTokenCache(), 120000);
-
+    
     // Initialization flag
     this.isInitialized = false;
-
-    // Start periodic batch processing for outgoing WS messages
+    
+    // Start batch processing for outgoing WS messages
     this.startBatchProcessing();
   }
-
-  /**
-   * Establish the WebSocket connection.
-   * 
-   * IMPORTANT: Call pumpFunService.connect() at startup so the module is ready.
-   */
+  
   async connect() {
     try {
       this.ws = await this.wsManager.createConnection(
@@ -102,8 +84,12 @@ class PumpFunService extends EventEmitter {
           onError: this.handleError.bind(this)
         }
       );
+      console.log(`✅ PumpFunService connected to ${this.websocketEndpoint}`);
       this.isInitialized = true;
       this.emit('connected');
+      // Immediately flush any pending messages and start heartbeat.
+      this.flushQueue();
+      this.startHeartbeat();
     } catch (error) {
       await ErrorHandler.handle(error, { operation: 'connect' });
       this.handleReconnect();
@@ -370,11 +356,13 @@ class PumpFunService extends EventEmitter {
   async flushTokenCache() {
     if (this.tokenCache.length === 0) return;
     try {
+      console.log(`🔄 Flushing ${this.tokenCache.length} tokens from cache to DB...`);
       await PumpFunTokenModel.insertMany(this.tokenCache);
-      console.log(`Flushed ${this.tokenCache.length} tokens to DB`);
+      console.log(`✅ Successfully flushed ${this.tokenCache.length} tokens to DB.`);
       this.tokenCache = [];
     } catch (error) {
-      console.error("Error flushing token cache:", error);
+      console.error("❌ Error flushing token cache:", error);
+      // Optionally: implement a retry or log the failed tokens count.
     }
   }
 
@@ -426,8 +414,7 @@ class PumpFunService extends EventEmitter {
 
   /* ────────────────────────────────
      Cleanup & Shutdown
-  ──────────────────────────────── */
-
+  ──────────────────────────────── */ 
   cleanup() {
     console.log('🧹 Cleaning up PumpFunService...');
     if (this.ws) {
@@ -435,7 +422,7 @@ class PumpFunService extends EventEmitter {
     }
     this.stopHeartbeat();
     clearInterval(this.cacheFlushInterval);
-    // Flush remaining token cache on shutdown
+    // Flush remaining tokens on shutdown
     this.flushTokenCache();
     this.removeAllListeners();
     this.isInitialized = false;
