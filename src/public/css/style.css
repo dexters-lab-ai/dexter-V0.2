@@ -20,6 +20,7 @@
   body {
     font-family: 'Space Grotesk', sans-serif;
     background: var(--background);
+    background-color: var(--background) !important;
     color: var(--text);
     line-height: 1.6;
   }

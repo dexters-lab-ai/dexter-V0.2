@@ -1168,23 +1168,67 @@ export class IntentProcessor extends EventEmitter {
     try {
       console.log(`🔍 Processing pasted address: ${address}`);
   
-      // 1. Determine network and token info.
+      // 1. Get token info using the improved fallback chain
       let tokenData;
       try {
-        tokenData = await retryCall(() => this.getTokenNetwork(address));
-        console.log(`🌐 Network detected: ${JSON.stringify(tokenData, null, 2)}`);
+        // This now uses getTokenInfoByAddress with proper fallback chain
+        tokenData = await retryCall(() => this.getTokenInfoByAddress(address));
+        console.log(`🌐 Token data retrieved: ${JSON.stringify(tokenData, null, 2)}`);
       } catch (error) {
-        console.warn(`⚠️ Failed to determine network: ${error.message}`);
+        console.warn(`⚠️ Failed to get token info: ${error.message}`);
         tokenData = null;
       }
-      const network = tokenData?.network || null;
-      const tokenInfo = tokenData?.tokenInfo || null;
-      const tokenSymbol = tokenInfo?.[0]?.baseToken?.symbol; // e.g. "SOL"
-      console.log(`Network: ${network} | Symbol: ${tokenSymbol} | Info: ${JSON.stringify(tokenInfo, null, 2)}`);
+  
+      // Extract network and token info from the response
+      let network, tokenInfo, tokenSymbol, dataSource;
+      
+      if (tokenData?.data) {
+        // Handle different response formats based on the source
+        if (tokenData.source?.includes("Dexscreener")) {
+          network = tokenData.data.chainId || "unknown";
+          tokenInfo = [{ baseToken: tokenData.data }];
+          tokenSymbol = tokenData.data.symbol;
+          dataSource = tokenData.source;
+        } else if (tokenData.source === "CoinGecko") {
+          const firstNetwork = Object.keys(tokenData.data)[0];
+          network = firstNetwork || "unknown";
+          const geckoData = tokenData.data[firstNetwork]?.data;
+          tokenInfo = [{ baseToken: { symbol: geckoData?.result?.[0]?.symbol || "Unknown", address } }];
+          tokenSymbol = tokenInfo[0].baseToken.symbol;
+          dataSource = "CoinGecko";
+        } else if (tokenData.source === "handleAddressInput") {
+          network = tokenData.data.network || "unknown";
+          tokenInfo = tokenData.data.tokenInfo;
+          tokenSymbol = tokenInfo?.[0]?.baseToken?.symbol;
+          dataSource = "handleAddressInput";
+        } else if (tokenData.source?.includes("Moralis")) {
+          if (tokenData.source.includes("Solana")) {
+            network = "solana";
+            tokenInfo = [{ baseToken: { symbol: tokenData.data.result?.[0]?.symbol || "Unknown", address } }];
+            tokenSymbol = tokenInfo[0].baseToken.symbol;
+            dataSource = tokenData.source;
+          } else {
+            // For EVM networks from Moralis
+            const firstNetwork = Object.keys(tokenData)[0];
+            network = firstNetwork || "unknown";
+            const moralisData = tokenData[firstNetwork]?.data;
+            tokenInfo = [{ baseToken: { symbol: moralisData?.result?.[0]?.symbol || "Unknown", address } }];
+            tokenSymbol = tokenInfo[0].baseToken.symbol;
+            dataSource = tokenData[firstNetwork]?.source || "Moralis";
+          }
+        }
+      }
+  
+      console.log(`Network: ${network} | Symbol: ${tokenSymbol} | Source: ${dataSource}`);
   
       // 2. Sanitize the address.
       const sanitizedAddress = address.trim().replace(/[\u0000-\u001F\u007F]/g, "");
-      const finalOutput = { network, type: tokenInfo ? "token" : "wallet", data: { address: sanitizedAddress } };
+      const finalOutput = { 
+        network, 
+        type: tokenInfo ? "token" : "wallet", 
+        source: dataSource,
+        data: { address: sanitizedAddress } 
+      };
   
       if (tokenInfo) {
         console.log("✅ Address identified as a token!");
@@ -1203,8 +1247,6 @@ export class IntentProcessor extends EventEmitter {
               return null;
             })
         ]);
-        console.log(`Pair Addresses: ${JSON.stringify(pairAddresses)}`);
-        console.log(`Holders: ${JSON.stringify(holders)}`);
   
         // 4. Fetch snipers & tweets if available.
         const snipers = pairAddresses
@@ -1221,26 +1263,24 @@ export class IntentProcessor extends EventEmitter {
                 return null;
               })
           : null;
-        const mindshare = 
+        /* const mindshare = 
           await retryCall(() => this.processAgentByContractQuery(sanitizedAddress, '_3Days'))
             .catch(err => {
               console.warn(`⚠️ Failed to fetch mindshare: ${err.message}`);
               return null;
           });
-
-        console.log(`Snipers: ${JSON.stringify(snipers)}`);
-        console.log(`Tweets: ${JSON.stringify(tweets)}`);
-        console.log(`Mindshare: ${JSON.stringify(mindshare)}`);
+          */
   
         // 5. Group the results with titles using the token symbol.
         finalOutput.data = {
           address: sanitizedAddress,
+          source: dataSource,
           [`${tokenSymbol} Info`]: tokenInfo,
           [`${tokenSymbol} Pair Addresses`]: pairAddresses,
           [`${tokenSymbol} Holders`]: holders,
           [`${tokenSymbol} Snipers`]: snipers,
           [`${tokenSymbol} Tweets`]: tweets,          
-        [`${tokenSymbol} Mindshare`]: mindshare
+          //[`${tokenSymbol} Mindshare`]: mindshare
         };
       } else {
         // 6. If it's a wallet, fetch wallet-related data.
@@ -1262,9 +1302,6 @@ export class IntentProcessor extends EventEmitter {
               return null;
             })
         ]);
-        console.log(`Net Worth: ${JSON.stringify(networth)}`);
-        console.log(`PNL: ${JSON.stringify(pnl)}`);
-        console.log(`Transactions: ${JSON.stringify(transactions)}`);
   
         finalOutput.data = {
           address: sanitizedAddress,
@@ -1281,7 +1318,7 @@ export class IntentProcessor extends EventEmitter {
       console.error("❌ Error in handleAddressPaste:", error);
       return { message: "Failed to process the pasted address.", data: null };
     }
-  }  
+  }
 
   async getTokenInfoBySymbol(symbol) {
     try {
@@ -1337,60 +1374,93 @@ export class IntentProcessor extends EventEmitter {
   async getTokenInfoByAddress(walletAddress) {
     // Check if address is EVM (0x-prefixed, 42 characters); otherwise assume Solana.
     const isEVM = /^0x[a-fA-F0-9]{40}$/.test(walletAddress);
-  
-    if (!isEVM) {
-      // Solana flow.
-      try {
-        const dexData = await this.dexscreener.getTokenInfoByAddress(walletAddress);
-        if (dexData) return { source: "Dexscreener (Solana)", data: dexData };
-      } catch (err) {
-        console.warn("Solana Dexscreener failed:", err.message);
+    
+    // 1. Try Dexscreener first for both EVM and Solana
+    try {
+      console.log(`Trying Dexscreener for ${isEVM ? 'EVM' : 'Solana'} address: ${walletAddress}`);
+      const dexData = await this.dexscreener.getTokenInfoByAddress(walletAddress);
+      if (dexData) {
+        return { 
+          source: `Dexscreener (${isEVM ? dexData.chainId || 'EVM' : 'Solana'})`, 
+          data: dexData 
+        };
       }
+    } catch (err) {
+      console.warn(`${isEVM ? 'EVM' : 'Solana'} Dexscreener failed:`, err.message);
+    }
+    
+    // 2. Try CoinGecko as second option
+    try {
+      console.log(`Trying CoinGecko for address: ${walletAddress}`);
+      const geckoData = await this.getTokenInfoFromCoinGecko(walletAddress);
+      if (geckoData) {
+        return { 
+          source: "CoinGecko", 
+          data: geckoData 
+        };
+      }
+    } catch (err) {
+      console.warn("CoinGecko lookup failed:", err.message);
+    }
+    
+    // 3. Try handleAddressInput as third option
+    try {
+      console.log(`Trying handleAddressInput for address: ${walletAddress}`);
+      const handleData = await this.handleAddressInput(walletAddress);
+      if (handleData && !handleData.error) {
+        return { 
+          source: "handleAddressInput", 
+          data: handleData 
+        };
+      }
+    } catch (err) {
+      console.warn("handleAddressInput failed:", err.message);
+    }
+    
+    // 4. Finally, try Moralis as last resort (compressed code)
+    if (!isEVM) {
+      // Solana flow - compressed
       try {
         const solSearch = await searchTokens(walletAddress, 'solana');
         if (solSearch?.data?.result?.length > 0) {
-          return { source: "Moralis Deep-Index Discovery (Token Search, Solana)", data: solSearch.data };
+          return { source: "Moralis (Solana)", data: solSearch.data };
         }
       } catch (err) {
-        console.warn("Solana searchTokens failed:", err.message);
+        console.warn("Solana Moralis failed:", err.message);
       }
       return { error: "Failed to retrieve token info for Solana." };
     } else {
-      // EVM flow: dynamically support all EVM networks.
-      const networks = Object.keys(evmChainMapping).filter(chain => chain !== 'solana'); // Exclude Solana if included
+      // EVM flow - compressed
+      const networks = Object.keys(evmChainMapping).filter(chain => chain !== 'solana');
       const results = {};
-
-      for (const net of networks) {
+      
+      // Parallel network checks with compressed code
+      const networkResults = await Promise.all(networks.map(async (net) => {
         try {
+          // Try direct token info first
           const result = await getEVMTokenInfo(net, walletAddress);
-          if (result?.data?.result?.length > 0) {
-            results[net] = result;
-            continue;
+          if (result?.data?.result?.length > 0) return { net, result };
+          
+          // Fall back to search
+          const search = await searchTokens(walletAddress, net);
+          if (search?.data?.result?.length > 0) {
+            return { net, result: { source: `Moralis Search (${net})`, data: search.data } };
           }
-          const searchResult = await searchTokens(walletAddress, net);
-          if (searchResult?.data?.result?.length > 0) {
-            results[net] = { source: `Moralis Deep-Index Discovery (Token Search, ${net})`, data: searchResult.data };
-          } else {
-            results[net] = { source: `Moralis EVM (${net})`, data: `Token info through ${net} returned not found` };
-          }
+          
+          return { net, result: { source: `Moralis (${net})`, data: null } };
         } catch (err) {
-          console.warn(`Error in Moralis for ${net}: ${err.message}`);
-          try {
-            const fallbackData = await this.dexscreener.getTokenInfoByAddress(walletAddress);
-            if (fallbackData) {
-              results[net] = { source: `Dexscreener (${net})`, data: fallbackData };
-            } else {
-              results[net] = { source: `Fallback for ${net}`, data: `Token info through ${net} returned not found` };
-            }
-          } catch (fallbackErr) {
-            console.error(`Fallback for ${net} failed: ${fallbackErr.message}`);
-            results[net] = { source: `Fallback for ${net}`, data: `Token info through ${net} returned not found` };
-          }
+          return { net, error: err.message };
         }
-      }
-      return results;
+      }));
+      
+      // Process results
+      networkResults.forEach(item => {
+        if (item?.result) results[item.net] = item.result;
+      });
+      
+      return Object.keys(results).length > 0 ? results : { error: "All token info sources failed." };
     }
-  }  
+  } 
 
   // CookieDAO mindshare
   async processAgentByTwitterQuery(twitterUsername, interval = '_7Days') {
@@ -1895,96 +1965,55 @@ export class IntentProcessor extends EventEmitter {
   }  
 
   async getTokenAddressBySymbol(symbol) {
+    // Preprocess the symbol
     symbol = String(symbol).trim().toLowerCase().replace(/\s+/g, '');
     if (!symbol || symbol.length === 44) {
       console.warn("Invalid or unsupported symbol/address provided.");
       return "NONE";
     }
   
-    // Try CoinGecko first.
-    try {
-      const coingeckoData = await this.intentProcessHandler.getTokenInfoFromCoinGecko(symbol);
-      if (coingeckoData && coingeckoData.general && coingeckoData.general.detailPlatforms) {
-        return coingeckoData.general.detailPlatforms;
-      }
-      throw new Error('CoinGecko data is incomplete or undefined');
-    } catch (error) {
-      console.warn("CoinGecko fetch failed:", error.message);
-    }
-
-
+    console.log(`[getTokenAddressBySymbol] Starting lookup for symbol: ${symbol}`);
   
-    // Fallback - Iterate over all networks in evmChainMapping.
-    let moralisData = null;
-    const networks = Object.keys(evmChainMapping);
-    for (const net of networks) {
-      try {
-        moralisData = await searchTokens(symbol, net);
-      } catch (error) {
-        console.warn(`Moralis searchTokens for ${net} failed: ${error.message}`);
-        moralisData = null;
-      }
-      if (moralisData && moralisData.data && moralisData.data.result && moralisData.data.result.length > 0) {
-        break;
-      }
-    }
-    if (moralisData && moralisData.data && moralisData.data.result && moralisData.data.result.length > 0) {
-      return moralisData.data.result[0].tokenAddress;
-    }
-  }  
-
-  async fetchTokenSnipers(userId, tokenAddress) {
+    // 1. Try DexScreener first.
     try {
-        // 1️⃣ Get the network from the token address
-        let tokenData;
-        try {
-            tokenData = await this.getTokenNetwork(tokenAddress);
-            console.log(`🌐 Detected Network: ${JSON.stringify(tokenData, null, 2)}`);
-        } catch (error) {
-            console.warn(`⚠️ Failed to determine network: ${error.message}`);
-            return "❌ Unable to determine the network for this address.";
+      const dexData = await this.dexscreener.getTokenInfoBySymbol(symbol);
+      console.log("[getTokenAddressBySymbol] DexScreener result:", dexData);
+      if (dexData) {
+        if (Array.isArray(dexData) && dexData.length > 0 && dexData[0].baseToken && dexData[0].baseToken.address) {
+          console.log("[getTokenAddressBySymbol] Returning token address from DexScreener (array):", dexData[0].baseToken.address);
+          return dexData[0].baseToken.address;
+        } else if (dexData.detailPlatforms) {
+          console.log("[getTokenAddressBySymbol] Returning token address from DexScreener (object):", dexData.detailPlatforms);
+          return dexData.detailPlatforms;
+        } else {
+          console.warn("[getTokenAddressBySymbol] DexScreener data incomplete or undefined.");
         }
-
-        const network = tokenData?.network;
-        if (!network) {
-            return "❌ Network detection failed.";
-        }
-
-        // 2️⃣ Get the pair address using the detected network
-        let pairAddresses;
-        try {
-            pairAddresses = await getTokenPairAddress(network, tokenAddress);
-            console.log(`🔗 Pair Addresses: ${JSON.stringify(pairAddresses, null, 2)}`);
-        } catch (error) {
-            console.warn(`⚠️ Failed to fetch pair addresses: ${error.message}`);
-            return "❌ Could not retrieve pair addresses.";
-        }
-
-        if (!pairAddresses || pairAddresses.length === 0) {
-            return "❌ No pair addresses found for this token.";
-        }
-
-        const pairAddress = pairAddresses[0]; // Select the first pair address
-        console.log(`🎯 Using Pair Address: ${pairAddress}`);
-
-        // 3️⃣ Fetch token snipers using the pair address
-        const blocksAfterCreation = 1000;
-        try {
-            const snipers = await getTokenSnipers(network, pairAddress, blocksAfterCreation);
-            if (snipers && snipers.data && (Array.isArray(snipers.data) ? snipers.data.length > 0 : true)) {
-                console.log(`🎯 Snipers found: ${JSON.stringify(snipers, null, 2)}`);
-                return snipers;
-            }
-            return "❌ No snipers found, Moralis doesn't have data on this.";
-        } catch (error) {
-            console.error("❌ Error fetching token snipers:", error);
-            return "❌ No snipers found, Moralis doesn't have data on this.";
-        }
+      }
     } catch (error) {
-        console.error("❌ Unexpected error in fetchTokenSnipers:", error);
-        return "❌ Failed to process token snipers.";
+      console.warn("[getTokenAddressBySymbol] DexScreener fetch failed:", error.message);
     }
-  }
+  
+    // 2. Fallback to CoinGecko.
+    try {
+      const coingeckoData = await this.getTokenInfoFromCoinGecko(symbol);
+      //console.log("🚀🚀🚀 [getTokenAddressBySymbol] CoinGecko result:", coingeckoData);  
+      //console.log("🚀 Final Output:", JSON.stringify(coingeckoData, null, 2));
+      const detailPlatforms = coingeckoData.general.detailPlatforms;
+      const platforms = Object.keys(detailPlatforms);
+      if (platforms.length > 0) {
+        // If you expect only one platform, or want the first one:
+        const platform = platforms[0];
+        const contractAddress = detailPlatforms[platform].contract_address;
+        console.log("Contract Address:", contractAddress);
+        return contractAddress;
+      }
+    } catch (error) {
+      console.warn("[getTokenAddressBySymbol] CoinGecko fetch failed:", error.message);
+    }
+  
+    console.warn("[getTokenAddressBySymbol] All lookups failed. Returning 'NONE'.");
+    return "NONE";
+  }  
 
   async startBitrefillShoppingFlow(chatId, email) {
     await this.bitrefillService.handleShoppingFlow(chatId, email),
@@ -2510,6 +2539,63 @@ export class IntentProcessor extends EventEmitter {
         return { success: false, error: error.message };
     }
   }
+
+  async getPumpfunTokenRanged(userId, chatId, args) {
+    // Default to 24 hours ago if startTime isn’t provided.
+    const startTime = args.startTime ? new Date(args.startTime) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // Default to now if endTime isn’t provided.
+    const endTime = args.endTime ? new Date(args.endTime) : new Date();
+  
+    try {
+      // Retrieve tokens for the specified period.
+      const pumpfunDBresults = await pumpFunService.getTokensByPeriod(startTime, endTime);
+      if (!pumpfunDBresults.success) {
+        throw new Error(pumpfunDBresults.error);
+      }
+  
+      // Prepare the JSON file data.
+      const jsonData = JSON.stringify(pumpfunDBresults.tokens, null, 2);
+      const buffer = Buffer.from(jsonData, "utf-8");
+  
+      // Send the JSON file to the user via Telegram.
+      await bot.telegram.sendDocument(chatId, { source: buffer }, { filename: "pumpfun_tokens.json" });
+      return { success: true };
+    } catch (error) {
+      console.error("Pumpfun query calling error:", error.message);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  async getPumpfunTokenLiquidity(userId, chatId, args) {
+    // Expect a liquidity threshold in SOL.
+    const minLiquiditySOL = args.minLiquidity;
+    if (minLiquiditySOL === undefined) {
+      console.error("No minimum liquidity provided.");
+      return { success: false, error: "No minimum liquidity provided." };
+    }
+    
+    try {
+      // Retrieve tokens based on liquidity threshold.
+      const tokensResult = await pumpFunService.getTokensByLiquidity(minLiquiditySOL);
+      if (!tokensResult.success) {
+        throw new Error(tokensResult.error);
+      }
+      
+      // Limit results to 300 tokens.
+      const limitedTokens = tokensResult.tokens.slice(0, 300);
+      
+      // Prepare the JSON file data.
+      const jsonData = JSON.stringify(limitedTokens, null, 2);
+      const buffer = Buffer.from(jsonData, "utf-8");
+  
+      // Send the JSON file to the user via Telegram.
+      await bot.telegram.sendDocument(chatId, { source: buffer }, { filename: "pumpfun_tokens_liquidity.json" });
+      return { success: true };
+    } catch (error) {
+      console.error("Pumpfun liquidity query calling error:", error.message);
+      return { success: false, error: error.message };
+    }
+  }  
 
   // Web Scrap - FireCrawl
   async trendingTokensScrapped(userId) {

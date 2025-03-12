@@ -431,10 +431,10 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
           function_call: "auto",
           functions: this.functions,
           max_tokens: 500,
-          temperature: 0.3,
+          temperature: 0.2,
           top_p: 1,
-          frequency_penalty: 0.3,
-          presence_penalty: 0.7,
+          frequency_penalty: 0,
+          presence_penalty: 0,
           n: 1,
         });
       } else {
@@ -456,10 +456,10 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
             function_call: "auto",
             functions: this.functions,
             max_tokens: 500,
-            temperature: 0.3,
+            temperature: 0.2,
             top_p: 1,
-            frequency_penalty: 0.3,
-            presence_penalty: 0.7,
+            frequency_penalty: 0,
+            presence_penalty: 0,
             n: 1,
           });
         }
@@ -690,8 +690,8 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         max_tokens: 500,          // Reduce max tokens for cost saving & response time
         temperature: 0.3,         // Moderate creativity
         top_p: 1,               // Probability distribution, variety to responses
-        frequency_penalty: 0,   // his moderate penalty discourages over‑repetition of specific tokens without suppressing useful repeated keywords in a domain like crypto trading.
-        presence_penalty: 0,    // nudges the model to introduce new concepts and examples while still staying on topic—useful when we want varied scenarios and examples
+        frequency_penalty: 0.2,   // his moderate penalty discourages over‑repetition of specific tokens without suppressing useful repeated keywords in a domain like crypto trading.
+        presence_penalty: 0.2,    // nudges the model to introduce new concepts and examples while still staying on topic—useful when we want varied scenarios and examples
         n: 1,                     // Single response
       });
 
@@ -1271,6 +1271,8 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         subscribe_pumpfun_token_trade: () => this.intentProcessor.subscribeTokenTrade(userId, chatId, args.criteria, args.contractAddresses),
         unsubscribe_pumpfun_token_trade: () => this.intentProcessor.unsubscribeTokenTrade(userId, args),
         execute_pumpfun_trade: () => this.intentProcessor.executePumpfunTrade(userId, chatId, args),
+        get_pumpfun_token_list_by_period: () => this.intentProcessor.getPumpfunTokenRanged(userId, chatId, args),
+        get_pumpfun_tokens_by_liquidity: () => this.intentProcessor.getPumpfunTokenLiquidity(userId, chatId, args),
 
         // KOL Monitoring Functions
         monitor_kol: () => this.intentProcessor.startKOLMonitoring(userId, args),
@@ -1393,7 +1395,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         functions: this.functions,
         function_call: "auto",
         max_tokens: 500,
-        temperature: 0.3,
+        temperature: 0,
         top_p: 1.0,
         frequency_penalty: 0.3,
         presence_penalty: 0.2,

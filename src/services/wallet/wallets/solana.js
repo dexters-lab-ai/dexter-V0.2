@@ -20,13 +20,11 @@ import HDKey from 'hdkey';
 import WebSocket from 'ws';
 
 // Keep direct RPC access for redundancy
-// We will use both JupiterQuickNode and this SolanaQuickNode route as fallback just in case.
 const RPC_ENDPOINT = 'https://lingering-red-liquid.solana-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764';
 const WS_ENDPOINT = 'wss://lingering-red-liquid.solana-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764';
 
 export class SolanaWallet {
   constructor() {
-    // Keep direct connection for fallback
     this.connection = new Connection(RPC_ENDPOINT, 'confirmed');
     this.queue = new PQueue({ concurrency: 1 });
     this.webSocket = null;
@@ -37,6 +35,8 @@ export class SolanaWallet {
     this.pingInterval = null;
     this.healthCheckInterval = null;
     this.quickNode = null;
+    // For WS reconnection backoff
+    this.wsReconnectDelay = 5000; // start with 5 seconds
   }
 
   async initialize() {
@@ -53,8 +53,8 @@ export class SolanaWallet {
         // Setup WebSocket connection
         await this.setupWebSocket();
         
-        // Start health monitoring
-        //this.startHealthChecks();
+        // Optionally start health monitoring
+        // this.startHealthChecks();
         
         this.state.initialized = true;
         console.log('✅ SolanaWallet initialized.');
@@ -120,7 +120,8 @@ export class SolanaWallet {
     }
   }  
 
-  // Keep WebSocket setup for direct price monitoring
+  // ──────── WebSocket Setup & Reconnection ────────
+
   async setupWebSocket() {
     if (!WS_ENDPOINT) throw new Error('No WebSocket endpoint available.');
 
@@ -131,32 +132,53 @@ export class SolanaWallet {
         this.webSocket = ws;
         this.state.wsReady = true;
         console.log(`✅ WebSocket connected: ${WS_ENDPOINT}`);
+        // Reset backoff delay after a successful connection
+        this.wsReconnectDelay = 5000;
         this.heartbeat();
         resolve();
       });
 
       ws.on('message', (msg) => console.log('📥 WebSocket Message:', msg.toString()));
-      ws.on('error', (err) => reject(err));
-      ws.on('close', () => this.reconnectWebSocket());
+
+      ws.on('error', (err) => {
+        console.error('❌ WebSocket error:', err);
+      });
+
+      ws.on('close', () => {
+        console.warn('⚠️ WebSocket closed.');
+        this.state.wsReady = false;
+        this.reconnectWebSocket();
+      });
     });
   }
 
   heartbeat() {
     if (this.pingInterval) clearTimeout(this.pingInterval);
-
     this.pingInterval = setTimeout(() => {
-      if (this.webSocket?.readyState === WebSocket.OPEN) {
+      if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
         console.log('🔄 Sending heartbeat ping...');
         this.webSocket.ping();
       } else {
-        console.warn('⚠️ WebSocket is not open. Skipping heartbeat ping.');
+        console.warn('⚠️ WebSocket not open. Skipping heartbeat.');
       }
-    }, 60000); // 60 seconds
+      this.heartbeat(); // schedule the next heartbeat
+    }, 60000); // every 60 seconds
   }
 
   reconnectWebSocket() {
-    console.warn('⚠️ Reconnecting WebSocket...');
-    setTimeout(() => this.setupWebSocket(), 5000);
+    console.warn(`🔄 Attempting to reconnect WebSocket in ${this.wsReconnectDelay / 1000} seconds...`);
+    setTimeout(() => {
+      this.setupWebSocket()
+        .then(() => {
+          console.log('✅ WebSocket reconnected.');
+        })
+        .catch((err) => {
+          console.error('❌ Failed to reconnect WebSocket:', err);
+          // Increase delay (exponential backoff up to a limit, e.g., 1 minute)
+          this.wsReconnectDelay = Math.min(this.wsReconnectDelay * 2, 60000);
+          this.reconnectWebSocket();
+        });
+    }, this.wsReconnectDelay);
   }
 
   startHealthChecks() {
@@ -177,22 +199,15 @@ export class SolanaWallet {
   async createWallet() {
     try {
       console.log("🔄 Creating new Solana wallet...");
-
-      // Generate mnemonic & seed
       const mnemonic = bip39.generateMnemonic();
       const seed = await bip39.mnemonicToSeed(mnemonic);
-      
-      // Derive keypair from seed
       const hdkey = HDKey.fromMasterSeed(seed).derive("m/44'/501'/0'/0'");
       const keypair = Keypair.fromSeed(hdkey.privateKey);
-
-      // Construct and return wallet object
       const walletData = {
         address: keypair.publicKey.toString(),
         privateKey: Buffer.from(keypair.secretKey).toString('hex'),
         mnemonic,
       };
-
       console.log("✅ Solana Wallet Created:", walletData.address);
       return walletData;
     } catch (error) {
@@ -227,11 +242,9 @@ export class SolanaWallet {
 
   async getBalance(address) {
     try {
-      // Try QuickNode first
       const balance = await this.quickNode.solana.connection.getBalance(new PublicKey(address));
       return (balance / 1e9).toFixed(9);
     } catch (error) {
-      // Fallback to direct RPC
       const balance = await this.connection.getBalance(new PublicKey(address));
       return (balance / 1e9).toFixed(9);
     }
@@ -239,14 +252,12 @@ export class SolanaWallet {
 
   async getTokenBalance(walletAddress, tokenMint) {
     try {
-      // Try QuickNode first
       const response = await this.quickNode.solana.connection.getParsedTokenAccountsByOwner(
         new PublicKey(walletAddress),
         { mint: new PublicKey(tokenMint) }
       );
       
       if (!response?.value?.length) {
-        // Fallback to direct RPC
         const rpcResponse = await this.connection.getParsedTokenAccountsByOwner(
           new PublicKey(walletAddress),
           { mint: new PublicKey(tokenMint) }
@@ -255,7 +266,6 @@ export class SolanaWallet {
           ? rpcResponse.value[0].account.data.parsed.info.tokenAmount.uiAmount
           : '0';
       }
-      
       return response.value[0].account.data.parsed.info.tokenAmount.uiAmount;
     } catch (error) {
       console.error('Error getting token balance:', error);
@@ -271,16 +281,13 @@ export class SolanaWallet {
 
   async sendTransaction(transaction) {
     try {
-      // Use QuickNode's smart transaction sending
       const smartTx = await this.quickNode.prepareSmartTransaction(transaction);
       const result = await this.quickNode.sendSmartTransaction(smartTx);
-
       return {
         signature: result.signature,
         success: true
       };
     } catch (error) {
-      // Fallback to direct RPC
       try {
         const signature = await this.connection.sendTransaction(transaction);
         return {

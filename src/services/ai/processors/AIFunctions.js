@@ -375,6 +375,7 @@ export const AIFunctions = [
       },      
 
       // Cookie Mindshare and Sentiment and Narratives searching per ticker or token address
+      /*
       {
         name: "search_token_by_twitterusername",
         description: "Search for Agent by Twitter username for an optional interval. Returns market mindshare AI based metrics, market metrics, contracts, and social statistics.",
@@ -440,7 +441,7 @@ export const AIFunctions = [
           required: []
         }
       },
-    /*
+      
       {
         name: "search_twitter_by_address",
         description: "Search social tweets and opinions using token address. Google using a phrase prompting 'what' you want to know and targeting 'what' e.g., 'snai community growth'. Use fetch_tweets_for_symbol for search using symbol or cashtag only as query.",
@@ -465,7 +466,7 @@ export const AIFunctions = [
           required: ["query"]
         }
       },
-    */
+    
       {
         name: "get_token_market_sentiment_changes",
         description: "Deep dive into a token combined data from price to socials to market interest. Combined rich fundamental social & price metrics which influence sentiment on token/symbol/ticker. Aggregates sentiment data for a ticker, cashtag, or token address over a time interval. Merges Agents Paged, Tweet searches, and more.",
@@ -485,6 +486,8 @@ export const AIFunctions = [
           required: ["queryStr"]
         }
       },
+
+      */
     
       {
         name: "get_cookiedao_api_authorization_status",
@@ -536,7 +539,7 @@ export const AIFunctions = [
           properties: {
             query: {
               type: "string",
-              description: `Main search phrase/cashtag/token or contract address. E.g. '$SNAI', 'cookie token utility', or 'CA: 0xc0041ef357b183448b235a8ea73ce4e4ec8c265f' etc.
+              description: `Dont use urls. Only use to search for a word phrase/token cashtag/token symbol or contract address. E.g. '$SNAI', 'cookie token utility', or 'CA: 0xc0041ef357b183448b235a8ea73ce4e4ec8c265f' etc.
       IMPORTANT: Do NOT include advanced operators (like near:city, filter:images) in 'query' if the user mentions them—put those in 'operators' or use 'class'.`
             },
             from: {
@@ -1402,7 +1405,7 @@ export const AIFunctions = [
           properties: {
             criteria: {
               type: "object",
-              description: "Optional criteria for filtering notifications (e.g., minimum liquidity).",
+              description: "Optional criteria for filtering notifications (e.g., minimum liquidity in SOL in human decimals not lamports).",
               properties: {
                 minLiquidity: {
                   type: "number",
@@ -1503,6 +1506,44 @@ export const AIFunctions = [
           required: ["action", "mint", "amount", "denominatedInSol", "slippage"]
         }
       }, 
+
+      {
+        name: "get_pumpfun_token_list_by_period",
+        description: "Retrieves stale PumpFun tokens stored in the DB within a specified time period. Accepts start and end times in natural language or ISO timestamps. ",
+        parameters: {
+          type: "object",
+          properties: {
+            startTime: {
+              type: "string",
+              description: "The beginning of the time period (e.g., '24 hours ago' or '2025-03-10T00:00:00Z')."
+            },
+            endTime: {
+              type: "string",
+              description: "The end of the time period (e.g., 'now' or '2025-03-11T00:00:00Z')."
+            },
+            minLiquidity: {
+              type: "number",
+              description: "Optional minimum liquidity threshold in SOL. This value will be converted to lamports for the query."
+            }
+          },
+          required: ["startTime", "endTime"]
+        }
+      }, 
+      
+      {
+        name: "get_pumpfun_tokens_by_liquidity",
+        description: "Retrieves stale PumpFun tokens that have a market capitalization above a specified liquidity threshold. ",
+        parameters: {
+          type: "object",
+          properties: {
+            minLiquidity: {
+              type: "number",
+              description: "The minimum liquidity in SOL that a token must have to be returned. E.g. 2 SOL"
+            }
+          },
+          required: ["minLiquidity"]
+        }
+      },      
 
       // Web Scrapping
       {

@@ -246,6 +246,8 @@ class DexScreenerService {
         {},
         `dexscreener:tokenInfo:${query}`
       );
+
+      console.log(rawResponse);
     
       // Format each pair in the response
       const formattedPairs = rawResponse.pairs?.map(this.formatPairData) || [];

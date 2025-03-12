@@ -30,7 +30,7 @@ export class HealthMonitor extends EventEmitter {
       console.log('✅ Dependencies initialized. Setting up health checks...');
       
       // Setup health checks only after dependencies are ready
-      await this.setupChecks();
+      // await this.setupChecks();
 
       this.isInitialized = true;
       console.log('✅ HealthMonitor initialized successfully.');

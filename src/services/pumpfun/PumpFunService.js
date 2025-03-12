@@ -8,6 +8,7 @@ import { ErrorHandler } from '../../core/errors/index.js';
 import { config } from '../../core/config.js';
 import { wsManager } from './WebSocketManager.js';
 import { tokenLaunchDetector } from './detection/TokenLaunchDetector.js';
+import { getLPSizeForToken } from './detection/getLPSizeForToken.js';
 import { bot } from '../../core/bot.js';
 
 export async function sendTelegramNotification(telegramChatId, message) {
@@ -30,11 +31,18 @@ const pumpFunTokenSchema = new mongoose.Schema({
   name: { type: String },
   symbol: { type: String },
   uri: { type: String },
-  timestamp: { type: Date, default: Date.now }
+  timestamp: { type: Date, default: Date.now },
 });
 // Indexed timestamp field for faster retrieval.
 pumpFunTokenSchema.index({ timestamp: 1 });
 const PumpFunTokenModel = mongoose.model('PumpFunToken', pumpFunTokenSchema);
+
+/* --- Mongoose Schema for PumpFun Stats --- */
+const pumpFunStatsSchema = new mongoose.Schema({
+  totalTokensSaved: { type: Number, default: 0 }
+});
+const PumpFunStatsModel = mongoose.model('PumpFunStats', pumpFunStatsSchema);
+
 
 class PumpFunService extends EventEmitter {
   constructor(networkConfig = { rpcUrl: config.solanaEndpoint }) {
@@ -117,7 +125,7 @@ class PumpFunService extends EventEmitter {
     try {
       const message = JSON.parse(data);
       this.lastHealthyTimestamp = Date.now(); 
-      console.log('📩 PumpFun WS message received:', JSON.stringify(message, null, 2));
+      //console.log('📩 PumpFun WS message received:', JSON.stringify(message, null, 2));
       if (message.txType) {
         switch (message.txType) {
           case 'create':
@@ -141,9 +149,10 @@ class PumpFunService extends EventEmitter {
     console.warn('🔌 PumpFun WS connection closed.');
     this.isInitialized = false;
     this.stopHeartbeat();
-    // Let wsManager handle reconnection
+    // Immediately trigger reconnection when the WS closes.
+    this.handleReconnect();
     this.emit('closed');
-  }
+  }  
 
   handleError(error) {
     console.error('❌ PumpFun WS error:', error);
@@ -303,7 +312,7 @@ class PumpFunService extends EventEmitter {
   ──────────────────────────────── */
   handleCreateMessage(message) {
     try {
-      console.log('🎉 Handling new token message:', message);
+      // console.log('🎉 Handling new token message:', message);
       const { signature, mint, traderPublicKey, initialBuy, marketCapSol, name, symbol, uri } = message;
       // Increase both the per-session counter and cumulative count.
       this.tokenLaunchCount++;
@@ -396,8 +405,14 @@ class PumpFunService extends EventEmitter {
       console.log(`🔄 Flushing ${this.tokenCache.length} tokens from cache to DB...`);
       await PumpFunTokenModel.insertMany(this.tokenCache);
       console.log(`✅ Successfully flushed ${this.tokenCache.length} tokens to DB.`);
-      // Update cumulative saved counter.
-      this.totalTokensSaved += this.tokenCache.length;
+      // Calculate the increment
+      const countIncrement = this.tokenCache.length;
+      // Update in-memory counter (optional, for quick access)
+      this.totalTokensSaved += countIncrement;
+      
+      // Update the persistent stats document: increment the counter or create if not exists
+      await PumpFunStatsModel.updateOne({}, { $inc: { totalTokensSaved: countIncrement } }, { upsert: true });
+      
       // Clear the pending cache.
       this.tokenCache = [];
     } catch (error) {
@@ -407,15 +422,44 @@ class PumpFunService extends EventEmitter {
 
   async getTokensByPeriod(startTime, endTime) {
     try {
+      // If startTime/endTime are not provided, default to 24 hours ago and now respectively.
+      const start = startTime ? new Date(startTime) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const end = endTime ? new Date(endTime) : new Date();
+  
+      // Query tokens with timestamp between start and end. Limit results to 300.
       const tokens = await PumpFunTokenModel.find({
-        timestamp: { $gte: startTime, $lte: endTime }
-      }).sort({ timestamp: 1 });
+        timestamp: { $gte: start, $lte: end }
+      }).sort({ timestamp: 1 }).limit(300);
+  
       return { success: true, tokens };
     } catch (error) {
       console.error("Error fetching tokens by period:", error);
       return { success: false, error: error.message };
     }
   }
+  
+  async getTokensByLiquidity(minLiquidity) {
+    try {
+      // Retrieve tokens with a basic market cap filter. Limit results to 300.
+      const result = await PumpFunTokenModel.find({
+        marketCapSol: { $gte: minLiquidity }
+      }).sort({ timestamp: 1 }).limit(300);
+  
+      const filteredTokens = [];
+      for (const token of result) {
+        const lpSize = await getLPSizeForToken(token.mint);
+        console.log(`Token ${token.name} (${token.mint}) LP size: ${lpSize}`);
+        // If the LP size meets the threshold, include this token.
+        if (lpSize >= minLiquidity) { 
+          filteredTokens.push({ ...token.toObject(), lpSize });
+        }
+      }
+      return { success: true, tokens: filteredTokens };
+    } catch (error) {
+      console.error("Error fetching tokens by liquidity:", error);
+      return { success: false, error: error.message };
+    }
+  }  
 
   async checkHealth() {
     try {
@@ -423,19 +467,22 @@ class PumpFunService extends EventEmitter {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         status = "healthy";
       } else if (this.lastHealthyTimestamp && (Date.now() - this.lastHealthyTimestamp < 120000)) {
-        // If a message was received within the last 2 minutes, consider it healthy.
         status = "healthy";
       }
+      // Retrieve persistent total tokens saved from the stats document.
+      const statsDoc = await PumpFunStatsModel.findOne({});
+      const persistentTotalTokens = statsDoc ? statsDoc.totalTokensSaved : 0;
+      
       const tokens = await PumpFunTokenModel.find({})
         .sort({ timestamp: -1 })
-        .limit(300)
+        .limit(10)
         .exec();
       const recentTokens = tokens.reverse();
       return {
         status,
         endpoint: this.websocketEndpoint,
         tokensLaunched: this.tokenLaunchCount,
-        totalTokensSaved: this.totalTokensSaved,  
+        totalTokensSaved: persistentTotalTokens,  
         reconnectAttempts: this.reconnectAttempts,
         cachedTokens: this.tokenCache.length,
         recentTokens
@@ -443,7 +490,7 @@ class PumpFunService extends EventEmitter {
     } catch (error) {
       return { status: "unhealthy", error: error.message };
     }
-  }  
+  }    
 
   cleanup() {
     console.log('🧹 Cleaning up PumpFunService...');

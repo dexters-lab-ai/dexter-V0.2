@@ -67,8 +67,8 @@ class AIMetricsService extends EventEmitter {
       // Load persisted metrics from the database
       await this.loadMetricsFromDB();
 
-      // Start periodic saving every 30 seconds
-      this.metricsInterval = setInterval(() => this.saveMetricsSnapshot(), 30000);
+      // Start periodic saving every 1 mins
+      this.metricsInterval = setInterval(() => this.saveMetricsSnapshot(), 60000);
       
     } catch (error) {
       console.error('❌ Error initializing AIMetricsService:', error);

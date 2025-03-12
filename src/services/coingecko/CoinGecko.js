@@ -59,7 +59,8 @@ function cacheWrapperOneHour(fn, cacheKeyGenerator) {
  * Searches CoinGecko for coins matching the provided query.
  */
 async function _searchCoin(query) {
-  const url = `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`;
+  console.log(' searching for.....', query)
+  const url = `https://api.coingecko.com/api/v3/search?query=${query}`;
   const data = await universalFetch(url);
   return { source: 'CoinGecko Search API', data };
 }
@@ -81,9 +82,15 @@ export const searchCoin = cacheWrapperOneHour(_searchCoin, (query) => `searchCoi
  */
 async function _getPriceCoinGecko(contractAddress) {
   const lowerAddress = contractAddress.toLowerCase();
-  const url = `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${lowerAddress}&vs_currencies=usd`;
+  
+  // Determine which platform to query based on the address format.
+  // If the address doesn't start with '0x', assume it's for Solana.
+  const platform = contractAddress.startsWith("0x") ? "ethereum" : "solana";
+  
+  const url = `https://api.coingecko.com/api/v3/simple/token_price/${platform}?contract_addresses=${lowerAddress}&vs_currencies=usd`;
   const result = await universalFetch(url);
   const tokenData = result[lowerAddress];
+  
   if (!tokenData || typeof tokenData.usd === 'undefined') {
     throw new Error(`No price data found for contract: ${contractAddress}`);
   }

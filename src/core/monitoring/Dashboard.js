@@ -10,10 +10,47 @@ import { flipperMode } from '../../services/pumpfun/FlipperMode.js';
 import { User } from '../../models/User.js';
 import { ErrorHandler } from '../errors/index.js';
 import os from 'os';
+import path from 'path';
+import fs from 'fs';
 // For API keys
 import { encrypt, decrypt } from '../../utils/encryption.js';
 
 const dashboardRouter = express.Router();
+
+// Global in-memory store for request logs
+let dashboardRequestLogs = [];
+
+// Middleware to log request details
+function logDashboardRequest(req, res, next) {
+  // Capture the timestamp, IP, user-agent, HTTP method, and the requested URL
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    ip: req.ip, // Express sets this automatically (or use req.headers['x-forwarded-for'] if behind a proxy)
+    userAgent: req.get('User-Agent'),
+    method: req.method,
+    url: req.originalUrl
+  };
+
+  dashboardRequestLogs.push(logEntry);
+  next();
+}
+
+// Cache configuration at module scope.
+let cachedMetrics = null;
+let lastMetricsFetchTime = 0;
+const METRICS_CACHE_DURATION = 30000; // 20 seconds cache duration
+
+// A wrapper to get cached metrics if recent enough.
+async function getCachedMetrics() {
+  const now = Date.now();
+  if (cachedMetrics && (now - lastMetricsFetchTime < METRICS_CACHE_DURATION)) {
+    return cachedMetrics;
+  }
+  // Otherwise, fetch new metrics.
+  cachedMetrics = await fetchMetrics();
+  lastMetricsFetchTime = now;
+  return cachedMetrics;
+}
 
 // ----------------------------------------------------------
 // 1) HELPER: fetchMetrics() for system & service status
@@ -67,6 +104,9 @@ async function fetchMetrics() {
       cpuUsage: os.loadavg()[0].toFixed(2),
       osLoadAvg: os.loadavg()
     };
+
+    
+  //console.log("*******  ***  FETCH METRICS Fresh Results *********:", JSON.stringify(results, null, 2));
 
     return {
       system: systemMetrics,
@@ -223,11 +263,13 @@ function renderDashboard(metrics) {
   `;
 }
 
+dashboardRouter.use(logDashboardRequest);
+
 dashboardRouter.get('/', async (req, res) => {
   try {
-    const metrics = await fetchMetrics();    
+    const metrics = await getCachedMetrics();    
   
-  console.log("*******  ***  00000000000000A *********:", JSON.stringify(metrics, null, 2));
+  //console.log("*******  ***  00000000000000A *********:", JSON.stringify(metrics, null, 2));
     if (metrics.error) throw new Error(metrics.error);
     res.send(renderDashboard(metrics));
   } catch (error) {
@@ -246,7 +288,7 @@ dashboardRouter.get('/', async (req, res) => {
 // IMP: DASHBOARD FRAGMENT ENDPOINT FOR DYNAMIC UPDATES
 dashboardRouter.get('/fragment', async (req, res) => {
   try {
-    const metrics = await fetchMetrics();
+    const metrics = await getCachedMetrics();
     if (metrics.error) throw new Error(metrics.error);
     // Only return the inner HTML of the dashboard container
     res.send(`
@@ -531,7 +573,7 @@ function renderAIMetrics(ai) {
   const stt = ai.stt || { totalCalls: 0, totalDuration: 0, modelUsage: [] };
   const modelUsage = ai.openai.modelUsage;
   
-  console.log("*******  ***  AI - DATA *********:", JSON.stringify(ai, null, 2));
+  //console.log("*******  ***  AI - DATA *********:", JSON.stringify(ai, null, 2));
 
   return `
     <section class="metrics-card system-metrics glass-effect">
@@ -824,14 +866,14 @@ function renderPumpFunMetrics(pumpFunData) {
     `;
   }
   
-  // Build table rows for up to 10 recent tokens
+  // Build table rows for up to 10 recent tokens.
   let rowsHtml = '';
   if (pumpFunData.recentTokens && pumpFunData.recentTokens.length > 0) {
-    // Show the last 10 tokens (if there are at least 10)
+    // Show the last 10 tokens (if there are at least 10).
     const recent = pumpFunData.recentTokens.slice(-10);
     recent.forEach(token => {
       rowsHtml += `
-        <tr>
+        <tr title="Mint: ${token.mint}\nMarket Cap: ${token.marketCapSol ? token.marketCapSol.toFixed(2) + ' SOL' : 'N/A'}">
           <td>${token.name || '-'}</td>
           <td>${token.symbol || '-'}</td>
           <td>${token.mint || '-'}</td>
@@ -852,46 +894,35 @@ function renderPumpFunMetrics(pumpFunData) {
       </div>
       <div class="metrics-grid">
         <div class="metric-item">
-          <div class="metric-icon">
-            <i class="fas fa-info-circle"></i>
-          </div>
+          <div class="metric-icon"><i class="fas fa-info-circle"></i></div>
           <div class="metric-info">
             <h3>Status</h3>
             <div class="value-display">${pumpFunData.status}</div>
           </div>
         </div>
         <div class="metric-item">
-          <div class="metric-icon">
-            <i class="fas fa-layer-group"></i>
-          </div>
+          <div class="metric-icon"><i class="fas fa-layer-group"></i></div>
           <div class="metric-info">
             <h3>Tokens Launched</h3>
             <div class="value-display">${pumpFunData.tokensLaunched}</div>
           </div>
         </div>
-         <!-- Total Cached Card -->
         <div class="metric-item">
-          <div class="metric-icon">
-            <i class="fas fa-archive"></i>
-          </div>
+          <div class="metric-icon"><i class="fas fa-archive"></i></div>
           <div class="metric-info">
-            <h3>Total AI Cache</h3>
+            <h3>Total Cached</h3>
             <div class="value-display">${pumpFunData.totalTokensSaved}</div>
           </div>
         </div>
         <div class="metric-item">
-          <div class="metric-icon">
-            <i class="fas fa-sync-alt"></i>
-          </div>
+          <div class="metric-icon"><i class="fas fa-sync-alt"></i></div>
           <div class="metric-info">
             <h3>Reconnect Attempts</h3>
             <div class="value-display">${pumpFunData.reconnectAttempts}</div>
           </div>
         </div>
         <div class="metric-item">
-          <div class="metric-icon">
-            <i class="fas fa-database"></i>
-          </div>
+          <div class="metric-icon"><i class="fas fa-database"></i></div>
           <div class="metric-info">
             <h3>Cached Tokens</h3>
             <div class="value-display">${pumpFunData.cachedTokens || 0}</div>
@@ -916,9 +947,15 @@ function renderPumpFunMetrics(pumpFunData) {
         </table>
       </div>
       <div class="download-section" style="text-align: center; margin-top: 1rem;">
-        <a href="/dashboard/downloadPumpFunTokens" class="download-link" style="color: var(--primary); text-decoration: underline;">
+        <a href="/dashboard/downloadPumpFunTokens" class="download-link">
           Download Last 300 Tokens (JSON)
         </a>
+        <div class="tooltip">
+          <small>
+            This is a raw list of token launch events. <br>
+            <em>Note:</em> It is not advised to trade directly from this data. Our team is working on an AI‑enhanced version featuring sniper info, owner risk, holder change, volume, large sells, liquidity, social sentiment, LP lock, and more!
+          </small>
+        </div>
       </div>
     </section>
   `;
@@ -2014,18 +2051,51 @@ function getDashboardStyles() {
       }
 
       /* =============== PUMPFUN ================================================= */
-      .download-section {
-        margin-top: 1rem;
-        text-align: center;
-      }
       .download-link {
         font-size: 1rem;
-        color: var(--primary);
+        color: white;
         text-decoration: underline;
         transition: color 0.3s ease;
       }
       .download-link:hover {
-        color: var(--secondary);
+        color: var(--accent) !important;
+      }
+
+      /* Tooltip styling for download section */
+      .download-section {
+        position: relative;
+        display: inline-block;
+        margin-top: 1rem;
+      }
+      .download-section .tooltip {
+        visibility: hidden;
+        width: 280px;
+        background-color: #333;
+        color: #fff;
+        text-align: center;
+        border-radius: 6px;
+        padding: 0.5rem;
+        position: absolute;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .download-section .tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%; /* At the bottom of the tooltip */
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #333 transparent transparent transparent;
+      }
+      .download-section:hover .tooltip {
+        visibility: visible;
+        opacity: 1;
       }
 
       /* =============== AI Functions - Test Tube & Bacteria Icons =============== */
@@ -2706,7 +2776,7 @@ function getDashboardScripts() {
         };
         */
        // Trying new polling mechanism without creating, revert anytime, meant to try avoid websocket being disconnected on dahboard page load only
-       // Instead of opening a WS connection, poll for updates every 30 seconds
+       // Instead of opening a WS connection, poll for updates every 60 seconds
         setInterval(async () => {
           try {
             const res = await fetch('/dashboard/fragment');
@@ -2720,7 +2790,7 @@ function getDashboardScripts() {
           } catch (err) {
             console.error('Error refreshing dashboard fragment:', err);
           }
-        }, 30000);
+        }, 60000);
 
 
         //
@@ -2847,7 +2917,7 @@ function getDashboardScripts() {
 
           // ========== F) CHECK API STATUS AT LOAD ==========
           checkApiStatus();
-          setInterval(checkApiStatus, 30000);
+          setInterval(checkApiStatus, 300000); // 5mins
         });
 
         //
@@ -3022,6 +3092,42 @@ function getServiceIcon(service) {
   };
   return icons[service] || icons.default;
 }
+
+// Every 5 minutes (300000 ms), process and clear the in-memory log
+setInterval(() => {
+  if (dashboardRequestLogs.length > 0) {
+    // Build the absolute path for the admin_logs folder
+    const logsFolder = path.join(process.cwd(), 'admin_logs');
+    
+    // Ensure the folder exists; if not, create it (recursively)
+    if (!fs.existsSync(logsFolder)) {
+      fs.mkdirSync(logsFolder, { recursive: true });
+    }
+
+    // Convert the logs to a JSON string
+    const jsonData = JSON.stringify(dashboardRequestLogs, null, 2);
+    
+    // For demonstration, log to the console.
+    console.log("=== D.A.I.L. Admin Log: API Dashboard Requests ===");
+    console.log(jsonData);
+    
+    // Create an absolute filename for the log file
+    const filename = path.join(logsFolder, `dashboard_requests_${Date.now()}.json`);
+    
+    // Write the JSON data to the file (this creates the file if it doesn't exist)
+    fs.writeFile(filename, jsonData, (err) => {
+      if (err) {
+        console.error('Error writing dashboard request logs:', err);
+      } else {
+        console.log(`Dashboard request logs saved to ${filename}`);
+      }
+    });
+    
+    // Clear the in-memory log after processing
+    dashboardRequestLogs = [];
+  }
+}, 300000); // 300000 ms = 5 minutes
+
 
 export { dashboardRouter as default, fetchMetrics as startMonitoringDashboard };
 

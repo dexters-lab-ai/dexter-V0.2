@@ -1057,16 +1057,16 @@ class TwitterService extends EventEmitter {
   async fetchTweetsFromAccount(account) {
     try {
       console.log(`🔄 Fetching tweets for account: ${account}`);
-
-        input = {          
-          cookies: [config.apifyCookieToken],
-          endTime: this._getDefaultToDate(),
-          maxItems: 100,
-          searchTerms: [`from:${account}`],
-          sortBy: "Latest",
-          startTime: this._getDefaultFromDate(),
-        };
-
+  
+      const input = {          
+        cookies: [config.apifyCookieToken],
+        endTime: this._getDefaultToDate(),
+        maxItems: 100,
+        searchTerms: [`from:${account}`],
+        sortBy: "Latest",
+        startTime: this._getDefaultFromDate(),
+      };
+  
       const run = await this.apifyClient.actor('fastcrawler/tweet-fast-scraper').call(input);
       const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
       console.log(`✅ Fetched ${items.length} tweets for ${account}`);
@@ -1076,7 +1076,7 @@ class TwitterService extends EventEmitter {
       await ErrorHandler.handle(error);
       return [];
     }
-  }
+  }  
   
   extractCashtags(tweet) {
     const cashtags = new Set();

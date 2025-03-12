@@ -313,6 +313,7 @@ export class IntentProcessHandler {
           params: { query: sanitizedSymbol },
         });
     
+        //console.log(" - 1X COINGOCKEOOOOOOOOOOOOOOOOO RAW TICKER RESULT:", JSON.stringify(searchData, null, 2));
         const token = searchData.coins.find(coin => coin.symbol.toLowerCase() === sanitizedSymbol);
     
         if (!token) {
@@ -330,7 +331,7 @@ export class IntentProcessHandler {
             sparkline: false,
           },
         });      
-        //console.log("COINGOCKEOOOOOOOOOOOOOOOOO RAW TICKER RESULT:", JSON.stringify(tokenDetails, null, 2));
+        //console.log(" - 2X COINGOCKEOOOOOOOOOOOOOOOOO RAW TICKER RESULT:", JSON.stringify(tokenDetails, null, 2));
 
         let description = tokenDetails.description.en || "No description available...";
         description = description.split('\n')[0].trim();

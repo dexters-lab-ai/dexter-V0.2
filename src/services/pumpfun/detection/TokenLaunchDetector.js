@@ -22,7 +22,7 @@ export class TokenLaunchDetector extends EventEmitter {
 
       // Check liquidity requirements
       const liquidity = await quickNodeService.getTokenLiquidity(token.address);
-      if (liquidity < 5) return false; // Minimum 5 SOL liquidity
+      if (liquidity < 10) return false; // Minimum 5 SOL liquidity
 
       // Verify token contract
       const contractInfo = await quickNodeService.getAccountInfo(token.address);

@@ -414,30 +414,32 @@ class PriceAlertService extends EventEmitter {
   
       let priceUsd = null;
   
-      // --- Attempt 1: DexScreener ---
-      try {
-        console.log(`🔍 Checking DexScreener for: ${tokenAddress}`);
-        const priceRaw = await this.dexscreener.getTokenPriceByAddress(tokenAddress);
-        console.log(`🔍 Price Found on DexScreener: ${priceRaw}`);
-        priceUsd = parseFloat(priceRaw);
-      } catch (dexError) {
-        console.warn(`DexScreener failed for ${tokenAddress}: ${dexError.message}`);
-      }
-  
-      // --- Attempt 2: CoinGecko ---
-      if (!priceUsd || isNaN(priceUsd)) {
+      if (isEvm) {
+        // --- EVM Checks ---
+        // Attempt 1: DexScreener
         try {
-          console.log(`🔍 Checking CoinGecko for: ${tokenAddress}`);
-          const priceRaw = await getPriceCoinGecko(tokenAddress);
-          console.log(`🔍 Price Found on CoinGecko: ${priceRaw}`);
+          console.log(`🔍 Checking DexScreener for: ${tokenAddress}`);
+          const priceRaw = await this.dexscreener.getTokenPriceByAddress(tokenAddress);
+          console.log(`🔍 Price Found on DexScreener: ${priceRaw}`);
           priceUsd = parseFloat(priceRaw);
-        } catch (cgError) {
-          console.warn(`CoinGecko failed for ${tokenAddress}: ${cgError.message}`);
+        } catch (dexError) {
+          console.warn(`DexScreener failed for ${tokenAddress}: ${dexError.message}`);
         }
-      }
   
-      // --- Attempt 3 (Fallback for Solana only): Jupiter QuickNode ---
-      if ((!priceUsd || isNaN(priceUsd)) && !isEvm) {
+        // Attempt 2: CoinGecko
+        if (!priceUsd || isNaN(priceUsd)) {
+          try {
+            console.log(`🔍 Checking CoinGecko for: ${tokenAddress}`);
+            const priceRaw = await getPriceCoinGecko(tokenAddress);
+            console.log(`🔍 Price Found on CoinGecko: ${priceRaw}`);
+            priceUsd = parseFloat(priceRaw);
+          } catch (cgError) {
+            console.warn(`CoinGecko failed for ${tokenAddress}: ${cgError.message}`);
+          }
+        }
+      } else {
+        // --- Non-EVM (Solana) Check ---
+        // Skip DexScreener and CoinGecko and use Jupiter fallback only.
         try {
           console.log(`🔍 Using Jupiter fallback for: ${tokenAddress}`);
           const quote = await this.jupiterQuickNode.getCachedQuote({
@@ -467,7 +469,7 @@ class PriceAlertService extends EventEmitter {
       console.error(`Error fetching price for ${tokenAddress}:`, error);
       return null;
     }
-  }   
+  }     
 
   async executeAlert(alert, currentPrice) {
     consolr.log(' * * * * * ALERT !!!! ', alert);
