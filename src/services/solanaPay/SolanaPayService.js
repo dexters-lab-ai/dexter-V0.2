@@ -176,5 +176,8 @@ export const solanaPayService = new SolanaPayService();
 solanaPayService.initialize().catch(console.error);
 
 // Handle cleanup on process termination
-// Removed the process.on handlers and register with cleanup manager
-cleanupManager.registerService('solanaPay', () => solanaPayService.cleanup());
+cleanupManager.registerService('solanaPay', async () => {
+  await solanaPayService.cleanup();
+  console.log('SolanaPayService cleanup complete.');
+});
+

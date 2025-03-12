@@ -299,7 +299,11 @@ export class IntentProcessHandler {
         .replace(/\.{2,}/g, ".")
         .trim();
     }
-     
+    /**
+     * Query in 2 parts, we need ID to get tokenInfo. So we query id first, then token info. no work around
+     * @param {string} symbol 
+     * @returns Detailed token information.
+     */
     async getTokenInfoFromCoinGecko(symbol) {
       try {
         if (typeof symbol !== 'string') {

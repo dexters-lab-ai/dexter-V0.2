@@ -447,5 +447,7 @@ export const shopifyService = new ShopifyService();
 shopifyService.initialize().catch(console.error);
 
 // Handle cleanup on process termination
-// Removed the process.on handlers and register with cleanup manager
-cleanupManager.registerService('shopify', () => shopifyService.cleanup());
+cleanupManager.registerService('shopify', async () => {
+  await shopifyService.cleanup();
+  console.log('ShopifyService cleanup complete.');
+});

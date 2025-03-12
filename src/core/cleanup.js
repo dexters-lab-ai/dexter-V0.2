@@ -12,27 +12,28 @@ class CleanupManager extends EventEmitter {
   }
 
   setupProcessHandlers() {
-    // Increase max listeners to prevent warning
+    // Increase max listeners to prevent warnings.
     process.setMaxListeners(20);
 
     // Single handler for SIGINT
     process.once('SIGINT', async () => {
       console.log('\n🛑 SIGINT received. Cleaning up...');
       await this.cleanupAll();
-      process.exit(0);
+      // Do not exit the process—allow it to continue running.
+      // process.exit(0);
     });
 
     // Single handler for SIGTERM
     process.once('SIGTERM', async () => {
       console.log('\n🛑 SIGTERM received. Cleaning up...');
       await this.cleanupAll();
-      process.exit(0);
+      // Do not exit the process—allow it to continue running.
+      // process.exit(0);
     });
   }
 
   async cleanupAll() {
     console.log('🧹 Starting cleanup...');
-    
     for (const [name, cleanup] of this.services) {
       try {
         await cleanup();
@@ -41,7 +42,6 @@ class CleanupManager extends EventEmitter {
         console.error(`❌ Error cleaning up ${name}:`, error);
       }
     }
-    
     console.log('✅ All services cleaned up');
   }
 }

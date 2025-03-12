@@ -395,4 +395,7 @@ export const aiMetricsService = new AIMetricsService();
 aiMetricsService.initialize().catch(err => console.error('❌ Error initializing AI Metrics:', err));
 
 // Register cleanup on exit
-cleanupManager.registerService('aiMetrics', () => aiMetricsService.cleanup());
+cleanupManager.registerService('aiMetrics', async () => {
+  await aiMetricsService.cleanup();
+  console.log('AIMetricsService cleanup complete.');
+});

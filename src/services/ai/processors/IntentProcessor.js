@@ -431,53 +431,65 @@ export class IntentProcessor extends EventEmitter {
    * @returns {Promise<Array|Object>} - If a chain is provided, returns an array of transactions.
    *                                    If no chain is provided, returns an object with keys: { base, eth, avax, solana }.
    */    
-  async getWalletTransactions(chatId, parameters) {    
+  async getWalletTransactions(chatId, parameters) {
     const network = parameters.network;
     const wallet = parameters.walletAddress;
     const options = parameters.tokenList ?? [];
-    
-    if (!wallet) throw new Error("Wallet address is required.");
-
-    let result;
-
-    // ✅ Solana Transactions Handling
-    if (network.toLowerCase() === "solana") {
-        try {
-            result = await getWalletTransactions("solana", wallet);
-        } catch (error) {
-            console.error("Solana primary fetch failed, using fallback.", error);
-            result = await getAllSPLTokenTransactions(wallet, options);
-        }
-        return result;
+  
+    if (!wallet) {
+      return { success: false, message: "Wallet address is required." };
     }
-
-    // ✅ EVM Transactions Handling (using evmChainMapping)
+  
+    let result;
+  
+    // Solana Transactions Handling
+    if (network.toLowerCase() === "solana") {
+      try {
+        result = await getWalletTransactions("solana", wallet);
+      } catch (error) {
+        console.error("Solana primary fetch failed, using fallback.", error);
+        try {
+          result = await getAllSPLTokenTransactions(wallet, options);
+        } catch (fallbackError) {
+          console.error("Solana fallback fetch failed.", fallbackError);
+          return { success: false, message: "Failed to fetch Solana transactions." };
+        }
+      }
+      return result;
+    }
+  
+    // EVM Transactions Handling
     const evmChainId = evmChainMapping[network.toLowerCase()];
     if (!evmChainId) {
-        throw new Error(`Unsupported EVM network: ${network}`);
+      return { success: false, message: `Unsupported EVM network: ${network}` };
     }
-
+  
     try {
-        result = await getWalletTransactions(network, wallet);
+      result = await getWalletTransactions(network, wallet);
     } catch (error) {
-        console.error(`Primary fetch for ${network} failed, using fallback.`, error);
+      console.error(`Primary fetch for ${network} failed, using fallback.`, error);
+      try {
         switch (network.toLowerCase()) {
-            case "base":
-                result = await getAllERC20TokenTransactionsBASE(wallet, options);
-                break;
-            case "ethereum":
-                result = await getAllERC20TokenTransactionsETH(wallet, options);
-                break;
-            case "avalanche":
-                result = await getAllERC20TokenTransactionsAVAX(wallet, options);
-                break;
-            default:
-                throw new Error(`No fallback method available for ${network}`);
+          case "base":
+            result = await getAllERC20TokenTransactionsBASE(wallet, options);
+            break;
+          case "ethereum":
+            result = await getAllERC20TokenTransactionsETH(wallet, options);
+            break;
+          case "avalanche":
+            result = await getAllERC20TokenTransactionsAVAX(wallet, options);
+            break;
+          default:
+            return { success: false, message: `No fallback method available for ${network}` };
         }
+      } catch (fallbackError) {
+        console.error("Fallback fetch failed:", fallbackError);
+        return { success: false, message: `Failed to fetch transactions for ${network}.` };
+      }
     }
-
+  
     return result;
-  }
+  }  
 
   async swapTokensOnJupiter(userId, params) {
     let swapResult;
@@ -707,7 +719,7 @@ export class IntentProcessor extends EventEmitter {
 
   async createPriceAlert(userId, chatId, params) {
     let logMessageId = null;
-
+  
     const log = async (chatId, message) => {
       if (!chatId) return;
       try {
@@ -721,57 +733,60 @@ export class IntentProcessor extends EventEmitter {
         console.warn('⚠️ Error logging message:', err.message);
       }
     };
-
+  
     try {
       await log(chatId, '🚀 Creating price alert...');
-
+  
+      // Process and validate token address.
       params.tokenAddress = this.processUrlInput(params.tokenAddress);
       if (!params.tokenAddress || params.tokenAddress === "No valid address found in URL") {
-        throw new Error("Invalid token address. Please provide a valid token address.");
+        return { success: false, message: "Invalid token address. Please provide a valid token address." };
       }
-
+  
+      // Determine the network for the token.
       const tokenData = await this.getTokenNetwork(params.tokenAddress);
       if (!tokenData) {
-        throw new Error('Unable to determine the network for this token. Tell devs to update n');
+        return { success: false, message: "Unable to determine the network for this token. Please notify devs to update the network mappings." };
       }
-
+  
       const { network, tokenInfo } = tokenData;
       console.log(tokenData);
       const tokenSymbol = tokenInfo.symbol || tokenInfo.token_symbol || tokenInfo.mint || "N/A";
       const tokenAddress = tokenInfo.address || tokenInfo.token_address || tokenInfo.mint || "N/A";
       await log(chatId, `✅ Network determined: ${network}\n\nToken Info:\n- Symbol: ${tokenSymbol}\n- Address: ${tokenAddress}`);
-
+  
+      // Determine wallet address.
       let walletAddress;
       if (!params.walletAddress) {
         const wallets = await walletService.getWalletsByNetwork(userId, network);
         if (!wallets.length) {
-          throw new Error(`No wallets found for network ${network}. Please add a wallet for this network.`);
+          return { success: false, message: `No wallets found for network ${network}. Please add a wallet for this network.` };
         }
-
         walletAddress = wallets[0].address;
         await log(chatId, `✅ Using wallet: ${walletAddress}`);
       } else {
-        walletAddress = params.walletAddress.trim().replace(/[\u0000-\u001F\u007F]/g, "");        
+        walletAddress = params.walletAddress.trim().replace(/[\u0000-\u001F\u007F]/g, "");
       }
-
+  
+      // Validate target price.
       if (!params.targetPrice || typeof params.targetPrice !== 'number' || params.targetPrice <= 0) {
-        throw new Error('Invalid target price. It must be a positive number.');
+        return { success: false, message: "Invalid target price. It must be a positive number." };
       }
-
+  
+      // Validate condition.
       if (!['above', 'below'].includes(params.condition)) {
-        throw new Error('Invalid condition. Must be "above" or "below".');
+        return { success: false, message: 'Invalid condition. Must be "above" or "below".' };
       }
-
+  
+      // Process swap action if provided.
       let swapAction = { enabled: false };
       if (params.swapAction && params.swapAction.enabled) {
         if (!params.swapAction.amount || isNaN(params.swapAction.amount) || parseFloat(params.swapAction.amount) <= 0) {
-          throw new Error('Invalid swap amount. Must be a positive number.');
+          return { success: false, message: "Invalid swap amount. Must be a positive number." };
         }
-
         if (!['buy', 'sell'].includes(params.swapAction.type)) {
-          throw new Error('Invalid swap action type. Must be "buy" or "sell".');
+          return { success: false, message: 'Invalid swap action type. Must be "buy" or "sell".' };
         }
-
         swapAction = {
           enabled: true,
           type: params.swapAction.type,
@@ -779,7 +794,8 @@ export class IntentProcessor extends EventEmitter {
           walletAddress: walletAddress,
         };
       }
-
+  
+      // Prepare alert data.
       const alertData = {
         tokenAddress: params.tokenAddress,
         network,
@@ -789,15 +805,20 @@ export class IntentProcessor extends EventEmitter {
         swapAction,
         walletAddress,
       };
-
+  
+      // Create the alert.
       const alert = await priceAlertService.createAlert(userId, alertData);
-      await log(chatId, `🎉 Price alert created!
-      Token: ${tokenSymbol}
-      Target: ${params.targetPrice}
-      Cond: ${params.condition}
-      Amt: ${swapAction.enabled ? swapAction.amount : 'N/A'}
-      Swap: ${swapAction.enabled ? swapAction.type : 'N/A'}`);
-
+      await log(
+        chatId,
+        `🎉 Price alert created!
+  Token: ${tokenSymbol}
+  Target: ${params.targetPrice}
+  Condition: ${params.condition}
+  Amount: ${swapAction.enabled ? swapAction.amount : 'N/A'}
+  Swap Action: ${swapAction.enabled ? swapAction.type : 'N/A'}`
+      );
+  
+      // Delete the log message after 30 seconds.
       setTimeout(async () => {
         try {
           if (logMessageId) {
@@ -807,11 +828,10 @@ export class IntentProcessor extends EventEmitter {
           console.warn('⚠️ Could not delete log message:', err.message);
         }
       }, 30000);
-
+  
       return alert;
     } catch (error) {
       await log(chatId, `❌ Error: ${error.message}`);
-
       setTimeout(async () => {
         try {
           if (logMessageId) {
@@ -821,10 +841,9 @@ export class IntentProcessor extends EventEmitter {
           console.warn('⚠️ Could not delete error log message:', err.message);
         }
       }, 30000);
-
-      throw error;
+      return { success: false, message: error.message };
     }
-  }
+  }  
 
   processUrlInput(input) {
     const urlPattern = /^(https?:\/\/[^\s]+)$/;
@@ -861,63 +880,72 @@ export class IntentProcessor extends EventEmitter {
   async getPriceAlert(alertId) {
     try {
       if (!alertId) {
-        throw new Error("Alert ID is required");
+        return { success: false, message: "Alert ID is required." };
       }
-
+  
       const alert = await priceAlertService.getAlertById(alertId);
-
+  
       if (!alert) {
-        throw new Error(`Alert with ID ${alertId} not found`);
+        return { success: false, message: `Alert with ID ${alertId} not found.` };
       }
-
+  
       return alert;
     } catch (error) {
       console.error("Error fetching price alert:", error.message);
-      throw error;
+      return { success: false, message: "Alert could not be retrieved." };
     }
-  }
+  }  
 
   async editPriceAlert(alertId, updatedData) {
     try {
       if (!alertId) {
-        throw new Error("Alert ID is required");
+        return { success: false, message: "Alert ID is required." };
       }
-
+  
       if (!updatedData || Object.keys(updatedData).length === 0) {
-        throw new Error("Updated data is required to edit the alert");
+        return { success: false, message: "Updated data is required to edit the alert." };
       }
-
+  
       const updatedAlert = await priceAlertService.editAlert(alertId, updatedData);
-
+  
       if (!updatedAlert) {
-        throw new Error(`Alert with ID ${alertId} not found or could not be updated`);
+        return { 
+          success: false, 
+          message: `Alert with ID ${alertId} not found or could not be updated.` 
+        };
       }
-
+  
       return updatedAlert;
     } catch (error) {
       console.error("Error editing price alert:", error.message);
-      throw error;
+      return { success: false, message: "Alert could not be updated." };
     }
-  }
+  }  
 
   async deletePriceAlert(alertId) {
     try {
       if (!alertId) {
-        throw new Error("Alert ID is required");
+        return { success: false, message: "Alert ID is required" };
       }
-
+  
       const result = await priceAlertService.deleteAlert(alertId);
-
+  
       if (!result.success) {
-        throw new Error(`Failed to delete alert with ID ${alertId}`);
+        return {
+          success: false,
+          message: `Alert with ID ${alertId} could not be found or has already been deleted.`,
+        };
       }
-
+  
       return result;
     } catch (error) {
       console.error("Error deleting price alert:", error.message);
-      throw error;
+      return {
+        success: false,
+        message: "Alert could not be found or deleted already.",
+      };
     }
-  }
+  }  
 
   async getTokenNetwork(tokenAddress) {
     const solanaRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -1733,124 +1761,148 @@ export class IntentProcessor extends EventEmitter {
     // Load user
     const user = await User.findOne({ telegramId: userId });
     if (!user) {
-      throw new Error(`User not found for user = ${userId}`);
+      return { success: false, message: `User not found for user = ${userId}` };
     }
-
+  
     switch (action) {
       case 'create':
       case 'update':
         if (!username || !password) {
-          throw new Error("username/password required for create/update");
+          return { success: false, message: "Username and password are required for create/update." };
         }
-        // Encrypt
-        
-      let passwordHashed = encrypt(password);
+        // Encrypt the password
+        const passwordHashed = encrypt(password);
         user.gmailSettings.username = username;
         user.gmailSettings.password = passwordHashed;
         await user.save();
         return { success: true, action, message: "Gmail settings saved/updated." };
-
+  
       case 'delete':
         user.gmailSettings.username = "";
         user.gmailSettings.password = "";
         await user.save();
         return { success: true, action, message: "Gmail settings removed." };
-
+  
       default:
-        throw new Error(`Unsupported action: ${action}`);
+        return { success: false, message: `Unsupported action: ${action}` };
     }
-  }
+  }  
 
   // Google API Methods
   async manageUserGmailSettings(userId, args) {
     try {
       const { action, username, password } = args;
       const user = await User.findOne({ telegramId: userId });
-      if (!user) throw new Error('User not found');
-
-      return await gmailController.manageSettings({ body: { telegramId: userId, action, username, password } });
+      if (!user) {
+        return { success: false, message: "User not found" };
+      }
+  
+      const result = await gmailController.manageSettings({
+        body: { telegramId: userId, action, username, password },
+      });
+      return result;
     } catch (error) {
-      console.error('Error managing Gmail settings:', error);
-      throw error;
+      console.error("Error managing Gmail settings:", error);
+      return { success: false, message: `Error managing Gmail settings: ${error.message}` };
     }
-  }
+  }  
 
   async manageCalendarEvent(userId, args) {
     try {
       const { action, eventId, title, startTime, endTime, description } = args;
       const user = await User.findOne({ telegramId: userId });
-      if (!user) throw new Error('User not found');
-
-      return await manageCalendarEvent({ body: { telegramId: userId, action, eventId, title, startTime, endTime, description } });
+      if (!user) {
+        return { success: false, message: "User not found" };
+      }
+  
+      const result = await manageCalendarEvent({
+        body: { telegramId: userId, action, eventId, title, startTime, endTime, description },
+      });
+      return result;
     } catch (error) {
-      console.error('Error managing calendar event:', error);
-      throw error;
+      console.error("Error managing calendar event:", error);
+      return { success: false, message: `Error managing calendar event: ${error.message}` };
     }
-  }
+  }  
 
   async listCalendarEvent(userId, args) {
     try {
       const user = await User.findOne({ telegramId: userId });
-      if (!user) throw new Error('User not found');
-
-      return await listCalendarEvents({ body: { telegramId: userId, maxResults: 10 } });
+      if (!user) {
+        return { success: false, message: "User not found" };
+      }
+  
+      const result = await listCalendarEvents({ body: { telegramId: userId, maxResults: 10 } });
+      return result;
     } catch (error) {
-      console.error('Error managing calendar event:', error);
-      throw error;
+      console.error("Error listing calendar events:", error);
+      return { success: false, message: `Error listing calendar events: ${error.message}` };
     }
   }
-
+  
   async sendEmail(userId, args) {
     try {
       const { to, subject, text, html } = args;
       const user = await User.findOne({ telegramId: userId });
-      if (!user) throw new Error('User not found');
-
-      return await sendEmail({ body: { telegramId: userId, to, subject, text, html } });
+      if (!user) {
+        return { success: false, message: "User not found" };
+      }
+  
+      const result = await sendEmail({ body: { telegramId: userId, to, subject, text, html } });
+      return result;
     } catch (error) {
-      console.error('Error sending email:', error);
-      throw error;
+      console.error("Error sending email:", error);
+      return { success: false, message: `Error sending email: ${error.message}` };
     }
   }
-
+  
   async searchEmails(userId, args) {
     try {
       const { query, maxResults } = args;
       const user = await User.findOne({ telegramId: userId });
-      if (!user) throw new Error('User not found');
-
-      return await searchEmails({ body: { telegramId: userId, query, maxResults } });
+      if (!user) {
+        return { success: false, message: "User not found" };
+      }
+  
+      const result = await searchEmails({ body: { telegramId: userId, query, maxResults } });
+      return result;
     } catch (error) {
-      console.error('Error searching emails:', error);
-      throw error;
+      console.error("Error searching emails:", error);
+      return { success: false, message: `Error searching emails: ${error.message}` };
     }
   }
-
+  
   async readEmail(userId, args) {
     try {
       const { messageId, format } = args;
       const user = await User.findOne({ telegramId: userId });
-      if (!user) throw new Error('User not found');
-
-      return await readEmail({ body: { telegramId: userId, messageId, format } });
+      if (!user) {
+        return { success: false, message: "User not found" };
+      }
+  
+      const result = await readEmail({ body: { telegramId: userId, messageId, format } });
+      return result;
     } catch (error) {
-      console.error('Error reading email:', error);
-      throw error;
+      console.error("Error reading email:", error);
+      return { success: false, message: `Error reading email: ${error.message}` };
     }
   }
-
+  
   async replyEmail(userId, args) {
     try {
       const { threadId, messageId, body } = args;
       const user = await User.findOne({ telegramId: userId });
-      if (!user) throw new Error('User not found');
-
-      return await replyEmail({ body: { telegramId: userId, threadId, messageId, body } });
+      if (!user) {
+        return { success: false, message: "User not found" };
+      }
+  
+      const result = await replyEmail({ body: { telegramId: userId, threadId, messageId, body } });
+      return result;
     } catch (error) {
-      console.error('Error replying to email:', error);
-      throw error;
+      console.error("Error replying to email:", error);
+      return { success: false, message: `Error replying to email: ${error.message}` };
     }
-  }
+  }  
 
   // SolanaPay Methods
   async createSolanaPayment(args) {
@@ -2465,80 +2517,82 @@ export class IntentProcessor extends EventEmitter {
    * @param {object} options - Trade options.
    */
   async executePumpfunTrade(userId, chatId, options) {
-    options.pool = "auto"; // Default to "auto" pool.
-
+    // Set default pool option.
+    options.pool = "auto";
+  
     // Retrieve the user's Solana wallet.
     const walletAddresses = await walletService.getWallets(userId);
     const solWallets = walletAddresses.solana || [];
     if (solWallets.length === 0) {
-        throw new Error("No Solana wallet available for user.");
+      return { success: false, message: "No Solana wallet available for user." };
     }
     options.publicKey = solWallets[0].address; // Use the first Solana wallet.
-
+  
     try {
-        // Retrieve user document.
-        const user = await User.findOne({ telegramId: userId });
-        if (!user || !user.wallets) {
-            throw new Error("User wallet not found.");
+      // Retrieve user document.
+      const user = await User.findOne({ telegramId: userId });
+      if (!user || !user.wallets) {
+        return { success: false, message: "User wallet not found." };
+      }
+  
+      // Retrieve wallet data for Solana.
+      const networkKey = "solana";
+      const walletData =
+        user.wallets[networkKey] && user.wallets[networkKey].length > 0
+          ? user.wallets[networkKey][0]
+          : null;
+      if (!walletData || !walletData.encryptedPrivateKey) {
+        return { success: false, message: `Encrypted private key missing for network: ${networkKey}` };
+      }
+  
+      // Decrypt the private key.
+      let privateKey = decrypt(walletData.encryptedPrivateKey);
+      if (!privateKey) {
+        if (/^(0x)?[0-9a-fA-F]{64}$/.test(walletData.encryptedPrivateKey)) {
+          privateKey = walletData.encryptedPrivateKey;
+        } else {
+          return { success: false, message: "Failed to decrypt or retrieve a valid private key." };
         }
-
-        // Retrieve wallet data for Solana.
-        const networkKey = 'solana';
-        const walletData = (user.wallets[networkKey] && user.wallets[networkKey].length > 0)
-            ? user.wallets[networkKey][0]
-            : null;
-        if (!walletData || !walletData.encryptedPrivateKey) {
-            throw new Error("Encrypted private key missing for network: " + networkKey);
-        }
-
-        // Decrypt the private key.
-        let privateKey = decrypt(walletData.encryptedPrivateKey);
-        if (!privateKey) {
-            if (/^(0x)?[0-9a-fA-F]{64}$/.test(walletData.encryptedPrivateKey)) {
-                privateKey = walletData.encryptedPrivateKey;
-            } else {
-                throw new Error("Failed to decrypt or retrieve a valid private key.");
-            }
-        }
-        options.privateKey = privateKey;
-
-        // Execute the trade via PumpFun service.
-        const result = await pumpFunService.executeTrade(options);
-        
-        // Check if trade execution was successful.
-        if (!result.success) {
-            throw new Error(`Trade failed: ${result.error || 'Unknown error'}`);
-        }
-
-        // Truncate transaction signature for display.
-        const truncatedSignature = result.signature 
-            ? `${result.signature.slice(0, 6)}...${result.signature.slice(-6)}`
-            : 'N/A';
-
-        // Build the notification message with a clickable txn link.
-        const txnLink = result.signature 
-            ? `[${truncatedSignature}](https://solscan.io/tx/${result.signature})`
-            : '*Transaction failed*';
-
-        const coolMessage = `🚀 *Aping on PumpFun!*  
-✅ *Trade Successful!*  
-
-*Action:* ${options.action}  
-*Mint:* \`${options.mint}\`  
-*Amount:* \`${options.amount}\`  
-🔗 *Txn:* ${txnLink}  
-
-🔥 *Happy Pump!* 🚀`;
-
-        // ✅ Send the message to the user.
-        await safeSendMessage(bot, chatId, coolMessage, { parse_mode: 'Markdown' });
-
-        return result;
+      }
+      options.privateKey = privateKey;
+  
+      // Execute the trade via PumpFun service.
+      const result = await pumpFunService.executeTrade(options);
+      
+      // Check if trade execution was successful.
+      if (!result.success) {
+        return { success: false, message: `Trade failed: ${result.error || "Unknown error"}` };
+      }
+  
+      // Truncate transaction signature for display.
+      const truncatedSignature = result.signature
+        ? `${result.signature.slice(0, 6)}...${result.signature.slice(-6)}`
+        : "N/A";
+  
+      // Build the notification message with a clickable transaction link.
+      const txnLink = result.signature
+        ? `[${truncatedSignature}](https://solscan.io/tx/${result.signature})`
+        : "Transaction failed";
+  
+      const coolMessage = `🚀 *Aping on PumpFun!*  
+      ✅ *Trade Successful!*  
+      
+      *Action:* ${options.action}  
+      *Mint:* \`${options.mint}\`  
+      *Amount:* \`${options.amount}\`  
+      🔗 *Txn:* ${txnLink}  
+      
+      🔥 *Happy Pump!* 🚀`;
+  
+      // Send the message to the user.
+      await safeSendMessage(bot, chatId, message, { parse_mode: "Markdown" });
+  
+      return result;
     } catch (error) {
-        console.error("❌ Error in executePumpfunTrade:", error);
-        return { success: false, error: error.message };
+      console.error("Error in executePumpfunTrade:", error);
+      return { success: false, message: error.message };
     }
-  }
+  }  
 
   async getPumpfunTokenRanged(userId, chatId, args) {
     // Default to 24 hours ago if startTime isn’t provided.

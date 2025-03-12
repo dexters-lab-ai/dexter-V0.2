@@ -452,7 +452,7 @@ class Application {
       } catch (error) {
         console.error('Error during shutdown:', error);
       }
-      process.exit(0);
+      //process.exit(0);
     });
     
     process.on('SIGTERM', async () => {

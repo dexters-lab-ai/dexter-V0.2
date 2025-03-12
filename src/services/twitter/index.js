@@ -58,6 +58,9 @@ class TwitterService extends EventEmitter {
     this.apifyClient = new ApifyClient({ token: config.apifyApiKey });
     // Cache for storing recent tweets per handle (expires after a minute)
     this.tweetCache = new Map(); // key: normalized handle, value: { timestamp, tweets: [...] }
+    this.searchCache = new Map(); // Cache for search results
+    this.searchCounts = new Map(); // Rate limit counters
+    this.lastResetTime = Date.now();
     // Track last API call per handle to enforce rate limiting
     this.apiRateLimitTimestamps = new Map();
     // Fallback flag if queue service is degraded
