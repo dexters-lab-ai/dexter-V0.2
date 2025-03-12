@@ -77,7 +77,6 @@ router.post('/v1/token', validateApiKey, async (req, res) => {
 /**
  * GET /downloadPumpFunTokens
  * Download the last 300 PumpFun tokens as JSON.
- */
 router.get('/downloadPumpFunTokens', async (req, res) => {
   try {
     const tokensResult = await pumpFunService.getTokensByPeriod(new Date(0), new Date());
@@ -97,6 +96,7 @@ router.get('/downloadPumpFunTokens', async (req, res) => {
     res.status(500).send({ error: error.message });
   }
 });
+ */
 
 /**
  * GET /status

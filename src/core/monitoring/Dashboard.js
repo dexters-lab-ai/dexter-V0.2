@@ -824,6 +824,26 @@ function renderPumpFunMetrics(pumpFunData) {
     `;
   }
   
+  // Build table rows for up to 10 recent tokens
+  let rowsHtml = '';
+  if (pumpFunData.recentTokens && pumpFunData.recentTokens.length > 0) {
+    // Show the last 10 tokens (if there are at least 10)
+    const recent = pumpFunData.recentTokens.slice(-10);
+    recent.forEach(token => {
+      rowsHtml += `
+        <tr>
+          <td>${token.name || '-'}</td>
+          <td>${token.symbol || '-'}</td>
+          <td>${token.mint || '-'}</td>
+          <td>${token.marketCapSol ? token.marketCapSol.toFixed(2) : '-'}</td>
+          <td>${new Date(token.timestamp).toLocaleString()}</td>
+        </tr>
+      `;
+    });
+  } else {
+    rowsHtml = `<tr><td colspan="5">No recent tokens</td></tr>`;
+  }
+  
   return `
     <section class="metrics-card system-metrics glass-effect">
       <div class="card-header">
@@ -837,9 +857,7 @@ function renderPumpFunMetrics(pumpFunData) {
           </div>
           <div class="metric-info">
             <h3>Status</h3>
-            <div class="value-display">
-              ${pumpFunData.status}
-            </div>
+            <div class="value-display">${pumpFunData.status}</div>
           </div>
         </div>
         <div class="metric-item">
@@ -848,9 +866,17 @@ function renderPumpFunMetrics(pumpFunData) {
           </div>
           <div class="metric-info">
             <h3>Tokens Launched</h3>
-            <div class="value-display">
-              ${pumpFunData.tokensLaunched}
-            </div>
+            <div class="value-display">${pumpFunData.tokensLaunched}</div>
+          </div>
+        </div>
+         <!-- Total Cached Card -->
+        <div class="metric-item">
+          <div class="metric-icon">
+            <i class="fas fa-archive"></i>
+          </div>
+          <div class="metric-info">
+            <h3>Total AI Cache</h3>
+            <div class="value-display">${pumpFunData.totalTokensSaved}</div>
           </div>
         </div>
         <div class="metric-item">
@@ -859,9 +885,7 @@ function renderPumpFunMetrics(pumpFunData) {
           </div>
           <div class="metric-info">
             <h3>Reconnect Attempts</h3>
-            <div class="value-display">
-              ${pumpFunData.reconnectAttempts}
-            </div>
+            <div class="value-display">${pumpFunData.reconnectAttempts}</div>
           </div>
         </div>
         <div class="metric-item">
@@ -870,14 +894,29 @@ function renderPumpFunMetrics(pumpFunData) {
           </div>
           <div class="metric-info">
             <h3>Cached Tokens</h3>
-            <div class="value-display">
-              ${pumpFunData.cachedTokens || 0}
-            </div>
+            <div class="value-display">${pumpFunData.cachedTokens || 0}</div>
           </div>
         </div>
       </div>
+      <div style="margin-top: 2rem;">
+        <h3 style="text-align: center;">Recent Tokens (Last 10)</h3>
+        <table class="param-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Symbol</th>
+              <th>Mint</th>
+              <th>Market Cap (SOL)</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
       <div class="download-section" style="text-align: center; margin-top: 1rem;">
-        <a href="/downloadPumpFunTokens" class="download-link" style="color: var(--primary); text-decoration: underline;">
+        <a href="/dashboard/downloadPumpFunTokens" class="download-link" style="color: var(--primary); text-decoration: underline;">
           Download Last 300 Tokens (JSON)
         </a>
       </div>
@@ -2644,6 +2683,7 @@ function getDashboardScripts() {
         //
         // 1) INIT WEBSOCKET (Unchanged from your old code)
         //
+        /*
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         const ws = new WebSocket(\`\${protocol}//\${host}\`);
@@ -2664,6 +2704,24 @@ function getDashboardScripts() {
             console.error('Error refreshing fragment:', err);
           }
         };
+        */
+       // Trying new polling mechanism without creating, revert anytime, meant to try avoid websocket being disconnected on dahboard page load only
+       // Instead of opening a WS connection, poll for updates every 30 seconds
+        setInterval(async () => {
+          try {
+            const res = await fetch('/dashboard/fragment');
+            const html = await res.text();
+            const container = document.getElementById('dashboardContainer');
+            if (container) {
+              container.innerHTML = html;
+            } else {
+              console.error('dashboardContainer element not found');
+            }
+          } catch (err) {
+            console.error('Error refreshing dashboard fragment:', err);
+          }
+        }, 30000);
+
 
         //
         // 2) DOMContentLoaded: set up all your event listeners

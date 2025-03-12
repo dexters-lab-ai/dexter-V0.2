@@ -20,7 +20,7 @@ export class WebSocketManager extends EventEmitter {
       }
 
       const ws = new WebSocket(endpoint, options);
-      
+
       ws.on('open', () => {
         // If a custom onOpen callback was provided, call it.
         if (options.onOpen && typeof options.onOpen === 'function') {
@@ -30,7 +30,16 @@ export class WebSocketManager extends EventEmitter {
         }
         this.reconnectAttempts.set(key, 0);
         this.emit('connected', { endpoint });
-      });      
+      });
+
+      // Set up a message event handler
+      ws.on('message', (data) => {
+        if (options.onMessage && typeof options.onMessage === 'function') {
+          options.onMessage(data);
+        } else {
+          console.log(`📨 Message received from ${endpoint}: ${data}`);
+        }
+      });
 
       ws.on('close', () => {
         console.log(`🏋️ WebSocket closed for ${endpoint}`);

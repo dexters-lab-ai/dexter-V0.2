@@ -60,8 +60,12 @@ class PumpFunService extends EventEmitter {
     this.maxReconnectAttempts = 10;
     this.heartbeatInterval = null;
     this.heartbeatTimeout = null;
-    this.tokenLaunchCount = 0;
-    this.tokenCache = [];
+    
+    // Cumulative token tracking:
+    this.tokenLaunchCount = 0;          // Total tokens received via WS events
+    this.totalTokensSaved = 0;          // Cumulative count of tokens flushed to DB
+    this.tokenCache = [];               // Tokens waiting to be flushed
+    this.lastHealthyTimestamp = null;
     
     // Start periodic flush of token cache to DB every 2 mins
     this.cacheFlushInterval = setInterval(() => this.flushTokenCache(), 120000);
@@ -99,6 +103,7 @@ class PumpFunService extends EventEmitter {
   // When the connection opens, subscribe automatically to new token events.
   handleOpen() {
     console.log(`✅ PumpFun⛽ WS connected to ${this.websocketEndpoint}`);
+    this.lastHealthyTimestamp = Date.now(); 
     this.reconnectAttempts = 0;
     this.isInitialized = true;
     this.flushQueue();
@@ -111,6 +116,7 @@ class PumpFunService extends EventEmitter {
   handleMessage(data) {
     try {
       const message = JSON.parse(data);
+      this.lastHealthyTimestamp = Date.now(); 
       console.log('📩 PumpFun WS message received:', JSON.stringify(message, null, 2));
       if (message.txType) {
         switch (message.txType) {
@@ -299,8 +305,9 @@ class PumpFunService extends EventEmitter {
     try {
       console.log('🎉 Handling new token message:', message);
       const { signature, mint, traderPublicKey, initialBuy, marketCapSol, name, symbol, uri } = message;
+      // Increase both the per-session counter and cumulative count.
       this.tokenLaunchCount++;
-
+  
       const formattedMsg = `
 🚀 *New Token Detected!*
 *Name:* ${name}
@@ -315,7 +322,7 @@ class PumpFunService extends EventEmitter {
 
       this.emit('newTokenCreated', { message: formattedMsg, raw: message });
 
-      // Use batched notifications for new token subscribers
+      // Batched notifications for new token subscribers.
       const BATCH_SIZE = 10;
       const BATCH_INTERVAL = 60000; // 60 seconds
 
@@ -389,6 +396,9 @@ class PumpFunService extends EventEmitter {
       console.log(`🔄 Flushing ${this.tokenCache.length} tokens from cache to DB...`);
       await PumpFunTokenModel.insertMany(this.tokenCache);
       console.log(`✅ Successfully flushed ${this.tokenCache.length} tokens to DB.`);
+      // Update cumulative saved counter.
+      this.totalTokensSaved += this.tokenCache.length;
+      // Clear the pending cache.
       this.tokenCache = [];
     } catch (error) {
       console.error("❌ Error flushing token cache:", error);
@@ -412,6 +422,9 @@ class PumpFunService extends EventEmitter {
       let status = "unhealthy";
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         status = "healthy";
+      } else if (this.lastHealthyTimestamp && (Date.now() - this.lastHealthyTimestamp < 120000)) {
+        // If a message was received within the last 2 minutes, consider it healthy.
+        status = "healthy";
       }
       const tokens = await PumpFunTokenModel.find({})
         .sort({ timestamp: -1 })
@@ -422,6 +435,7 @@ class PumpFunService extends EventEmitter {
         status,
         endpoint: this.websocketEndpoint,
         tokensLaunched: this.tokenLaunchCount,
+        totalTokensSaved: this.totalTokensSaved,  
         reconnectAttempts: this.reconnectAttempts,
         cachedTokens: this.tokenCache.length,
         recentTokens
@@ -429,7 +443,7 @@ class PumpFunService extends EventEmitter {
     } catch (error) {
       return { status: "unhealthy", error: error.message };
     }
-  }
+  }  
 
   cleanup() {
     console.log('🧹 Cleaning up PumpFunService...');
