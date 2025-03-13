@@ -1,6 +1,7 @@
 import { ApiKey } from '../models/ApiKey.js';
 import { v4 as uuidv4 } from 'uuid';
 import { deterministicEncrypt } from '../../../../utils/encryption.js';
+import { ApiUsage } from '../models/ApiUsage.js';
 
 const TIER_CONFIGS = {
   basic: {
@@ -65,17 +66,15 @@ export class ApiKeyService {
     return true;
   }
 
-  static async getRecentUsage(key, timeWindowMs = 60000) {
+  static async getRecentUsage(encryptedKey, timeWindowMs = 60000) {
     const since = new Date(Date.now() - timeWindowMs);
-    
     const usage = await ApiUsage.countDocuments({
-      apiKey: key,
+      apiKey: encryptedKey,
       timestamp: { $gte: since }
     });
-
     return usage;
   }
-
+  
   static async deactivateKey(key) {
     const apiKey = await ApiKey.findOne({ key: encrypt(key) });
     if (apiKey) {
