@@ -36,6 +36,29 @@ function parseTweetDate(dateStr) {
 }
 
 /**
+ * Reorders a tweet date string from “DD/MM/YYYY, HH:MM:SS” to “MM/DD/YYYY, HH:MM:SS”.
+ * If the input does not match the expected format, returns the original string.
+ */
+function reorderTweetDate(dateStr) {
+  if (!dateStr) return dateStr;
+  
+  // Split the date and time parts (expects a comma separator)
+  const parts = dateStr.split(',');
+  if (parts.length < 2) return dateStr; // Not the expected format
+
+  const datePart = parts[0].trim(); // e.g., "26/12/2024"
+  const timePart = parts[1].trim(); // e.g., "23:13:54"
+  const dateComponents = datePart.split('/');
+  if (dateComponents.length !== 3) return dateStr;
+
+  // Extract day, month, and year
+  const [day, month, year] = dateComponents;
+  
+  // Return reordered date string
+  return `${month}/${day}/${year}, ${timePart}`;
+}
+
+/**
  * Structured logging helpers to standardize log output.
  */
 function logInfo(context, message, extra = {}) {
@@ -248,7 +271,6 @@ class TwitterService extends EventEmitter {
       }
       await queueService.addRepeatableJob(
         'kolMonitor',               // queue name
-        'KOL_MONITOR',             // <-- job name
         { userId, handle, amount }, // data
         { every: intervalMs },      // repeatOptions
         jobId,                      // jobId (e.g. "kolMonitor:12345:@VitalikButerin")
@@ -326,7 +348,7 @@ class TwitterService extends EventEmitter {
           for (const job of activeJobs) {
             // We check job.name === 'KOL_MONITOR' to be extra certain
             if (
-              job.name === 'KOL_MONITOR' &&
+              job.name === 'kolMonitor' &&
               job.data &&
               job.data.handle === handle &&
               job.data.userId === userId
@@ -779,6 +801,20 @@ class TwitterService extends EventEmitter {
       return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
     } else {
       return "just now";
+    }
+  }
+
+  // IFor API Querying
+  async searchTweetsByCashtagAPI(cashtag) {
+    try {
+      const defaultUserId = "0"; 
+      const minLikes = 0, minRetweets = 0, minReplies = 0;
+      const cleanCashtag = cashtag.toLowerCase().trim();
+      // Call the existing function with default parameters
+      return await this.searchTweetsByCashtag(defaultUserId, cleanCashtag, minLikes, minRetweets, minReplies);
+    } catch (error) {
+      console.error(`Error in searchTweetsByCashtagAPI for cashtag "${cashtag}":`, error);
+      return [];
     }
   }
   
