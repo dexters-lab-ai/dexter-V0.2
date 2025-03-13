@@ -25,6 +25,40 @@ function getPossibleKeys() {
 }
 
 /**
+ * Encrypts a given text using AES-256 in ECB mode, which is deterministic.
+ * Returns the encrypted text.
+ *
+ * @param {string} text - The plaintext to encrypt.
+ * @returns {string} - The encrypted text.
+ */
+export function deterministicEncrypt(text) {
+  if (typeof text !== "string" || !text.trim()) {
+    throw new Error("Input must be a non-empty string");
+  }
+  const key = CryptoJS.enc.Utf8.parse(config.mongoEncryptionKey);
+  const encrypted = CryptoJS.AES.encrypt(text, key, {
+    mode: CryptoJS.mode.ECB,
+    padding: CryptoJS.pad.Pkcs7
+  });
+  return encrypted.toString();
+}
+
+/**
+ * Decrypts the text encrypted with deterministicEncrypt.
+ *
+ * @param {string} ciphertext - The encrypted text.
+ * @returns {string} - The decrypted plaintext.
+ */
+export function deterministicDecrypt(ciphertext) {
+  const key = CryptoJS.enc.Utf8.parse(config.mongoEncryptionKey);
+  const bytes = CryptoJS.AES.decrypt(ciphertext, key, {
+    mode: CryptoJS.mode.ECB,
+    padding: CryptoJS.pad.Pkcs7
+  });
+  return bytes.toString(CryptoJS.enc.Utf8);
+}
+
+/**
  * Encrypts a given text using AES-256-CBC with a random IV.
  * Returns the encrypted data in format: `IV:Ciphertext`
  *

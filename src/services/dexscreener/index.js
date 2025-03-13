@@ -302,7 +302,7 @@ class DexScreenerService {
         `dexscreener:tokenInfo:${query}`
       );
     
-      console.log('Dexscreener Token Price by address:', JSON.stringify(rawResponse, null, 2));
+      //console.log('Dexscreener Token Price by address:', JSON.stringify(rawResponse, null, 2));
       
       if (rawResponse?.pairs?.length > 0) {
         const tokenData = rawResponse.pairs[0];

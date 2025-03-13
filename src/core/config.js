@@ -16,6 +16,9 @@ if (!ENCRYPTION_KEY || Buffer.from(ENCRYPTION_KEY, 'base64').length !== 32) {
 
 class Config {
   constructor() {
+    this.ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+    this.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+    this.ADMIN_PORT = process.env.ADMIN_PORT || 3090;
     // Basic Application Settings
     this.botToken = process.env.BOT_TOKEN;
     this.ngrokAuthToken= process.env.NGROK_AUTH_TOKEN;

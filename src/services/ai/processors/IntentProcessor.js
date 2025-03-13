@@ -279,6 +279,7 @@ export class IntentProcessor extends EventEmitter {
             : bs58.decode(processedKey);
           const wallet = Keypair.fromSecretKey(secretKeyUint8);
           const publicKey = wallet.publicKey.toBase58();
+          /*
           console.log("✅ Solana Wallet Reconstructed:", publicKey);
           await this.safeSendMessage(
             this.bot,
@@ -286,6 +287,7 @@ export class IntentProcessor extends EventEmitter {
             `✅ **Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${publicKey}\n\`\`\``,
             { parse_mode: "Markdown" }
           );
+          */
   
           // Fetch balances with fallback.
           let formattedBalances;
@@ -347,6 +349,7 @@ export class IntentProcessor extends EventEmitter {
             throw new Error(`Provider for network "${net}" is not configured.`);
           
           const wallet = new Wallet(privateKey, providerForNetwork);
+          /*
           console.log(`✅ ${net.toUpperCase()} Wallet Reconstructed:`, wallet.address);
           await this.safeSendMessage(
             this.bot,
@@ -354,6 +357,7 @@ export class IntentProcessor extends EventEmitter {
             `✅ **Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${wallet.address}\n\`\`\``,
             { parse_mode: "Markdown" }
           );
+          */
           
           let formattedBalances;
           try {

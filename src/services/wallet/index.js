@@ -381,6 +381,53 @@ class WalletService extends EventEmitter {
   }
 
   /**
+   * getWalletByNetwork
+   * ------------------
+   * Retrieves a single wallet for the given user and network that is valid for transactions.
+   * A valid wallet is defined as one that has an encryptedPrivateKey.
+   *
+   * @param {string|number} userId - The Telegram ID of the user.
+   * @param {string} network - The network to look for (e.g., "ethereum", "solana").
+   * @returns {Object} An object containing the network and wallet details.
+   * @throws {Error} If the user or wallet data is not found, or if no valid wallet exists for the network.
+   */
+  async getWalletByNetwork(userId, network) {
+    try {
+      // Retrieve the user by telegramId (ensure userId is a string if needed)
+      const user = await User.findOne({ telegramId: userId.toString() }).lean();
+      if (!user || !user.wallets) {
+        throw new Error("User wallet data not found.");
+      }
+      // Ensure the network parameter is provided.
+      if (!network) {
+        throw new Error("Network parameter is required.");
+      }
+      
+      // Get the wallets for the given network.
+      const walletsForNetwork = user.wallets[network];
+      if (!walletsForNetwork || walletsForNetwork.length === 0) {
+        throw new Error(`No wallet data found for network "${network}".`);
+      }
+      
+      // Find the first wallet that has an encrypted private key.
+      const wallet = walletsForNetwork.find((w) => w.encryptedPrivateKey);
+      if (!wallet) {
+        throw new Error(`No valid wallet found for network "${network}".`);
+      }
+      
+      // Return the wallet data along with the network.
+      return {
+        network,
+        address: wallet.address,
+        encryptedPrivateKey: wallet.encryptedPrivateKey,
+      };
+    } catch (error) {
+      console.error("Error fetching wallet by network:", error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Toggles the autonomous flag on a wallet.
    * @param {string|number} userId
    * @param {string} address

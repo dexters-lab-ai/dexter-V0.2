@@ -1,45 +1,37 @@
 import OpenAI from "openai";
 import { config } from "../../core/config.js";
 import { ErrorHandler } from "../../core/errors/index.js";
-import { aiMetricsService } from '../aiMetricsService.js';
+import { aiMetricsService } from "../aiMetricsService.js";
 
 /**
  * DeepSeekService
  *
- * Uses the OpenAI-compatible "openai" library but points to "https://api.deepseek.com"
- * with your DeepSeek API key.
- *
- * Exposes methods:
- *  - testConnection()
- *  - createChatCompletion()
- *  - generateAIResponse()
- *  - formatMessages()
+ * Uses the OpenAI-compatible "openai" library with DeepSeek's API endpoint.
+ * Exposes methods for chat completions and utilities.
  */
 class DeepSeekService {
   constructor() {
-    this.apiKey = config.deepseekApiKey; // e.g. "sk-1234..."
+    this.apiKey = config.deepseekApiKey; // Correctly sourced from config
     this.isConnected = false;
     this.conversationHistory = new Map();
     this.startTime = Date.now();
 
-    // Set up the "openai" client but override baseURL to DeepSeek
-    // (The docs mention we can still use "https://api.deepseek.com/v1" or "https://api.deepseek.com")
+    // Initialize OpenAI client with DeepSeek's endpoint
     this.openai = new OpenAI({
-      baseURL: "https://api.deepseek.com", // or 'https://api.deepseek.com/v1'
+      baseURL: "https://api.deepseek.com", // Correct DeepSeek API URL
       apiKey: this.apiKey,
-      // If needed, you can also specify "defaultHeaders", "organization", etc.
     });
   }
 
   /**
-   * Tests the connection by creating a small chat completion.
-   * If it succeeds, sets this.isConnected = true
+   * Tests the connection with a minimal chat completion.
+   * Sets this.isConnected = true on success.
+   * @returns {Promise<boolean>}
    */
   async testConnection() {
     try {
-      // Minimal example
       const completion = await this.openai.chat.completions.create({
-        model: "deepseek-chat",
+        model: "deepseek-chat", // Confirm this with DeepSeek's latest docs
         messages: [{ role: "user", content: "test" }],
         max_tokens: 10,
       });
@@ -53,27 +45,18 @@ class DeepSeekService {
       this.isConnected = false;
       console.error("❌ Failed to connect to DeepSeek API:", error.message);
       await ErrorHandler.handle(error);
-      throw error;
+      return false;
     }
   }
 
   /**
-   * Create a chat completion using the DeepSeek "openai" style call
-   * with additional parameters if you like (temperature, etc.)
-   *
-   * @param {Object} options
-   *   @param {Array} options.messages - conversation array, e.g. [{role: "user", content: "..."}]
-   *   @param {string} [options.model="deepseek-chat"] - which model to use
-   *   @param {number} [options.max_tokens=700] - max tokens
-   *   @param {number} [options.temperature=1.0]
-   *   @param {number} [options.top_p=1]
-   *   @param {number} [options.frequency_penalty=0]
-   *   @param {number} [options.presence_penalty=0]
-   * @returns {Promise<Object>} - The raw response from DeepSeek
+   * Creates a chat completion with DeepSeek API.
+   * @param {Object} options - Configuration for the completion
+   * @returns {Promise<Object>} - Raw DeepSeek response
    */
   async createChatCompletion({
     messages,
-    model = "deepseek-chat",
+    model = "deepseek-chat", // Default model
     max_tokens = 700,
     temperature = 1.0,
     top_p = 1,
@@ -81,10 +64,12 @@ class DeepSeekService {
     presence_penalty = 0,
   }) {
     try {
-      if (!this.isConnected) {
-        await this.testConnection();
+      // Only test connection if not already confirmed
+      if (!this.isConnected && !(await this.testConnection())) {
+        throw new Error("DeepSeek API connection failed.");
       }
-      const requestStart = Date.now();  // Capture start time per call
+
+      const requestStart = Date.now();
       const completion = await this.openai.chat.completions.create({
         model,
         messages,
@@ -94,61 +79,58 @@ class DeepSeekService {
         frequency_penalty,
         presence_penalty,
       });
-  
+
       if (!completion?.choices?.length) {
-        throw new Error("Invalid or empty response from DeepSeek createChatCompletion.");
+        throw new Error("Empty response from DeepSeek API.");
       }
-  
-      // Track metrics after successful call
-      const duration = Date.now() - requestStart;  // Use per-call timing
+
+      // Track metrics
+      const duration = Date.now() - requestStart;
       aiMetricsService.trackModelUsage(
         model,
         completion.usage.total_tokens,
-        this.calculateCost(model, completion.usage.total_tokens),
+        this.calculateCost(model, completion.usage),
         duration
       );
-  
+
       return completion;
     } catch (error) {
-      console.error("❌ Error in DeepSeek createChatCompletion:", error.message);
-      aiMetricsService.metrics.openai.rateLimitHits++;
+      console.error("❌ Error in createChatCompletion:", error.message);
+      if (error.response?.status === 429) {
+        aiMetricsService.metrics.openai.rateLimitHits++;
+      }
       await ErrorHandler.handle(error);
       throw error;
     }
-  }  
-
-  // Helper to calculate costs based on model and tokens
-  calculateCost(model, tokens) {
-    const costs = {
-      'deepseek-chat': 0.0025,  // 8B model pricing
-      'deepseek-chat-67b': 0.012  // 67B model pricing
-    };
-    return (costs[model] || 0.0025) * (tokens / 1000); // Default to 8B pricing
   }
 
   /**
-   * Generates a single AI response (string) from the chat messages.
-   * Example usage:
-   *    const responseText = await deepSeekService.generateAIResponse([
-   *      { role: "system", content: "You are an assistant." },
-   *      { role: "user", content: "Hello, how are you?" }
-   *    ]);
-   *
-   * @param {Array} messages - conversation array
-   * @returns {Promise<string>} content from the first choice
+   * Calculates cost based on model and token usage.
+   * Update these rates from DeepSeek's latest pricing.
+   */
+  calculateCost(model, usage) {
+    const rates = {
+      "deepseek-chat": 0.00014 / 1000, // Example: $0.14/M input tokens (check docs)
+      "deepseek-coder": 0.00014 / 1000, // Adjust as needed
+    };
+    const rate = rates[model] || 0.00014 / 1000; // Default rate
+    return rate * (usage.prompt_tokens + usage.completion_tokens);
+  }
+
+  /**
+   * Generates a single string response from messages.
+   * @param {Array} messages - Array of { role, content }
+   * @returns {Promise<string>} - Assistant's response
    */
   async generateAIResponse(messages) {
     try {
       const formattedMessages = this.formatMessages(messages);
-      // Just call createChatCompletion with default model
       const completion = await this.createChatCompletion({ messages: formattedMessages });
-
-      // Return the "assistant" message text
-      const firstChoice = completion.choices[0];
-      if (!firstChoice?.message?.content) {
-        throw new Error("No content in DeepSeek AI response.");
+      const content = completion.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error("No content in DeepSeek response.");
       }
-      return firstChoice.message.content;
+      return content;
     } catch (error) {
       console.error("❌ Error generating AI response:", error.message);
       await ErrorHandler.handle(error);
@@ -157,35 +139,35 @@ class DeepSeekService {
   }
 
   /**
-   * Utility: convert an array of { role, content } to the correct shape for DeepSeek/OpenAI.
-   *   If "content" is an object, we'll JSON-stringify it. 
+   * Formats messages for DeepSeek API.
+   * @param {Array} messages - Raw messages
+   * @returns {Array} - Formatted messages
    */
   formatMessages(messages) {
     return messages.map((msg) => ({
       role: msg.role || "user",
-      content:
-        typeof msg.content === "string"
-          ? msg.content
-          : JSON.stringify(msg.content),
+      content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
     }));
   }
 
+  /**
+   * Updates conversation history for a user.
+   * @param {string} userId - User identifier
+   * @param {Array|string} messages - Input messages
+   * @param {string} reply - AI response
+   */
   updateConversationHistory(userId, messages, reply) {
     if (!userId) return;
     const history = this.conversationHistory.get(userId) || [];
     const updatedHistory = [...history];
+
     if (Array.isArray(messages)) {
-      updatedHistory.push(
-        ...messages.map(msg => ({
-          role: msg.role || 'user',
-          content: typeof msg.content === 'string' ? msg.content : String(msg.content),
-        }))
-      );
-    } else if (typeof messages === 'string') {
-      updatedHistory.push({ role: 'user', content: messages });
+      updatedHistory.push(...this.formatMessages(messages));
+    } else if (typeof messages === "string") {
+      updatedHistory.push({ role: "user", content: messages });
     }
     if (reply) {
-      updatedHistory.push({ role: 'assistant', content: typeof reply === 'string' ? reply : String(reply) });
+      updatedHistory.push({ role: "assistant", content: String(reply) });
     }
     while (updatedHistory.length > 10) {
       updatedHistory.shift();

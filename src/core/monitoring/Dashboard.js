@@ -215,18 +215,6 @@ async function validateApiKey(key) {
   return true;
 }
 
-async function trackApiUsage(key, endpoint) {
-  await apiUsageCollection.insertOne({
-    apiKey: encrypt(key),
-    endpoint,
-    timestamp: new Date()
-  });
-  await apiKeyCollection.updateOne(
-    { key: encrypt(key) },
-    { $inc: { usageCount: 1 } }
-  );
-}
-
 // ----------------------------------------------------------
 // 3) THE MAIN DASHBOARD ROUTE
 // ----------------------------------------------------------
@@ -3131,4 +3119,4 @@ setInterval(() => {
 
 export { dashboardRouter as default, fetchMetrics as startMonitoringDashboard };
 
-export { validateApiKey, trackApiUsage }
+export { validateApiKey }

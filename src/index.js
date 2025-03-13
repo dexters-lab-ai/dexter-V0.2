@@ -13,8 +13,6 @@ import bodyParser from 'body-parser';
 import { config } from './core/config.js';
 import { bot } from './core/bot.js';
 import { db } from './core/database.js';
-import { intentProcessor } from './services/ai/processors/IntentProcessor.js';
-import { unifiedMessenger } from './core/UnifiedMessageHandler.js';
 import { rateLimiter } from './core/rate-limiting/RateLimiter.js';
 import { circuitBreakers } from './core/circuit-breaker/index.js';
 import { tasksService } from './services/tasks/TasksService.js';
@@ -28,6 +26,8 @@ import { twitterService } from './services/twitter/index.js';
 import { flipperMode } from './services/pumpfun/FlipperMode.js';
 import { pumpFunService } from './services/pumpfun/PumpFunService.js';
 import { startMonitoringDashboard } from './core/monitoring/Dashboard.js'; 
+import { intentProcessor } from './services/ai/processors/IntentProcessor.js';
+import { unifiedMessenger } from './core/UnifiedMessageHandler.js';
 
 import dashboardRouter from './core/monitoring/Dashboard.js';
 import apiRoutes from './core/monitoring/api/routes.js';

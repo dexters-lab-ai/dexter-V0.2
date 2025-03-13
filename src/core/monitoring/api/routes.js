@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../../database.js';
-import { validateApiKey, trackApiUsage } from '../middleware/apiAuth.js';
+import { validateApiKey, trackAndContinue } from '../middleware/apiAuth.js';
 import { 
   handleSentimentQuery,
   handleTokenQuery 
@@ -50,9 +50,8 @@ router.post('/keys', async (req, res) => {
  * POST /v1/sentiment
  * Sentiment Analysis Endpoint, key product for the API service
  */
-router.post('/v1/sentiment', validateApiKey, async (req, res) => {
+router.post('/v1/sentiment', validateApiKey, trackAndContinue, async (req, res) => {
   try {
-    await trackApiUsage(req.apiKey, 'sentiment');
     const result = await handleSentimentQuery(req.body);
     res.json(result);
   } catch (error) {
@@ -64,9 +63,8 @@ router.post('/v1/sentiment', validateApiKey, async (req, res) => {
  * POST /v1/token
  * Token Analysis Endpoint, key product for the API service
  */
-router.post('/v1/token', validateApiKey, async (req, res) => {
+router.post('/v1/token', validateApiKey, trackAndContinue, async (req, res) => {
   try {
-    await trackApiUsage(req.apiKey, 'token');
     const result = await handleTokenQuery(req.body);
     res.json(result);
   } catch (error) {

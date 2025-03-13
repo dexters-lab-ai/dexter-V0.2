@@ -60,7 +60,7 @@ const factory = {
 
 const opts = {
 
-  max: 10, // maximum number of clients in the pool
+  max: 20, // maximum number of clients in the pool
 
   min: 2,  // minimum number of clients in the pool
 

@@ -1,6 +1,5 @@
 import Bull from 'bull';
 import { EventEmitter } from 'events';
-import { createClient } from 'redis';
 import { config } from '../../core/config.js';
 import { ErrorHandler } from '../../core/errors/index.js';
 import { redisPool } from '../../core/redisPool.js';
@@ -17,23 +16,32 @@ class QueueService extends EventEmitter {
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
+        timeout: 60000, // 60-second job timeout
         removeOnComplete: true,
         removeOnFail: false,
       },
     };
-    // Increase intervals so that health checks and monitoring do not run too frequently.
+    // Intervals for health checks, monitoring, and periodic cleanup.
     this.healthCheckInterval = null;
     this.monitoringInterval = null;
+    this.cleanupInterval = null;
     this.queueStats = new Map();
     this.degraded = false;
     
-    // Use a single consistent Redis configuration
-    this.redisConfig = {
-      host: config.redis.socket.host,
-      port: config.redis.socket.port,
-      password: config.redis.password,
-      username: config.redis.username,
-    };
+    // Use a static configuration for Bull.
+    // IMPORTANT: Do not include maxRetriesPerRequest or enableReadyCheck here,
+    // because Bull does not permit these for subscriber connections.
+    this.bullConfig = config.bullRedis
+      ? {
+          host: config.bullRedis.host,
+          port: config.bullRedis.port,
+          password: config.bullRedis.password,
+        }
+      : {
+          host: '127.0.0.1',
+          port: 6379,
+          password: '',
+        };
   }
 
   async initialize() {
@@ -43,9 +51,11 @@ class QueueService extends EventEmitter {
 
       if (!this.degraded) {
         await this.initializeQueues();
-        // Health checks every 30 minutes, queue monitoring every 15 minutes
+        // Health checks every 30 minutes, queue monitoring every 15 minutes.
         this.startHealthChecks(30 * 60 * 1000);
         this.startQueueMonitoring(15 * 60 * 1000);
+        // Periodic cleanup: every 10 minutes, cleaning jobs older than 1 hour.
+        this.startPeriodicCleanup(10 * 60 * 1000, 3600000);
       } else {
         console.warn('⚠️ QueueService initialized in degraded mode due to Redis unavailability.');
       }
@@ -67,7 +77,7 @@ class QueueService extends EventEmitter {
   
       this.connectPromise = new Promise(async (resolve, reject) => {
         try {
-          // If an existing client exists, release it back to the pool first.
+          // If an existing client exists, release it back to the pool.
           if (this.redisClient) {
             try {
               this.redisClient.removeAllListeners();
@@ -87,7 +97,7 @@ class QueueService extends EventEmitter {
                 this._lastRedisErrorTime = Date.now();
               }
               this.degraded = true;
-              // Optionally schedule a reconnection attempt (with exponential backoff)
+              // Schedule a reconnection attempt using exponential backoff.
               setTimeout(() => {
                 this.initializeRedis().catch(err => {
                   console.error('❌ Redis reconnection attempt failed (pool):', err.message);
@@ -142,7 +152,8 @@ class QueueService extends EventEmitter {
     if (this.queues.has(name)) return this.queues.get(name);
     try {
       const queue = new Bull(name, {
-        redis: this.redisConfig,
+        // Use the static bull configuration.
+        redis: this.bullConfig,
         settings: {
           lockDuration: 300000,
           stalledInterval: 300000,
@@ -153,19 +164,11 @@ class QueueService extends EventEmitter {
         ...options,
       });
   
-      // Limit event listeners to avoid memory leaks.
+      // Limit event listeners to avoid memory leak warnings.
       queue.setMaxListeners(5);
   
-      // Throttled error handler for network errors.
       queue.on('error', async (error) => {
-        if (error.code === 'ECONNRESET' || error.code === 'ENOTFOUND') {
-          if (!queue._lastErrorLogged || (Date.now() - queue._lastErrorLogged) > 60000) {
-            console.error(`❌ Queue "${name}" error: ${error.message}`);
-            queue._lastErrorLogged = Date.now();
-          }
-        } else {
-          console.error(`❌ Queue "${name}" error: ${error.message}`);
-        }
+        console.error(`❌ Queue "${name}" error: ${error.message}`);
         await ErrorHandler.handle(error);
         this.emit('queueError', { queue: name, error });
       });
@@ -197,24 +200,22 @@ class QueueService extends EventEmitter {
   
   async tryRecoverFromDegradedState() {
     if (!this.degraded) return true;
-    
     try {
-      await this.initializeRedis();
-      if (!this.degraded) {
-        for (const queueName of ['tasks', 'priceAlerts', 'kolMonitor']) {
-          if (!this.queues.has(queueName)) {
-            await this.createQueue(queueName);
-          }
+      // Reinitialize missing queues.
+      for (const queueName of ['tasks', 'priceAlerts', 'kolMonitor']) {
+        if (!this.queues.has(queueName)) {
+          await this.createQueue(queueName);
         }
-        if (!this.healthCheckInterval) this.startHealthChecks(30 * 60 * 1000);
-        if (!this.monitoringInterval) this.startQueueMonitoring(15 * 60 * 1000);
-        console.log('✅ QueueService recovered from degraded state');
-        return true;
       }
+      if (!this.healthCheckInterval) this.startHealthChecks(30 * 60 * 1000);
+      if (!this.monitoringInterval) this.startQueueMonitoring(15 * 60 * 1000);
+      console.log('✅ QueueService recovered from degraded state');
+      this.degraded = false;
+      return true;
     } catch (error) {
       console.error('❌ Failed to recover from degraded state:', error.message);
+      return false;
     }
-    return false;
   }
 
   getQueue(name) {
@@ -225,13 +226,11 @@ class QueueService extends EventEmitter {
   async addJob(queueName, data, options = {}) {
     try {
       if (this.degraded && !(await this.tryRecoverFromDegradedState())) {
-        if (Math.random() < 0.01) {
-          console.warn(`⚠️ Queue service is degraded. Can't add job to "${queueName}"`);
-        }
+        console.warn(`⚠️ Queue service is degraded. Can't add job to "${queueName}"`);
         return null;
       }
       const queue = this.getQueue(queueName);
-      // Deduplication if applicable.
+      // Deduplication: if data contains userId and handle, check for an existing job.
       if (data.userId && data.handle) {
         const existingJobs = await queue.getJobs(['waiting', 'active', 'delayed']);
         const duplicateJob = existingJobs.find(job => {
@@ -240,34 +239,26 @@ class QueueService extends EventEmitter {
         });
         if (duplicateJob) return duplicateJob;
       }
+      const jobOptions = { timeout: 60000, ...options };
       const job = await queue.add(data, {
         attempts: 3,
         backoff: { type: 'exponential', delay: 1000 },
         removeOnComplete: true,
-        ...options,
+        ...jobOptions,
       });
       this.emit('jobAdded', { queue: queueName, jobId: job.id, data });
       return job;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-        if (Math.random() < 0.01) {
-          console.error(`❌ Redis error when adding job to "${queueName}"`);
-        }
-      } else {
-        console.error(`❌ Error adding job to "${queueName}": ${error.message}`);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error adding job to "${queueName}": ${error.message}`);
+      await ErrorHandler.handle(error);
       return null;
     }
-  }  
+  }
 
   async addNamedJob(queueName, jobName, data, options = {}) {
     try {
       if (this.degraded && !(await this.tryRecoverFromDegradedState())) {
-        if (Math.random() < 0.01) {
-          console.warn(`⚠️ Queue service is degraded. Can't add named job "${jobName}" to "${queueName}"`);
-        }
+        console.warn(`⚠️ Queue service is degraded. Can't add named job "${jobName}" to "${queueName}"`);
         return null;
       }
       const queue = this.getQueue(queueName);
@@ -280,29 +271,20 @@ class QueueService extends EventEmitter {
       this.emit('jobAdded', { queue: queueName, jobName, jobId: job.id, data });
       return job;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-        if (Math.random() < 0.01) {
-          console.error(`❌ Redis error when adding named job to "${queueName}"`);
-        }
-      } else {
-        console.error(`❌ Error adding named job "${jobName}" to "${queueName}": ${error.message}`);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error adding named job "${jobName}" to "${queueName}": ${error.message}`);
+      await ErrorHandler.handle(error);
       return null;
     }
-  }  
+  }
 
   async addRepeatableJob(queueName, data, repeatOptions, jobId, moreOptions = {}) {
     try {
       if (this.degraded && !(await this.tryRecoverFromDegradedState())) {
-        if (Math.random() < 0.01) {
-          console.warn(`⚠️ Queue service is degraded. Can't add repeatable job "${jobId}" to "${queueName}"`);
-        }
+        console.warn(`⚠️ Queue service is degraded. Can't add repeatable job "${jobId}" to "${queueName}"`);
         return null;
       }
       const queue = this.getQueue(queueName);
-      // Ensure duplicate repeatable jobs are removed.
+      // Remove duplicate repeatable jobs.
       await this.removeRepeatableJobById(queueName, jobId).catch(() => {});
       const jobOpts = {
         jobId,
@@ -318,19 +300,12 @@ class QueueService extends EventEmitter {
       this.emit('repeatableJobAdded', { queue: queueName, jobId, data, repeatOptions });
       return job;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-        if (Math.random() < 0.01) {
-          console.error(`❌ Redis error when adding repeatable job to "${queueName}"`);
-        }
-      } else {
-        console.error(`❌ Error adding repeatable job "${jobId}" to "${queueName}": ${error.message}`);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error adding repeatable job "${jobId}" to "${queueName}": ${error.message}`);
+      await ErrorHandler.handle(error);
       return null;
     }
-  }  
-  
+  }
+
   async removeRepeatableJobById(queueName, jobId) {
     try {
       if (this.degraded && !(await this.tryRecoverFromDegradedState())) return false;
@@ -346,15 +321,11 @@ class QueueService extends EventEmitter {
       }
       return false;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-      } else {
-        console.error(`❌ Error removing repeatable job "${jobId}" from "${queueName}": ${error.message}`);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error removing repeatable job "${jobId}" from "${queueName}": ${error.message}`);
+      await ErrorHandler.handle(error);
       return false;
     }
-  }  
+  }
 
   async removeJob(queueName, jobId) {
     try {
@@ -369,15 +340,11 @@ class QueueService extends EventEmitter {
       }
       return false;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-      } else {
-        console.error(`❌ Error removing job ${jobId} from "${queueName}": ${error.message}`);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error removing job ${jobId} from "${queueName}": ${error.message}`);
+      await ErrorHandler.handle(error);
       return false;
     }
-  }  
+  }
 
   async removeJobsByPattern(queueName, pattern) {
     try {
@@ -392,9 +359,7 @@ class QueueService extends EventEmitter {
           removed++;
           this.emit('jobRemoved', { queue: queueName, jobId: job.id, pattern });
         } catch (removeError) {
-          if (Math.random() < 0.1) {
-            console.error(`Error removing job ${job.id}: ${removeError.message}`);
-          }
+          console.error(`Error removing job ${job.id}: ${removeError.message}`);
         }
       }
       const repeatableJobs = await queue.getRepeatableJobs();
@@ -405,9 +370,7 @@ class QueueService extends EventEmitter {
             removed++;
             this.emit('repeatableJobRemoved', { queue: queueName, jobId: job.id, pattern });
           } catch (removeError) {
-            if (Math.random() < 0.1) {
-              console.error(`Error removing repeatable job ${job.id}: ${removeError.message}`);
-            }
+            console.error(`Error removing repeatable job ${job.id}: ${removeError.message}`);
           }
         }
       }
@@ -416,15 +379,11 @@ class QueueService extends EventEmitter {
       }
       return removed;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-      } else {
-        console.error(`❌ Error removing jobs by pattern "${pattern}" from "${queueName}": ${error.message}`);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error removing jobs by pattern "${pattern}" from "${queueName}": ${error.message}`);
+      await ErrorHandler.handle(error);
       return 0;
     }
-  }  
+  }
 
   async jobExists(queueName, jobId) {
     try {
@@ -433,12 +392,9 @@ class QueueService extends EventEmitter {
       const job = await queue.getJob(jobId);
       return !!job;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-      }
       return false;
     }
-  }  
+  }
 
   async listJobs(queueName, states = ['active', 'waiting', 'delayed', 'paused']) {
     try {
@@ -453,22 +409,17 @@ class QueueService extends EventEmitter {
         timestamp: job.timestamp,
       }));
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-      } else {
-        console.error(`❌ Error listing jobs in "${queueName}": ${error.message}`);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error listing jobs in "${queueName}": ${error.message}`);
+      await ErrorHandler.handle(error);
       return [];
     }
-  }  
+  }
 
   startHealthChecks(interval = 30 * 60 * 1000) {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
     }
-    
     this.healthCheckInterval = setInterval(async () => {
       try {
         await this.runHealthChecks();
@@ -476,7 +427,6 @@ class QueueService extends EventEmitter {
         console.error('❌ Error running health checks:', error.message);
       }
     }, interval);
-    
     console.log(`✅ Queue health checks started (interval: ${interval}ms)`);
   }
   
@@ -485,21 +435,14 @@ class QueueService extends EventEmitter {
       await this.tryRecoverFromDegradedState();
       if (this.degraded) return;
     }
-    
     try {
-      if (!this.redisClient || !this.redisClient.isReady) {
-        console.error('❌ Redis client is not ready');
-        this.emit('healthCheckFailed', { component: 'redis', error: 'Redis client is not ready' });
-        await this.initializeRedis();
-      }
+      console.log('ℹ️ Running Redis health check...');
     } catch (error) {
       console.error('❌ Redis health check failed:', error.message);
       this.emit('healthCheckFailed', { component: 'redis', error: error.message });
     }
-    
     const queueEntries = Array.from(this.queues.entries());
     const sampleQueues = queueEntries.length <= 3 ? queueEntries : queueEntries.sort(() => 0.5 - Math.random()).slice(0, 2);
-    
     for (const [queueName, queue] of sampleQueues) {
       try {
         const isPaused = await queue.isPaused();
@@ -525,7 +468,6 @@ class QueueService extends EventEmitter {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
     }
-    
     this.monitoringInterval = setInterval(async () => {
       try {
         await this.collectQueueStats();
@@ -533,7 +475,6 @@ class QueueService extends EventEmitter {
         console.error('❌ Error collecting queue stats:', error.message);
       }
     }, interval);
-    
     console.log(`✅ Queue monitoring started (interval: ${interval}ms)`);
   }
   
@@ -542,10 +483,8 @@ class QueueService extends EventEmitter {
       await this.tryRecoverFromDegradedState();
       if (this.degraded) return;
     }
-    
     const queueEntries = Array.from(this.queues.entries());
     const sampleQueues = queueEntries.length <= 2 ? queueEntries : queueEntries.sort(() => 0.5 - Math.random()).slice(0, 2);
-    
     for (const [queueName, queue] of sampleQueues) {
       try {
         const stats = {
@@ -558,7 +497,6 @@ class QueueService extends EventEmitter {
         };
         this.queueStats.set(queueName, stats);
         this.emit('queueStats', { queue: queueName, stats });
-        
         const activeJobs = await queue.getJobs(['active']);
         const now = Date.now();
         const orphanedJobs = activeJobs.filter(job => now - job.timestamp > 60 * 60 * 1000);
@@ -567,11 +505,7 @@ class QueueService extends EventEmitter {
           await this.cleanupOrphanedJobs(queueName, 60 * 60 * 1000);
         }
       } catch (error) {
-        if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-          this.degraded = true;
-        } else {
-          console.error(`❌ Error collecting stats for queue "${queueName}":`, error.message);
-        }
+        console.error(`❌ Error collecting stats for queue "${queueName}":`, error.message);
       }
     }
   }
@@ -585,17 +519,11 @@ class QueueService extends EventEmitter {
   }
 
   async logQueueContents(queueName) {
-    if (this.degraded && !(await this.tryRecoverFromDegradedState())) {
-      console.warn(`⚠️ Cannot log queue contents while in degraded mode`);
-      return;
-    }
-    
     try {
       const queue = this.getQueue(queueName);
       const repeatableJobs = await queue.getRepeatableJobs();
       const waitingJobs = await queue.getJobs(['waiting']);
       const activeJobs = await queue.getJobs(['active']);
-      
       console.log(`📊 Queue "${queueName}" summary:`);
       console.log(`- Repeatable Jobs: ${repeatableJobs.length}`);
       console.log(`- Waiting Jobs: ${waitingJobs.length}`);
@@ -606,14 +534,11 @@ class QueueService extends EventEmitter {
   }
 
   async cleanupOrphanedJobs(queueName, thresholdMs = 60 * 60 * 1000) {
-    if (this.degraded && !(await this.tryRecoverFromDegradedState())) return 0;
-    
     try {
       const queue = this.getQueue(queueName);
       const activeJobs = await queue.getJobs(['active']);
       const now = Date.now();
       const orphanedJobs = activeJobs.filter(job => now - job.timestamp > thresholdMs);
-      
       if (orphanedJobs.length > 0) {
         console.warn(`⚠️ Cleaning up ${orphanedJobs.length} orphaned jobs in queue "${queueName}"`);
         let cleaned = 0;
@@ -632,19 +557,13 @@ class QueueService extends EventEmitter {
       }
       return 0;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-      } else {
-        console.error(`❌ Error cleaning orphaned jobs in "${queueName}":`, error.message);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error cleaning orphaned jobs in "${queueName}":`, error.message);
+      await ErrorHandler.handle(error);
       return 0;
     }
   }
 
   async resetQueue(queueName) {
-    if (this.degraded && !(await this.tryRecoverFromDegradedState())) return false;
-    
     try {
       const queue = this.getQueue(queueName);
       await queue.empty();
@@ -662,18 +581,13 @@ class QueueService extends EventEmitter {
       this.emit('queueReset', { queue: queueName });
       return true;
     } catch (error) {
-      if (error.message.includes('Redis') || error.message.includes('ECONNREFUSED')) {
-        this.degraded = true;
-      } else {
-        console.error(`❌ Error resetting queue "${queueName}":`, error.message);
-        await ErrorHandler.handle(error);
-      }
+      console.error(`❌ Error resetting queue "${queueName}":`, error.message);
+      await ErrorHandler.handle(error);
       return false;
     }
   }
 
   async resetAllQueues() {
-    if (this.degraded) return false;
     const results = [];
     for (const queueName of this.queues.keys()) {
       try {
@@ -697,6 +611,10 @@ class QueueService extends EventEmitter {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
     }
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
     const closePromises = Array.from(this.queues.values()).map(async (queue) => {
       try {
         await queue.pause(true).catch(() => {});
@@ -708,11 +626,7 @@ class QueueService extends EventEmitter {
       }
     });
     await Promise.allSettled(closePromises);
-    
-    // Instead of quitting the client, release it to the pool.
-    if (this.redisClient) {
-      await redisPool.release(this.redisClient);
-    }
+    // For static configuration, there's no need to release a shared client.
     this.queues.clear();
     this.queueStats.clear();
     this.removeAllListeners();
@@ -720,7 +634,24 @@ class QueueService extends EventEmitter {
     this.degraded = false;
     console.log('✅ QueueService cleaned up');
   }
-  
+
+  // Start periodic cleanup of jobs older than a given age.
+  startPeriodicCleanup(interval, maxJobAge) {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.cleanupInterval = setInterval(async () => {
+      try {
+        for (const queueName of this.queues.keys()) {
+          await this.cleanupOrphanedJobs(queueName, maxJobAge);
+        }
+      } catch (error) {
+        console.error('❌ Error during periodic cleanup:', error.message);
+      }
+    }, interval);
+    console.log(`✅ Periodic cleanup started (interval: ${interval}ms, max job age: ${maxJobAge}ms)`);
+  }
 }
 
 export const queueService = new QueueService();

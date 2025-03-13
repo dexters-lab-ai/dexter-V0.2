@@ -861,8 +861,13 @@ class TwitterService extends EventEmitter {
         sortBy,
         tweetLanguage: "en",
       };
+  
       const run = await this.apifyClient.actor("fastcrawler/tweet-fast-scraper").call(input);
       const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
+      
+      // Log raw items for debugging
+      console.log('[searchTwitter] raw items =>', JSON.stringify(items, null, 2));
+      
       const formatted = items.map((tw) => ({
         type: tw.type || 'tweet',
         url: tw.url,
@@ -876,17 +881,18 @@ class TwitterService extends EventEmitter {
           dateStyle: "short",
           timeStyle: "short"
         }),
-        author: tw.author.username,
+        author: tw.author && tw.author.username ? tw.author.username : "unknown",
         media: tw.media,
       }));
-      console.log('[searchTwitter] sample =>', JSON.stringify(formatted.slice(0, 3), null, 2));
+      
+      console.log('[searchTwitter] sample formatted =>', JSON.stringify(formatted.slice(0, 3), null, 2));
       return formatted;
     } catch (error) {
-      console.error('❌ [searchTwitter] Error:', error);
+      console.error('[searchTwitter] Error:', error);
       await ErrorHandler.handle(error);
       return [];
     }
-  }
+  }  
   
   _getDefaultFromDate() {
     const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;

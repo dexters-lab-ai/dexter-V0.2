@@ -1,6 +1,6 @@
 import { ApiKey } from '../models/ApiKey.js';
 import { v4 as uuidv4 } from 'uuid';
-import { encrypt } from '../../../../utils/encryption.js';
+import { deterministicEncrypt } from '../../../../utils/encryption.js';
 
 const TIER_CONFIGS = {
   basic: {
@@ -22,22 +22,22 @@ const TIER_CONFIGS = {
 
 export class ApiKeyService {
   static async generateKey(userId, tier = 'basic') {
-    const config = TIER_CONFIGS[tier];
-    if (!config) {
+    const tierConfig = TIER_CONFIGS[tier];
+    if (!tierConfig) {
       throw new Error(`Invalid tier: ${tier}`);
     }
 
     const key = `dail_${uuidv4()}`;
-    const encryptedKey = encrypt(key);
-    
+    const encryptedKey = deterministicEncrypt(key);
+
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + config.validityDays);
+    expiresAt.setDate(expiresAt.getDate() + tierConfig.validityDays);
 
     const apiKey = new ApiKey({
       key: encryptedKey,
       userId,
       tier,
-      quotaLimit: config.quotaLimit,
+      quotaLimit: tierConfig.quotaLimit,
       expiresAt
     });
 
@@ -46,25 +46,24 @@ export class ApiKeyService {
   }
 
   static async validateKey(key) {
-    const apiKey = await ApiKey.findValidKey(key);
+    const encryptedKey = deterministicEncrypt(key);
+    const apiKey = await ApiKey.findValidKey(encryptedKey);
     if (!apiKey) return false;
-  
-    // Ensure expiration check
+
     if (new Date() > apiKey.expiresAt) {
       await apiKey.deactivate();
       return false;
     }
-  
-    // Check rate limit
+
     const recentUsage = await this.getRecentUsage(key);
-    const config = TIER_CONFIGS[apiKey.tier];
-  
-    if (recentUsage >= config.rateLimit) {
+    const tierConfig = TIER_CONFIGS[apiKey.tier];
+
+    if (recentUsage >= tierConfig.rateLimit) {
       return false;
     }
-  
+
     return true;
-  }  
+  }
 
   static async getRecentUsage(key, timeWindowMs = 60000) {
     const since = new Date(Date.now() - timeWindowMs);
