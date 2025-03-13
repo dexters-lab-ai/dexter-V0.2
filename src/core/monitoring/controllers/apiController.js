@@ -1,8 +1,199 @@
-import { twitterService } from '../../../services/twitter/index.js';
+import {
+  getTokenPrice,
+  getEVMTokenInfo,
+  getSolanaTokenInfo,
+  getTokenSnipers,
+  getTokenSymbol,
+} from '../../../services/tokens/MoralisTokenService.js';
 import { dexscreener } from '../../../services/dexscreener/index.js';
-import Moralis from 'moralis';
+import { twitterService } from '../../../services/twitter/index.js';
+
+// ------------------------------
+// TOKEN QUERY HANDLER
+// ------------------------------
+export async function handleTokenQuery({ token, network }) {
+  // Initialize variables with defaults so that if one fetch fails we still have a value.
+  let dexscreenerData = {};
+  let moralisData = {};
+  let priceData = {};
+  let sniperData = {};
+  let twitterData = [];
+
+  // 1. Dexscreener token info (needed for pairAddress and symbol)
+  try {
+    dexscreenerData = await dexscreener.getTokenInfoByAddress(token);
+  } catch (err) {
+    console.error('Dexscreener error:', err);
+  }
+
+  // 2. Moralis token metadata (using our service function which converts chain names)
+  try {
+    if (network.toLowerCase() === 'solana') {
+      moralisData = await getSolanaTokenInfo(token);
+    } else {
+      moralisData = await getEVMTokenInfo(network, token);
+    }
+  } catch (err) {
+    console.error('Moralis token info error:', err);
+  }
+
+  // 3. Token price details
+  try {
+    priceData = await getTokenPrice(network, token);
+  } catch (err) {
+    console.error('Token price error:', err);
+  }
+
+  // 4. Token sniper info – using the pair address from dexscreener if available.
+  try {
+    const pairAddress = dexscreenerData?.pairAddress;
+    if (pairAddress) {
+      sniperData = await getTokenSnipers(network, pairAddress);
+    }
+  } catch (err) {
+    console.error('Token snipers error:', err);
+  }
+
+  // 5. Determine token symbol using available data.
+  const symbol =
+    dexscreenerData?.baseToken?.symbol ||
+    dexscreenerData?.symbol ||
+    moralisData?.data?.token_symbol ||
+    '';
+
+  // 6. Retrieve sentiment data from Twitter.
+  try {
+    twitterData = await twitterService.searchTweetsByCashtag(symbol);
+  } catch (err) {
+    console.error('Twitter error:', err);
+  }
+
+  // 7. Build and return the combined response.
+  return {
+    token: {
+      address: token,
+      name: dexscreenerData?.name || moralisData?.data?.name || '',
+      symbol,
+      network,
+      logo: dexscreenerData?.info?.imageUrl || '',
+      description: dexscreenerData?.info?.description || '',
+      socials: {
+        twitter:
+          dexscreenerData?.info?.socials?.find((s) => s.type === 'twitter')?.url || '',
+        telegram:
+          dexscreenerData?.info?.socials?.find((s) => s.type === 'telegram')?.url || '',
+        website:
+          (dexscreenerData?.info?.websites && dexscreenerData.info.websites[0]) || '',
+      },
+    },
+    price: {
+      current: priceData?.data?.priceUsd || dexscreenerData?.priceUsd || null,
+      change24h: dexscreenerData?.priceChange?.h24 || null,
+      volume24h: dexscreenerData?.volume?.h24 || null,
+    },
+    market: {
+      mcap: dexscreenerData?.marketCap || null,
+      liquidity: dexscreenerData?.liquidity?.usd || null,
+      holders: moralisData?.data?.holders || null,
+      pairAddress: dexscreenerData?.pairAddress || null,
+    },
+    security: {
+      score: calculateSecurityScore(moralisData?.data || {}),
+      issues: detectSecurityIssues(moralisData?.data || {}),
+      snipers: Array.isArray(sniperData?.data)
+        ? sniperData.data.map((sniper) => ({
+            walletAddress: sniper.walletAddress,
+            snipedTransactions: sniper.snipedTransactions,
+            sellTransactions: sniper.sellTransactions,
+            totalSellTransactions: sniper.totalSellTransactions,
+            totalSnipedTransactions: sniper.totalSnipedTransactions,
+            totalTokensSniped: sniper.totalTokensSniped,
+            totalSnipedUsd: sniper.totalSnipedUsd,
+            totalTokensSold: sniper.totalTokensSold,
+            totalSoldUsd: sniper.totalSoldUsd,
+            currentBalance: sniper.currentBalance,
+            currentBalanceUsdValue: sniper.currentBalanceUsdValue,
+            realizedProfitPercentage: sniper.realizedProfitPercentage,
+            realizedProfitUsd: sniper.realizedProfitUsd,
+          }))
+        : [],
+    },
+    social: {
+      sentiment: {
+        score: calculateSentimentFromTweets(twitterData),
+        distribution: getSentimentDistribution(twitterData),
+      },
+      mentions24h: twitterData.length,
+      engagement24h: calculateEngagement(twitterData),
+      recentTweets: twitterData.slice(0, 5).map((tweet) => ({
+        text: tweet.text,
+        sentiment: tweet.sentiment,
+        engagement: tweet.likeCount + tweet.retweetCount,
+        url: tweet.url,
+      })),
+    },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ------------------------------
+// HELPER FUNCTIONS (unchanged)
+// ------------------------------
+function calculateSecurityScore(tokenData) {
+  let score = 100;
+  if (tokenData.mintable) score -= 10;
+  if (tokenData.proxy) score -= 5;
+  if (tokenData.holders < 100) score -= 20;
+  return Math.max(0, score);
+}
+
+function detectSecurityIssues(tokenData) {
+  const issues = [];
+  if (tokenData.mintable) {
+    issues.push({
+      type: 'warning',
+      message: 'Token is mintable – supply can be increased',
+    });
+  }
+  if (tokenData.proxy) {
+    issues.push({
+      type: 'info',
+      message: 'Token uses proxy contract – logic can be upgraded',
+    });
+  }
+  return issues;
+}
+
+function calculateSentimentFromTweets(tweets) {
+  if (!tweets.length) return 0;
+  const sentiments = tweets.map((t) => {
+    const sentiment = t.sentiment?.trim().toLowerCase();
+    if (sentiment === 'bullish') return 1;
+    if (sentiment === 'bearish') return -1;
+    return 0;
+  });
+  return sentiments.reduce((a, b) => a + b, 0) / tweets.length;
+}
+
+function getSentimentDistribution(tweets) {
+  return tweets.reduce((acc, tweet) => {
+    const sentiment = tweet.sentiment?.trim().toLowerCase();
+    acc[sentiment] = (acc[sentiment] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function calculateEngagement(tweets) {
+  return tweets.reduce(
+    (sum, t) =>
+      sum + t.likeCount + t.retweetCount + t.replyCount + t.quoteCount,
+    0
+  );
+}
+
 
 export async function handleSentimentQuery({ query, network }) {
+  console.log('🔍  API Call: Sentiment Scrub for >>>> ', query);
   try {
     let symbol = query;
     let tokenInfo = null;
@@ -10,14 +201,16 @@ export async function handleSentimentQuery({ query, network }) {
     // If query is an address, get symbol and info from dexscreener
     if (query.match(/^0x[a-fA-F0-9]{40}$/) || query.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
       tokenInfo = await dexscreener.getTokenInfoByAddress(query);
+      console.log('Token info:', tokenInfo);
       symbol = tokenInfo?.symbol;
       if (!symbol) {
         throw new Error('Could not resolve token symbol from address');
       }
     }
 
-    // Get sentiment data using searchTweetsByCashtag
-    const twitterData = await twitterService.searchTweetsByCashtag(symbol);
+    // Get sentiment data using the new searchTweetsByCashtagAPI function.
+    const twitterData = await twitterService.searchTweetsByCashtagAPI(symbol);
+    console.log('Twitter Data:', twitterData);
 
     // Calculate sentiment metrics
     const sentimentCounts = twitterData.reduce((acc, tweet) => {
@@ -85,149 +278,4 @@ export async function handleSentimentQuery({ query, network }) {
     console.error('Sentiment API Error:', error);
     throw error;
   }
-}
-
-export async function handleTokenQuery({ token, network }) {
-  try {
-    // Get detailed token info from dexscreener
-    const dexscreenerData = await dexscreener.getTokenInfoByAddress(token);
-    
-    // Get Moralis data including sniper info
-    const moralisData = await Moralis.EvmApi.token.getTokenMetadata({
-      addresses: [token],
-      chain: network
-    });
-
-    // Get sniper data if EVM network
-    let sniperData = null;
-    if (network !== 'solana') {
-      sniperData = await Moralis.EvmApi.token.getTokenSnipers({
-        chain: network,
-        token: token
-      });
-    }
-
-    // Get sentiment data
-    const symbol = dexscreenerData?.symbol || moralisData?.symbol;
-    const twitterData = await twitterService.searchTweetsByCashtag(symbol);
-
-    // Format response
-    return {
-      token: {
-        address: token,
-        name: dexscreenerData?.name || moralisData?.name,
-        symbol: symbol,
-        network,
-        logo: dexscreenerData?.info?.imageUrl,
-        description: dexscreenerData?.info?.description,
-        socials: {
-          twitter: dexscreenerData?.info?.socials?.find(s => s.type === 'twitter')?.url,
-          telegram: dexscreenerData?.info?.socials?.find(s => s.type === 'telegram')?.url,
-          website: dexscreenerData?.info?.websites?.[0]
-        }
-      },
-      price: {
-        current: dexscreenerData?.price,
-        change24h: dexscreenerData?.priceChange24h,
-        volume24h: dexscreenerData?.volume24h
-      },
-      market: {
-        mcap: dexscreenerData?.marketCap,
-        liquidity: dexscreenerData?.liquidity?.usd,
-        holders: moralisData?.holders,
-        pairAddress: dexscreenerData?.pairAddress
-      },
-      security: {
-        score: calculateSecurityScore(moralisData),
-        issues: detectSecurityIssues(moralisData),
-        snipers: sniperData?.result?.map(sniper => ({
-          address: sniper.address,
-          totalBuys: sniper.totalBuys,
-          totalSells: sniper.totalSells,
-          profitLoss: sniper.profitLoss,
-          firstBuy: sniper.firstBuy,
-          avgHoldTime: sniper.avgHoldTime
-        })) || []
-      },
-      social: {
-        sentiment: {
-          score: calculateSentimentFromTweets(twitterData),
-          distribution: getSentimentDistribution(twitterData)
-        },
-        mentions24h: twitterData.length,
-        engagement24h: calculateEngagement(twitterData),
-        recentTweets: twitterData.slice(0, 5).map(tweet => ({
-          text: tweet.text,
-          sentiment: tweet.sentiment,
-          engagement: tweet.likeCount + tweet.retweetCount,
-          url: tweet.url
-        }))
-      },
-      timestamp: new Date().toISOString()
-    };
-
-  } catch (error) {
-    console.error('Token API Error:', error);
-    throw error;
-  }
-}
-
-// Helper functions
-function calculateSecurityScore(tokenData) {
-  // Implement security scoring based on contract analysis
-  let score = 100;
-  
-  // Deduct points for various risk factors
-  if (tokenData.mintable) score -= 10;
-  if (tokenData.proxy) score -= 5;
-  if (tokenData.holders < 100) score -= 20;
-  
-  return Math.max(0, score);
-}
-
-function detectSecurityIssues(tokenData) {
-  const issues = [];
-  
-  if (tokenData.mintable) {
-    issues.push({
-      type: 'warning',
-      message: 'Token is mintable - supply can be increased'
-    });
-  }
-  
-  if (tokenData.proxy) {
-    issues.push({
-      type: 'info',
-      message: 'Token uses proxy contract - logic can be upgraded'
-    });
-  }
-
-  return issues;
-}
-
-function calculateSentimentFromTweets(tweets) {
-  if (!tweets.length) return 0;
-  
-  const sentiments = tweets.map(t => {
-    const sentiment = t.sentiment?.trim().toLowerCase();
-    if (sentiment === 'bullish') return 1;
-    if (sentiment === 'bearish') return -1;
-    return 0;
-  });
-  
-  return sentiments.reduce((a, b) => a + b, 0) / tweets.length;
-}
-
-function getSentimentDistribution(tweets) {
-  return tweets.reduce((acc, tweet) => {
-    const sentiment = tweet.sentiment?.trim().toLowerCase();
-    acc[sentiment] = (acc[sentiment] || 0) + 1;
-    return acc;
-  }, {});
-}
-
-function calculateEngagement(tweets) {
-  return tweets.reduce((sum, t) => {
-    return sum + t.likeCount + t.retweetCount + t.replyCount + t.quoteCount;
-  }, 0);
 }
