@@ -12,8 +12,6 @@ import { ErrorHandler } from '../errors/index.js';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
-// For API keys
-import { encrypt, decrypt } from '../../utils/encryption.js';
 
 const dashboardRouter = express.Router();
 
@@ -207,13 +205,6 @@ async function initializeCollections() {
   await apiUsageCollection.createIndex({ timestamp: 1 });
 }
 initializeCollections().catch(console.error);
-
-async function validateApiKey(key) {
-  const record = await apiKeyCollection.findOne({ key: decrypt(key) });
-  if (!record || !record.active) return false;
-  if (record.usageCount >= record.quotaLimit) return false;
-  return true;
-}
 
 // ----------------------------------------------------------
 // 3) THE MAIN DASHBOARD ROUTE
@@ -1130,12 +1121,63 @@ function renderApiSection() {
                   <input type="text" id="sentimentQuery" placeholder="e.g. BRUSH" required>
                 </div>
                 <div class="form-group">
-                  <label>Network</label>
-                  <select id="sentimentNetwork">
-                    <option value="sonic">Sonic</option>
-                    <option value="solana">Solana</option>
-                    <option value="base">Base</option>
-                  </select>
+                  <label>
+    Network
+    <span class="tooltip" title="Supported networks for now:
+      sonic, ethereum, avalanche, base, linear, cyber, fantom, arbitrum, berachain, nova,
+      optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
+      solana, sepolia, holesky, polygon_amoy, bsc_testnet, base_sepolia, linea, linea_sepolia,
+      gnosis, gnosis_chiado, chiliz, chiliz_testnet, moonbeam, moonriver, moonbase, flow,
+      flow_testnet, ronin, ronin_saigon, lisk, lisk_sepolia, pulsechain">
+      <i class="fas fa-info-circle"></i>
+    </span>
+  </label>
+  <select id="sentimentNetwork" required>
+    <!-- Wallet provider list (prioritized) -->
+    <option value="sonic">Sonic</option>
+    <option value="ethereum">Ethereum</option>
+    <option value="avalanche">Avalanche</option>
+    <option value="base">Base</option>
+    <option value="linear">Linear</option>
+    <option value="cyber">Cyber</option>
+    <option value="fantom">Fantom</option>
+    <option value="arbitrum">Arbitrum</option>
+    <option value="berachain">Berachain</option>
+    <option value="nova">Nova</option>
+    <option value="optimism">Optimism</option>
+    <option value="zkevm">ZKEVM</option>
+    <option value="scroll">Scroll</option>
+    <option value="polygon">Polygon</option>
+    <option value="bsc">BSC</option>
+    <option value="celo">Celo</option>
+    <option value="worldchain">Worldchain</option>
+    <option value="mantle">Mantle</option>
+    <option value="zksync">Zksync</option>
+    <option value="omni">Omni</option>
+    <!-- From our Moralis mapping that are not already listed -->
+    <option value="solana">Solana</option>
+    <option value="sepolia">Sepolia</option>
+    <option value="holesky">Holesky</option>
+    <option value="polygon_amoy">Polygon Amoy</option>
+    <option value="bsc_testnet">BSC Testnet</option>
+    <option value="base_sepolia">Base Sepolia</option>
+    <option value="linea">Linea</option>
+    <option value="linea_sepolia">Linea Sepolia</option>
+    <option value="gnosis">Gnosis</option>
+    <option value="gnosis_chiado">Gnosis Chiado</option>
+    <option value="chiliz">Chiliz</option>
+    <option value="chiliz_testnet">Chiliz Testnet</option>
+    <option value="moonbeam">Moonbeam</option>
+    <option value="moonriver">Moonriver</option>
+    <option value="moonbase">Moonbase</option>
+    <option value="flow">Flow</option>
+    <option value="flow_testnet">Flow Testnet</option>
+    <option value="ronin">Ronin</option>
+    <option value="ronin_saigon">Ronin Saigon</option>
+    <option value="lisk">Lisk</option>
+    <option value="lisk_sepolia">Lisk Sepolia</option>
+    <option value="pulsechain">Pulsechain</option>
+  </select>
                 </div>
                 <div class="form-group">
                   <label>API Key</label>
@@ -1215,12 +1257,63 @@ function renderApiSection() {
                   <input type="text" id="tokenAddress" placeholder="e.g. 0xc5ab8d98f9594..." required>
                 </div>
                 <div class="form-group">
-                  <label>Network</label>
-                  <select id="tokenNetwork">
-                    <option value="sonic">Sonic</option>
-                    <option value="solana">Solana</option>
-                    <option value="base">Base</option>
-                  </select>
+                  <label>
+    Network
+    <span class="tooltip" title="Supported networks for now:
+      sonic, ethereum, avalanche, base, linear, cyber, fantom, arbitrum, berachain, nova,
+      optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
+      solana, sepolia, holesky, polygon_amoy, bsc_testnet, base_sepolia, linea, linea_sepolia,
+      gnosis, gnosis_chiado, chiliz, chiliz_testnet, moonbeam, moonriver, moonbase, flow,
+      flow_testnet, ronin, ronin_saigon, lisk, lisk_sepolia, pulsechain">
+      <i class="fas fa-info-circle"></i>
+    </span>
+  </label>
+  <select id="sentimentNetwork" required>
+    <!-- Wallet provider list (prioritized) -->
+    <option value="sonic">Sonic</option>
+    <option value="ethereum">Ethereum</option>
+    <option value="avalanche">Avalanche</option>
+    <option value="base">Base</option>
+    <option value="linear">Linear</option>
+    <option value="cyber">Cyber</option>
+    <option value="fantom">Fantom</option>
+    <option value="arbitrum">Arbitrum</option>
+    <option value="berachain">Berachain</option>
+    <option value="nova">Nova</option>
+    <option value="optimism">Optimism</option>
+    <option value="zkevm">ZKEVM</option>
+    <option value="scroll">Scroll</option>
+    <option value="polygon">Polygon</option>
+    <option value="bsc">BSC</option>
+    <option value="celo">Celo</option>
+    <option value="worldchain">Worldchain</option>
+    <option value="mantle">Mantle</option>
+    <option value="zksync">Zksync</option>
+    <option value="omni">Omni</option>
+    <!-- Moralis mapping that are not already listed -->
+    <option value="solana">Solana</option>
+    <option value="sepolia">Sepolia</option>
+    <option value="holesky">Holesky</option>
+    <option value="polygon_amoy">Polygon Amoy</option>
+    <option value="bsc_testnet">BSC Testnet</option>
+    <option value="base_sepolia">Base Sepolia</option>
+    <option value="linea">Linea</option>
+    <option value="linea_sepolia">Linea Sepolia</option>
+    <option value="gnosis">Gnosis</option>
+    <option value="gnosis_chiado">Gnosis Chiado</option>
+    <option value="chiliz">Chiliz</option>
+    <option value="chiliz_testnet">Chiliz Testnet</option>
+    <option value="moonbeam">Moonbeam</option>
+    <option value="moonriver">Moonriver</option>
+    <option value="moonbase">Moonbase</option>
+    <option value="flow">Flow</option>
+    <option value="flow_testnet">Flow Testnet</option>
+    <option value="ronin">Ronin</option>
+    <option value="ronin_saigon">Ronin Saigon</option>
+    <option value="lisk">Lisk</option>
+    <option value="lisk_sepolia">Lisk Sepolia</option>
+    <option value="pulsechain">Pulsechain</option>
+  </select>
                 </div>
                 <div class="form-group">
                   <label>API Key</label>
@@ -2736,12 +2829,8 @@ function getDashboardStyles() {
 function getDashboardScripts() {
   return `
     <script>
-      // We'll wrap everything in an IIFE to avoid polluting global scope
-      (() => {
-        //
-        // 1) INIT WEBSOCKET (Unchanged from your old code)
-        //
-        /*
+      (function() {
+        // --- Dynamic WebSocket Initialization using dynamic paths ---
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         const ws = new WebSocket(\`\${protocol}//\${host}\`);
@@ -2762,9 +2851,8 @@ function getDashboardScripts() {
             console.error('Error refreshing fragment:', err);
           }
         };
-        */
-       // Trying new polling mechanism without creating, revert anytime, meant to try avoid websocket being disconnected on dahboard page load only
-       // Instead of opening a WS connection, poll for updates every 60 seconds
+
+        // --- Polling as Fallback: Refresh dashboard fragment every 3 mins ---
         setInterval(async () => {
           try {
             const res = await fetch('/dashboard/fragment');
@@ -2778,17 +2866,13 @@ function getDashboardScripts() {
           } catch (err) {
             console.error('Error refreshing dashboard fragment:', err);
           }
-        }, 60000);
+        }, 180000);
 
-
-        //
-        // 2) DOMContentLoaded: set up all your event listeners
-        //
+        // --- DOMContentLoaded: Set up event listeners and delegation ---
         document.addEventListener('DOMContentLoaded', () => {
-          // Menu scripts
+          // Menu toggle scripts
           const mobileMenuToggle = document.getElementById('mobileMenuToggle');
           const navLinks = document.getElementById('navLinks');
-
           if (mobileMenuToggle && navLinks) {
             mobileMenuToggle.addEventListener('click', () => {
               navLinks.classList.toggle('active');
@@ -2826,71 +2910,71 @@ function getDashboardScripts() {
 
           // Copy the generated key
           const copyBtn = document.getElementById('copyKeyButton');
-          copyBtn.addEventListener('click', () => {
-            const input = document.getElementById('apiKeyInput');
-            input.select();
-            document.execCommand('copy');
-            alert('API Key copied!');
-          });
+          if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+              const input = document.getElementById('apiKeyInput');
+              input.select();
+              document.execCommand('copy');
+              alert('API Key copied!');
+            });
+          }
 
-          // ========== B) SENTIMENT API TEST ==========
-          const sentimentForm = document.getElementById('sentimentTestForm');
-          sentimentForm.addEventListener('submit', async (e) => {
+          // ========== Event Delegation for Form Submissions ==========
+          // This single listener handles both the SentimentScrub™ and TokenScrub™ forms.
+          document.body.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const query = document.getElementById('sentimentQuery').value;
-            const network = document.getElementById('sentimentNetwork').value;
-            const apiKey = document.getElementById('sentimentApiKey').value;
-            const resultDiv = document.getElementById('sentimentResult');
-            const resultContent = resultDiv.querySelector('.result-content');
-
-            try {
-              const response = await fetch('/api/v1/sentiment', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'X-API-Key': apiKey
-                },
-                body: JSON.stringify({ query, network })
-              });
-              const data = await response.json();
-              resultContent.textContent = JSON.stringify(data, null, 2);
-              resultDiv.classList.remove('hidden');
-            } catch (err) {
-              resultContent.textContent = JSON.stringify({ error: err.message }, null, 2);
-              resultDiv.classList.remove('hidden');
-            }
-          });
-
-          // ========== C) TOKEN API TEST ==========
-          const tokenForm = document.getElementById('tokenTestForm');
-          tokenForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const tokenAddr = document.getElementById('tokenAddress').value;
-            const network = document.getElementById('tokenNetwork').value;
-            const apiKey = document.getElementById('tokenApiKey').value;
-            const resultDiv = document.getElementById('tokenResult');
-            const resultContent = resultDiv.querySelector('.result-content');
-
-            try {
-              const response = await fetch('/api/v1/token', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'X-API-Key': apiKey
-                },
-                body: JSON.stringify({ token: tokenAddr, network })
-              });
-              const data = await response.json();
-              resultContent.textContent = JSON.stringify(data, null, 2);
-              resultDiv.classList.remove('hidden');
-            } catch (err) {
-              resultContent.textContent = JSON.stringify({ error: err.message }, null, 2);
-              resultDiv.classList.remove('hidden');
+            const form = e.target;
+            if (form.id === 'sentimentTestForm') {
+              // Sentiment API test
+              const query = document.getElementById('sentimentQuery').value;
+              const network = document.getElementById('sentimentNetwork').value;
+              const apiKey = document.getElementById('sentimentApiKey').value;
+              const resultDiv = document.getElementById('sentimentResult');
+              const resultContent = resultDiv.querySelector('.result-content');
+              try {
+                const response = await fetch('/api/v1/sentiment', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                  },
+                  body: JSON.stringify({ query, network })
+                });
+                const data = await response.json();
+                resultContent.textContent = JSON.stringify(data, null, 2);
+                console.log(resultContent.textContent);
+                resultDiv.classList.remove('hidden');
+              } catch (err) {
+                resultContent.textContent = JSON.stringify({ error: err.message }, null, 2);
+                resultDiv.classList.remove('hidden');
+              }
+            } else if (form.id === 'tokenTestForm') {
+              // Token API test
+              const tokenAddr = document.getElementById('tokenAddress').value;
+              const network = document.getElementById('tokenNetwork').value;
+              const apiKey = document.getElementById('tokenApiKey').value;
+              const resultDiv = document.getElementById('tokenResult');
+              const resultContent = resultDiv.querySelector('.result-content');
+              try {
+                const response = await fetch('/api/v1/token', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                  },
+                  body: JSON.stringify({ token: tokenAddr, network })
+                });
+                const data = await response.json();
+                resultContent.textContent = JSON.stringify(data, null, 2);
+                resultDiv.classList.remove('hidden');
+              } catch (err) {
+                resultContent.textContent = JSON.stringify({ error: err.message }, null, 2);
+                resultDiv.classList.remove('hidden');
+              }
             }
           });
 
           // ========== D) COPY RESULT TEXT ==========
-          // For the "copy-button" on each result
           document.querySelectorAll('.copy-button[data-target]').forEach((button) => {
             const targetId = button.dataset.target;
             button.addEventListener('click', () => {
@@ -2905,24 +2989,20 @@ function getDashboardScripts() {
 
           // ========== F) CHECK API STATUS AT LOAD ==========
           checkApiStatus();
-          setInterval(checkApiStatus, 300000); // 5mins
+          setInterval(checkApiStatus, 300000); // 5 minutes
         });
 
-        //
-        // 3) We keep the same createMatrixBackground(), createLabEffects() etc. 
-        //
+        // --- Utility Functions ---
         function createMatrixBackground() {
           const container = document.querySelector('.matrix-container');
           if (!container) return;
           const chars = '01';
           const columnCount = Math.floor(window.innerWidth / 20);
-
           for (let i = 0; i < columnCount; i++) {
             const col = document.createElement('div');
             col.className = 'matrix-column';
             col.style.left = (i * 20) + 'px';
             col.style.animationDuration = (Math.random() * 3 + 2) + 's';
-            // generate random sequence of '0'/'1'
             const length = Math.floor(Math.random() * 25 + 5);
             const textArr = Array(length).fill().map(() => chars[Math.floor(Math.random() * chars.length)]);
             col.textContent = textArr.join('\\n');
@@ -2930,41 +3010,10 @@ function getDashboardScripts() {
           }
         }
 
-        function createLabEffects() {
-          const container = document.querySelector('.lab-container');
-          if (!container) return;
-
-          function createChemical() {
-            const c = document.createElement('div');
-            c.className = 'chemical';
-            c.style.width = '10px';
-            c.style.height = '40px';
-            c.style.left = Math.random() * 100 + 'vw';
-            c.style.top = Math.random() * 100 + 'vh';
-            container.appendChild(c);
-            setTimeout(() => c.remove(), 2000);
-          }
-
-          function createFlask() {
-            const f = document.createElement('div');
-            f.className = 'flask';
-            f.style.width = '20px';
-            f.style.height = '60px';
-            f.style.left = Math.random() * 100 + 'vw';
-            f.style.top = Math.random() * 100 + 'vh';
-            container.appendChild(f);
-            setTimeout(() => f.remove(), 2500);
-          }
-
-          setInterval(createChemical, 3000);
-          setInterval(createFlask, 4000);
-        }
-
         function initParticles() {
           const particlesContainer = document.createElement('div');
           particlesContainer.className = 'particles-container';
           document.body.appendChild(particlesContainer);
-
           for (let i = 0; i < 50; i++) {
             const particle = document.createElement('div');
             particle.className = 'particle';
@@ -2978,37 +3027,26 @@ function getDashboardScripts() {
         function initNetworkCardAnimations() {
           const networkCards = document.querySelectorAll('.network-card');
           if (!networkCards.length) return;
-
           function animateRandomCard() {
             const randomIndex = Math.floor(Math.random() * networkCards.length);
             const card = networkCards[randomIndex];
-            
             card.classList.add('network-ping');
-            
             const indicator = card.querySelector('.network-ping-indicator');
             indicator.style.opacity = '1';
-            
             setTimeout(() => {
               card.classList.remove('network-ping');
               indicator.style.opacity = '0';
             }, 2000);
           }
-
-          // Animate a random card every 3-7 seconds
-          setInterval(() => {
-            animateRandomCard();
-          }, Math.random() * 4000 + 3000);
+          setInterval(() => { animateRandomCard(); }, Math.random() * 4000 + 3000);
         }
 
-        // ========== F) checkApiStatus to update status-dot for each API ========== 
         async function checkApiStatus() {
           try {
             const res = await fetch('/api/status');
             const data = await res.json();
-            // D.A.I.L /api/status returns { services: { sentiment: { status: 'healthy' }, token: { status: 'unhealthy' } } }
             const sentimentStatus = data.services?.sentiment?.status || 'unhealthy';
             const tokenStatus = data.services?.token?.status || 'unhealthy';
-
             updateStatusDot('sentimentApiStatus', sentimentStatus);
             updateStatusDot('tokenApiStatus', tokenStatus);
           } catch (err) {
@@ -3118,5 +3156,3 @@ setInterval(() => {
 
 
 export { dashboardRouter as default, fetchMetrics as startMonitoringDashboard };
-
-export { validateApiKey }
