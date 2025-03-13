@@ -2989,7 +2989,7 @@ function getDashboardScripts() {
 
           // ========== F) CHECK API STATUS AT LOAD ==========
           checkApiStatus();
-          setInterval(checkApiStatus, 300000); // 5 minutes
+          setInterval(checkApiStatus, 600000); // 10 minutes
         });
 
         // --- Utility Functions ---

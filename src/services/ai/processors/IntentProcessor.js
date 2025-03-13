@@ -1355,32 +1355,34 @@ export class IntentProcessor extends EventEmitter {
 
   async getTokenInfoBySymbol(symbol) {
     try {
-      // 1. Attempt lookup via Moralis (which can handle multiple chains automatically).
-      let moralisData;
+      // 1. Attempt lookup via DexScreener first.
+      let dexscreenerData;
       try {
-        // searchTokens can be called without specifying a network if Moralis
-        // automatically searches across supported chains using the symbol.
-        moralisData = await searchTokens(symbol);
+        dexscreenerData = await this.dexscreener.getTokenInfoBySymbol(symbol);
       } catch (err) {
-        console.warn(`Moralis fetch failed for symbol ${symbol}: ${err.message}`);
+        console.warn(`Dexscreener fetch failed for symbol ${symbol}: ${err.message}`);
       }
   
-      // If Moralis found something, return the first result.
-      if (moralisData?.data?.result?.length > 0) {
-        console.log("✅ Token found on Moralis:", moralisData.data.result[0]);
-        return moralisData.data.result[0];
-      }
-  
-      // 2. Fallback to DexScreener.
-      console.log("⚠️ Token not found on Dextools. Trying DexScreener...");
-      const dexscreenerData = await this.dexscreener.getTokenInfoBySymbol(symbol).catch(() => null);
       if (dexscreenerData) {
         console.log("✅ Token found on DexScreener:", dexscreenerData);
         return dexscreenerData;
       }
   
+      // 2. Fallback to Moralis search.
+      let moralisData;
+      try {
+        moralisData = await searchTokens(symbol);
+      } catch (err) {
+        console.warn(`Moralis fetch failed for symbol ${symbol}: ${err.message}`);
+      }
+  
+      if (moralisData?.data?.result?.length > 0) {
+        console.log("✅ Token found on Moralis:", moralisData.data.result[0]);
+        return moralisData.data.result[0];
+      }
+  
       // 3. Fallback to Dextools.
-      console.log("⚠️ Token not found on Moralis. Trying Dextools...");
+      console.log("⚠️ Token not found on DexScreener/Moralis. Trying Dextools...");
       const dextoolsData = await this.dextools.getTokenInfo(symbol).catch(() => null);
       if (dextoolsData) {
         console.log("✅ Token found on Dextools:", dextoolsData);
@@ -1390,7 +1392,7 @@ export class IntentProcessor extends EventEmitter {
       // 4. Nothing found on any source.
       console.log("❌ Token not found on any source.");
       return {
-        error: "Failed to retrieve token data from Moralis, Dextools, and DexScreener.",
+        error: "Failed to retrieve token data from DexScreener, Moralis, and Dextools.",
       };
     } catch (error) {
       console.error("❌ Error in getTokenInfoBySymbol:", error);
@@ -1398,7 +1400,8 @@ export class IntentProcessor extends EventEmitter {
         error: "An unexpected error occurred while retrieving token information.",
       };
     }
-  }  
+  }
+  
   /**
    * DESCREENER BASED - SUPPORTS BOTH EVM & SOLANA using Symbol or address only
    * @param {*} walletAddress 

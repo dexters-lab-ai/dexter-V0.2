@@ -192,14 +192,23 @@ function calculateEngagement(tweets) {
 }
 
 
+// Helper: Returns promise resolution or fallback after ms milliseconds.
+function withTimeout(promise, ms, fallbackValue) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallbackValue), ms))
+  ]);
+}
+
 export async function handleSentimentQuery({ query, network }) {
-  console.log('🔍  API Call: Sentiment Scrub for >>>> ', query);
+  console.log('🔍 API Call: Sentiment Scrub for >>>> ', query);
   try {
     let symbol = query;
     let tokenInfo = null;
 
-    // If query is an address, get symbol and info from dexscreener
-    if (query.match(/^0x[a-fA-F0-9]{40}$/) || query.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
+    // If query is an address, use DexScreener to get token info.
+    if (query.match(/^0x[a-fA-F0-9]{40}$/) ||
+        query.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
       tokenInfo = await dexscreener.getTokenInfoByAddress(query);
       console.log('Token info:', tokenInfo);
       symbol = tokenInfo?.symbol;
@@ -208,14 +217,18 @@ export async function handleSentimentQuery({ query, network }) {
       }
     }
 
-    // Get sentiment data using the new searchTweetsByCashtagAPI function.
-    const twitterData = await twitterService.searchTweetsByCashtagAPI(symbol);
+    // Use our withTimeout() wrapper so that Twitter calls never hang.
+    const twitterData = await withTimeout(
+      twitterService.searchTweetsByCashtagAPI(symbol),
+      60000,  // 60 seconds timeout
+      []      // Fallback empty array if Twitter call times out
+    );
     console.log('Twitter Data:', twitterData);
 
-    // Calculate sentiment metrics
+    // Calculate sentiment metrics.
     const sentimentCounts = twitterData.reduce((acc, tweet) => {
-      const sentiment = tweet.sentiment?.trim().toLowerCase();
-      acc[sentiment] = (acc[sentiment] || 0) + 1;
+      const s = tweet.sentiment?.trim().toLowerCase();
+      acc[s] = (acc[s] || 0) + 1;
       return acc;
     }, {});
 
@@ -224,12 +237,12 @@ export async function handleSentimentQuery({ query, network }) {
     const bearishCount = sentimentCounts.bearish || 0;
     const sentimentScore = totalTweets > 0 ? (bullishCount - bearishCount) / totalTweets : 0;
 
-    // Calculate engagement metrics
+    // Calculate engagement metrics.
     const engagement = twitterData.reduce((acc, tweet) => {
       return acc + tweet.likeCount + tweet.retweetCount + tweet.replyCount + tweet.quoteCount;
     }, 0);
 
-    // Format response
+    // Build combined response.
     return {
       token: tokenInfo ? {
         symbol,
