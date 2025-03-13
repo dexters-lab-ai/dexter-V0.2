@@ -201,6 +201,7 @@ class QueueService extends EventEmitter {
   async tryRecoverFromDegradedState() {
     if (!this.degraded) return true;
     try {
+      await this.initializeRedis();
       // Reinitialize missing queues.
       for (const queueName of ['tasks', 'priceAlerts', 'kolMonitor']) {
         if (!this.queues.has(queueName)) {
