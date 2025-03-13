@@ -65,13 +65,13 @@ ApiKeySchema.methods.deactivate = async function() {
   await this.save();
 };
 
-// Statics
+// Statics: Use $expr to compare usageCount and quotaLimit fields
 ApiKeySchema.statics.findValidKey = async function(key) {
   return this.findOne({
     key,
     active: true,
-    usageCount: { $lt: '$quotaLimit' },
-    expiresAt: { $gt: new Date() }
+    expiresAt: { $gt: new Date() },
+    $expr: { $lt: [ "$usageCount", "$quotaLimit" ] }
   });
 };
 
