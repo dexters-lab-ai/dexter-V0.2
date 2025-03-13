@@ -9,6 +9,7 @@ import bs58 from "bs58"; // For Base58 decoding
 import { normalizeNetwork, NETWORKS, NETWORK_DISPLAY_NAMES } from '../../../core/constants.js';
 
 // Service imports
+import { Wallet } from "ethers";
 import { addressBookService } from '../../addressBook/AddressBookService.js';
 import { tradeService } from '../../trading/TradeService.js';
 import { dextools } from '../../dextools/index.js';
