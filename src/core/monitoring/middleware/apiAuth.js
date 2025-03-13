@@ -1,5 +1,5 @@
-import { validateApiKey as validateKey } from '../Dashboard.js';
 import { deterministicEncrypt } from '../../../utils/encryption.js';
+import { ApiKeyService } from '../api/services/ApiKeyService.js';
 import { ApiUsage } from '../api/models/ApiUsage.js';
 
 export async function validateApiKey(req, res, next) {
@@ -9,7 +9,7 @@ export async function validateApiKey(req, res, next) {
     return res.status(401).json({ error: 'API key required' });
   }
 
-  const isValid = await validateKey(apiKey);
+  const isValid = await ApiKeyService.validateKey(apiKey);
   if (!isValid) {
     return res.status(403).json({ error: 'Invalid or expired API key' });
   }
