@@ -25,7 +25,7 @@ router.get('/version', (req, res) => {
   res.json({
     version: "1.3.0", //KATZ!life is 1.3 after Boot and Skin versions. D.A.I.L is 1.4.0 public release
     environment: process.env.NODE_ENV || 'development',
-    build: process.env.BUILD_NUMBER || 'n/a'
+    build: process.env.BUILD_NUMBER || 'testnet'
   });
 });
 

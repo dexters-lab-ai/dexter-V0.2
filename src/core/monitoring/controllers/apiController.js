@@ -85,6 +85,7 @@ export async function handleTokenQuery({ token, network }) {
   // 7. Retrieve sniper info and LP info:
   //    - Use Dexscreener pairAddress for sniper info via getTokenSnipers.
   //    - Get LP lock info from CoinGecko.
+  // 7. Retrieve sniper info and LP info:
   try {
     const pairAddress = dsPair.pairAddress;
     if (pairAddress) {
@@ -94,7 +95,13 @@ export async function handleTokenQuery({ token, network }) {
         console.warn('Token snipers error (Moralis):', err);
       }
       try {
-        lpInfo = await getLPInfoCoinGecko(pairAddress, network);
+        // Wrap getLPInfoCoinGecko with a timeout of 10 seconds.
+        lpInfo = await Promise.race([
+          getLPInfoCoinGecko(pairAddress, network),
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ locked_liquidity_percentage: 'unavailable' }), 10000)
+          )
+        ]);
       } catch (lpErr) {
         console.warn('LP info error:', lpErr);
         lpInfo = { locked_liquidity_percentage: 'unavailable' };
