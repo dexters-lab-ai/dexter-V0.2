@@ -1357,6 +1357,7 @@ function getDashboardStyles() {
         --text-secondary: rgba(255, 255, 255, 0.7);
         --border-radius: 12px;
         --transition: all 0.3s ease;
+          background-color: var(--bg);
       }
       body {
         font-family: 'Space Grotesk', sans-serif;

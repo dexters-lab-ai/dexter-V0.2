@@ -294,6 +294,33 @@ class DexScreenerService {
     }
   }
 
+  async getTokenInfoByAddressBig(query) {
+    try {
+      const rawResponse = await this.fetchWithCache(
+        `/latest/dex/search?q=${query}`,
+        {},
+        `dexscreener:tokenInfo:${query}`
+      );
+    
+      // Format each pair in the response
+      const formattedPairs = rawResponse.pairs?.map(this.formatPairData) || [];      
+  
+      console.log('Dexscreener Token Info by address:', JSON.stringify(rawResponse, null, 2));
+    
+      // If no pairs, return empty array
+      if (!formattedPairs.length) return [];
+    
+      // Select the "main" LP based on the highest liquidity
+      const mainPair = formattedPairs.reduce((best, current) => {
+        return current.liquidity.usd > (best?.liquidity.usd || 0) ? current : best;
+      }, null);
+    
+      return rawResponse || {};
+    } catch {
+      return {baseToken:{symbol:"NONE"}}
+    }
+  }
+
   async getTokenPriceByAddress(query) {
     try {
       const rawResponse = await this.fetchWithCache(

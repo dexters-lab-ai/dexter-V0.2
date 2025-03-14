@@ -839,7 +839,7 @@ class TwitterService extends EventEmitter {
         minLikes,
         minReplies,
       };
-      const run = await this.apifyClient.actor("fastcrawler/twitter-cashtag-scraper-stock-crypto-sentiment-analysis").call(input);
+      const run = await this.apifyClient.actor("fastcrawler/twitter-x-cashtag-scraper-stock-crypto-sentiment-analysis").call(input);
       const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
       const filteredTweets = items.filter(
         (tweet) =>
@@ -858,7 +858,7 @@ class TwitterService extends EventEmitter {
     }
   }
   
-  async searchTwitter({ query, from, to, searchClass, operators = [], sortBy = 'Latest', maxItems = 100 }) {
+  async searchTwitter({ query, from, to, searchClass, operators = [], sortBy = 'Latest', maxItems = 500 }) {
     try {
       let operatorString = operators.join(' ');
       const baseSearch = operatorString ? `${query} ${operatorString}` : query;
@@ -898,7 +898,7 @@ class TwitterService extends EventEmitter {
         tweetLanguage: "en",
       };
   
-      const run = await this.apifyClient.actor("fastcrawler/tweet-fast-scraper").call(input);
+      const run = await this.apifyClient.actor("fastcrawler/Tweet-Fast-Scraper").call(input);
       const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
       
       // Log raw items for debugging
@@ -969,7 +969,30 @@ class TwitterService extends EventEmitter {
     }
     this.searchCounts.set(userId, currentCount + 1);
   }
-  
+
+  async getFudTweets(symbol) {
+    if (!symbol) return [];
+    // Build a query that includes various FUD-related keywords
+    const query = `$${symbol} (scam OR "rug pull" OR scammed OR rugged OR farm)`;
+    try {
+      const tweets = await twitterService.searchTwitter({
+        query,
+        searchClass: 'content',
+        maxItems: 50
+      });
+      // Sort tweets by (like + retweet) count (descending) and take the top 5.
+      const sortedTweets = tweets.sort((a, b) => {
+        const engagementA = (a.likeCount || 0) + (a.retweetCount || 0);
+        const engagementB = (b.likeCount || 0) + (b.retweetCount || 0);
+        return engagementB - engagementA;
+      });
+      return sortedTweets.slice(0, 5);
+    } catch (err) {
+      console.error(`FUD tweet search error for ${symbol}:`, err.message);
+      return [];
+    }
+  }
+    
   async discoverTrenches() {
     const cacheKey = 'trenches:cashtags';
     const cached = this.getFromCache(cacheKey);

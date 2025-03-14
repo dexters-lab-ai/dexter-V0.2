@@ -48,8 +48,8 @@ class ServerManager {
     this.httpRetryCount = 0;
     this.MAX_RETRIES = 10;
     this.RETRY_DELAY = 5000; // 5 seconds
-    this.NGROK_HEALTHCHECK_INTERVAL = 60000; // 1 minute
-    this.METRICS_UPDATE_INTERVAL = 60000; // 1 minute
+    this.NGROK_HEALTHCHECK_INTERVAL = 600000; // 1 minute
+    this.METRICS_UPDATE_INTERVAL = 600000; // 1 minute
     this.ngrokHealthcheckTimer = null;
     this.metricsUpdateTimer = null;
   }
@@ -452,7 +452,7 @@ class Application {
       } catch (error) {
         console.error('Error during shutdown:', error);
       }
-      //process.exit(0);
+      process.exit(0);
     });
     
     process.on('SIGTERM', async () => {
