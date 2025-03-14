@@ -16,7 +16,7 @@ class QueueService extends EventEmitter {
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
-        timeout: 60000, // 60-second job timeout
+        timeout: 120000, // increased to 2 minutes (or more) if needed
         removeOnComplete: true,
         removeOnFail: false,
       },
@@ -184,10 +184,13 @@ class QueueService extends EventEmitter {
         this.emit('jobFailed', { queue: name, jobId: job.id, error });
       });
   
-      queue.on('stalled', (jobId) => {
+      queue.on('stalled', (jobOrId) => {
+        const jobId = typeof jobOrId === 'object' && jobOrId.id 
+                        ? jobOrId.id.toString() 
+                        : String(jobOrId);
         console.warn(`⚠️ Job ${jobId} in queue "${name}" stalled`);
         this.emit('jobStalled', { queue: name, jobId });
-      });
+      });    
   
       this.queues.set(name, queue);
       return queue;

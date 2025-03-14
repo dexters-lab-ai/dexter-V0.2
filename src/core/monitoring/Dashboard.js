@@ -1015,10 +1015,10 @@ function renderApiSection() {
         </p>
       </div>
 
-      <!-- API Key Management -->
+      <!-- API Key Management (unchanged) -->
       <div class="api-key-management">
         <h3>API Key Management</h3>
-        <p>Select a tier to generate your API key:</p>
+        <p>Select a tier to generate your API key for testing:</p>
         <div class="tier-cards">
           <div class="tier-card">
             <h4>Test</h4>
@@ -1032,7 +1032,7 @@ function renderApiSection() {
           </div>
           <div class="tier-card featured">
             <h4>Basic</h4>
-            <p class="price">$49/month</p>
+            <p class="price">$/month</p>
             <ul>
               <li>10,000 calls/month</li>
               <li>Higher rate limits</li>
@@ -1065,7 +1065,7 @@ function renderApiSection() {
         </div>
       </div>
 
-      <!-- SentimentScrub API Card -->
+      <!-- SentimentScrub™ API Card -->
       <div class="api-card">
         <div class="api-card-header">
           <h3>SentimentScrub™</h3>
@@ -1108,7 +1108,9 @@ function renderApiSection() {
                     </tr>
                   </table>
                 </div>
-                <small class="doc-note">Expected Response: A JSON with sentiment score, confidence, metrics, and a timestamp.</small>
+                <small class="doc-note">
+                  Expected Response: A JSON with sentiment score, confidence, metrics, HTTP status, response time, and timestamp.
+                </small>
               </div>
             </div>
           </div>
@@ -1118,74 +1120,72 @@ function renderApiSection() {
               <form id="sentimentTestForm">
                 <div class="form-group">
                   <label>Query</label>
-                  <input type="text" id="sentimentQuery" placeholder="e.g. BRUSH" required>
+                  <input type="text" id="sentimentQuery" value="BRUSH" placeholder="Token symbol or address" required>
                 </div>
                 <div class="form-group">
                   <label>
-    Network
-    <span class="tooltip" title="Supported networks for now:
-      sonic, ethereum, avalanche, base, linear, cyber, fantom, arbitrum, berachain, nova,
-      optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
-      solana, sepolia, holesky, polygon_amoy, bsc_testnet, base_sepolia, linea, linea_sepolia,
-      gnosis, gnosis_chiado, chiliz, chiliz_testnet, moonbeam, moonriver, moonbase, flow,
-      flow_testnet, ronin, ronin_saigon, lisk, lisk_sepolia, pulsechain">
-      <i class="fas fa-info-circle"></i>
-    </span>
-  </label>
-  <select id="sentimentNetwork" required>
-    <!-- Wallet provider list (prioritized) -->
-    <option value="sonic">Sonic</option>
-    <option value="ethereum">Ethereum</option>
-    <option value="avalanche">Avalanche</option>
-    <option value="base">Base</option>
-    <option value="linear">Linear</option>
-    <option value="cyber">Cyber</option>
-    <option value="fantom">Fantom</option>
-    <option value="arbitrum">Arbitrum</option>
-    <option value="berachain">Berachain</option>
-    <option value="nova">Nova</option>
-    <option value="optimism">Optimism</option>
-    <option value="zkevm">ZKEVM</option>
-    <option value="scroll">Scroll</option>
-    <option value="polygon">Polygon</option>
-    <option value="bsc">BSC</option>
-    <option value="celo">Celo</option>
-    <option value="worldchain">Worldchain</option>
-    <option value="mantle">Mantle</option>
-    <option value="zksync">Zksync</option>
-    <option value="omni">Omni</option>
-    <!-- From our Moralis mapping that are not already listed -->
-    <option value="solana">Solana</option>
-    <option value="sepolia">Sepolia</option>
-    <option value="holesky">Holesky</option>
-    <option value="polygon_amoy">Polygon Amoy</option>
-    <option value="bsc_testnet">BSC Testnet</option>
-    <option value="base_sepolia">Base Sepolia</option>
-    <option value="linea">Linea</option>
-    <option value="linea_sepolia">Linea Sepolia</option>
-    <option value="gnosis">Gnosis</option>
-    <option value="gnosis_chiado">Gnosis Chiado</option>
-    <option value="chiliz">Chiliz</option>
-    <option value="chiliz_testnet">Chiliz Testnet</option>
-    <option value="moonbeam">Moonbeam</option>
-    <option value="moonriver">Moonriver</option>
-    <option value="moonbase">Moonbase</option>
-    <option value="flow">Flow</option>
-    <option value="flow_testnet">Flow Testnet</option>
-    <option value="ronin">Ronin</option>
-    <option value="ronin_saigon">Ronin Saigon</option>
-    <option value="lisk">Lisk</option>
-    <option value="lisk_sepolia">Lisk Sepolia</option>
-    <option value="pulsechain">Pulsechain</option>
-  </select>
+                    Network
+                    <span class="tooltip" title="Supported networks for now:
+                      sonic, solana, base, ethereum, avalanche, linear, cyber, fantom, arbitrum, berachain, nova, optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
+                      sepolia, holesky, polygon_amoy, bsc_testnet, base_sepolia, linea_sepolia, gnosis, gnosis_chiado, chiliz, chiliz_testnet, moonbeam, moonriver, moonbase, flow, flow_testnet, ronin, ronin_saigon, lisk, lisk_sepolia, pulsechain">
+                      <i class="fas fa-info-circle"></i>
+                    </span>
+                  </label>
+                  <select id="sentimentNetwork" required>
+                    <option value="sonic" selected>Sonic</option>
+                    <option value="solana">Solana</option>
+                    <option value="base">Base</option>
+                    <option value="ethereum">Ethereum</option>
+                    <option value="avalanche">Avalanche</option>
+                    <option value="linear">Linear</option>
+                    <option value="cyber">Cyber</option>
+                    <option value="fantom">Fantom</option>
+                    <option value="arbitrum">Arbitrum</option>
+                    <option value="berachain">Berachain</option>
+                    <option value="nova">Nova</option>
+                    <option value="optimism">Optimism</option>
+                    <option value="zkevm">ZKEVM</option>
+                    <option value="scroll">Scroll</option>
+                    <option value="polygon">Polygon</option>
+                    <option value="bsc">BSC</option>
+                    <option value="celo">Celo</option>
+                    <option value="worldchain">Worldchain</option>
+                    <option value="mantle">Mantle</option>
+                    <option value="zksync">Zksync</option>
+                    <option value="omni">Omni</option>
+                    <!-- Additional networks from Moralis mapping -->
+                    <option value="sepolia">Sepolia</option>
+                    <option value="holesky">Holesky</option>
+                    <option value="polygon_amoy">Polygon Amoy</option>
+                    <option value="bsc_testnet">BSC Testnet</option>
+                    <option value="base_sepolia">Base Sepolia</option>
+                    <option value="linea_sepolia">Linea Sepolia</option>
+                    <option value="gnosis">Gnosis</option>
+                    <option value="gnosis_chiado">Gnosis Chiado</option>
+                    <option value="chiliz">Chiliz</option>
+                    <option value="chiliz_testnet">Chiliz Testnet</option>
+                    <option value="moonbeam">Moonbeam</option>
+                    <option value="moonriver">Moonriver</option>
+                    <option value="moonbase">Moonbase</option>
+                    <option value="flow">Flow</option>
+                    <option value="flow_testnet">Flow Testnet</option>
+                    <option value="ronin">Ronin</option>
+                    <option value="ronin_saigon">Ronin Saigon</option>
+                    <option value="lisk">Lisk</option>
+                    <option value="lisk_sepolia">Lisk Sepolia</option>
+                    <option value="pulsechain">Pulsechain</option>
+                  </select>
                 </div>
                 <div class="form-group">
                   <label>API Key</label>
                   <input type="text" id="sentimentApiKey" placeholder="Enter your API key" required>
                 </div>
-                <button type="submit" class="test-button">
-                  <span class="button-text">Test Endpoint</span>
-                </button>
+                <button type="submit" class="test-button">Test Endpoint</button>
+                <div class="loading-indicator hidden">fetching...</div>
+                <div class="response-meta hidden">
+                  <span class="response-time"></span>
+                  <span class="status-code"></span>
+                </div>
               </form>
               <div id="sentimentResult" class="api-result hidden">
                 <div class="result-header">
@@ -1201,7 +1201,7 @@ function renderApiSection() {
         </div>
       </div>
 
-      <!-- TokenScrub API Card -->
+      <!-- TokenScrub™ API Card -->
       <div class="api-card">
         <div class="api-card-header">
           <h3>TokenScrub™</h3>
@@ -1244,7 +1244,9 @@ function renderApiSection() {
                     </tr>
                   </table>
                 </div>
-                <small class="doc-note">Expected Response: A JSON with token details, price, market data, security score, and social metrics.</small>
+                <small class="doc-note">
+                  Expected Response: A JSON with token details, price, market data, security score, social metrics, status code, and response time.
+                </small>
               </div>
             </div>
           </div>
@@ -1254,81 +1256,77 @@ function renderApiSection() {
               <form id="tokenTestForm">
                 <div class="form-group">
                   <label>Token</label>
-                  <input type="text" id="tokenAddress" placeholder="e.g. 0xc5ab8d98f9594..." required>
+                  <input type="text" id="tokenAddress" value="9d9mb8kooffad3sctgztkxqypkshx6ezhbkio89ixyy2" placeholder="e.g. 0xc5ab8d98f9594..." required>
                 </div>
                 <div class="form-group">
                   <label>
-    Network
-    <span class="tooltip" title="Supported networks for now:
-      sonic, ethereum, avalanche, base, linear, cyber, fantom, arbitrum, berachain, nova,
-      optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
-      solana, sepolia, holesky, polygon_amoy, bsc_testnet, base_sepolia, linea, linea_sepolia,
-      gnosis, gnosis_chiado, chiliz, chiliz_testnet, moonbeam, moonriver, moonbase, flow,
-      flow_testnet, ronin, ronin_saigon, lisk, lisk_sepolia, pulsechain">
-      <i class="fas fa-info-circle"></i>
-    </span>
-  </label>
-  <select id="sentimentNetwork" required>
-    <!-- Wallet provider list (prioritized) -->
-    <option value="sonic">Sonic</option>
-    <option value="ethereum">Ethereum</option>
-    <option value="avalanche">Avalanche</option>
-    <option value="base">Base</option>
-    <option value="linear">Linear</option>
-    <option value="cyber">Cyber</option>
-    <option value="fantom">Fantom</option>
-    <option value="arbitrum">Arbitrum</option>
-    <option value="berachain">Berachain</option>
-    <option value="nova">Nova</option>
-    <option value="optimism">Optimism</option>
-    <option value="zkevm">ZKEVM</option>
-    <option value="scroll">Scroll</option>
-    <option value="polygon">Polygon</option>
-    <option value="bsc">BSC</option>
-    <option value="celo">Celo</option>
-    <option value="worldchain">Worldchain</option>
-    <option value="mantle">Mantle</option>
-    <option value="zksync">Zksync</option>
-    <option value="omni">Omni</option>
-    <!-- Moralis mapping that are not already listed -->
-    <option value="solana">Solana</option>
-    <option value="sepolia">Sepolia</option>
-    <option value="holesky">Holesky</option>
-    <option value="polygon_amoy">Polygon Amoy</option>
-    <option value="bsc_testnet">BSC Testnet</option>
-    <option value="base_sepolia">Base Sepolia</option>
-    <option value="linea">Linea</option>
-    <option value="linea_sepolia">Linea Sepolia</option>
-    <option value="gnosis">Gnosis</option>
-    <option value="gnosis_chiado">Gnosis Chiado</option>
-    <option value="chiliz">Chiliz</option>
-    <option value="chiliz_testnet">Chiliz Testnet</option>
-    <option value="moonbeam">Moonbeam</option>
-    <option value="moonriver">Moonriver</option>
-    <option value="moonbase">Moonbase</option>
-    <option value="flow">Flow</option>
-    <option value="flow_testnet">Flow Testnet</option>
-    <option value="ronin">Ronin</option>
-    <option value="ronin_saigon">Ronin Saigon</option>
-    <option value="lisk">Lisk</option>
-    <option value="lisk_sepolia">Lisk Sepolia</option>
-    <option value="pulsechain">Pulsechain</option>
-  </select>
+                    Network
+                    <span class="tooltip" title="Supported networks for now:
+                      sonic, solana, base, ethereum, avalanche, linear, cyber, fantom, arbitrum, berachain, nova, optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
+                      sepolia, holesky, polygon_amoy, bsc_testnet, base_sepolia, linea_sepolia, gnosis, gnosis_chiado, chiliz, chiliz_testnet, moonbeam, moonriver, moonbase, flow, flow_testnet, ronin, ronin_saigon, lisk, lisk_sepolia, pulsechain">
+                      <i class="fas fa-info-circle"></i>
+                    </span>
+                  </label>
+                  <select id="tokenNetwork" required>
+                    <option value="sonic">Sonic</option>
+                    <option value="solana" selected>Solana</option>
+                    <option value="base">Base</option>
+                    <option value="ethereum">Ethereum</option>
+                    <option value="avalanche">Avalanche</option>
+                    <option value="linear">Linear</option>
+                    <option value="cyber">Cyber</option>
+                    <option value="fantom">Fantom</option>
+                    <option value="arbitrum">Arbitrum</option>
+                    <option value="berachain">Berachain</option>
+                    <option value="nova">Nova</option>
+                    <option value="optimism">Optimism</option>
+                    <option value="zkevm">ZKEVM</option>
+                    <option value="scroll">Scroll</option>
+                    <option value="polygon">Polygon</option>
+                    <option value="bsc">BSC</option>
+                    <option value="celo">Celo</option>
+                    <option value="worldchain">Worldchain</option>
+                    <option value="mantle">Mantle</option>
+                    <option value="zksync">Zksync</option>
+                    <option value="omni">Omni</option>
+                    <!-- Additional networks -->
+                    <option value="sepolia">Sepolia</option>
+                    <option value="holesky">Holesky</option>
+                    <option value="polygon_amoy">Polygon Amoy</option>
+                    <option value="bsc_testnet">BSC Testnet</option>
+                    <option value="base_sepolia">Base Sepolia</option>
+                    <option value="linea_sepolia">Linea Sepolia</option>
+                    <option value="gnosis">Gnosis</option>
+                    <option value="gnosis_chiado">Gnosis Chiado</option>
+                    <option value="chiliz">Chiliz</option>
+                    <option value="chiliz_testnet">Chiliz Testnet</option>
+                    <option value="moonbeam">Moonbeam</option>
+                    <option value="moonriver">Moonriver</option>
+                    <option value="moonbase">Moonbase</option>
+                    <option value="flow">Flow</option>
+                    <option value="flow_testnet">Flow Testnet</option>
+                    <option value="ronin">Ronin</option>
+                    <option value="ronin_saigon">Ronin Saigon</option>
+                    <option value="lisk">Lisk</option>
+                    <option value="lisk_sepolia">Lisk Sepolia</option>
+                    <option value="pulsechain">Pulsechain</option>
+                  </select>
                 </div>
                 <div class="form-group">
                   <label>API Key</label>
                   <input type="text" id="tokenApiKey" placeholder="Enter your API key" required>
                 </div>
-                <button type="submit" class="test-button">
-                  <span class="button-text">Test Endpoint</span>
-                </button>
+                <button type="submit" class="test-button">Test Endpoint</button>
+                <div class="loading-indicator hidden">fetching...</div>
+                <div class="response-meta hidden">
+                  <span class="response-time"></span>
+                  <span class="status-code"></span>
+                </div>
               </form>
               <div id="tokenResult" class="api-result hidden">
                 <div class="result-header">
                   <h4>Response</h4>
-                  <button class="copy-button" data-target="tokenResult">
-                    <i class="fas fa-copy"></i>
-                  </button>
+                  <button class="copy-button" data-target="tokenResult"><i class="fas fa-copy"></i></button>
                 </div>
                 <pre class="result-content"></pre>
               </div>
@@ -1363,6 +1361,7 @@ function getDashboardStyles() {
       body {
         font-family: 'Space Grotesk', sans-serif;
         background: var(--bg);
+        background-color: var(--bg);
         color: var(--text);
         line-height: 1.6;
         overflow-x: hidden;
@@ -2588,6 +2587,15 @@ function getDashboardStyles() {
         flex: 1 1 45%;
       }
 
+      /* Ensure the right column (API test form) does not expand beyond its allotted space */
+      .api-card-right {
+        display: flex;
+        flex-direction: column;
+        /* Set a max-width if needed, for example: */
+        max-width: 50%;
+        box-sizing: border-box;
+      }
+
       .api-card-description {
         background: rgba(0, 0, 0, 0.15);
         padding: 1rem;
@@ -2719,7 +2727,11 @@ function getDashboardStyles() {
         margin-bottom: 1.5rem;
       }
 
-      .api-test-form {
+      .api-test-form {flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        position: relative;
+
         background: rgba(0, 0, 0, 0.2);
         padding: 1rem;
         border-radius: 10px;
@@ -2800,12 +2812,53 @@ function getDashboardStyles() {
       .api-result { margin-top: 1rem; }
       .api-result.visible { display: block; }
 
+      .api-result {
+        max-height: 300px;  /* Fixed height – adjust as needed */
+        overflow-y: auto;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      
+      .api-card-content {
+        display: flex;
+        flex-wrap: nowrap;  /* Prevent wrapping to a new line */
+        gap: 2rem;
+      }
+
       .result-content {
         background: #111;
         color: #eee;
         padding: 1rem;
         border-radius: 8px;
         overflow-x: auto;
+      }
+
+      /* API Scrub Result area scrollable */
+      .api-result .result-content {
+        max-height: 300px;  /* Adjust height as needed */
+        overflow-y: auto;
+      }
+
+      /* Loading indicator and response metadata */
+      .loading-indicator {
+        font-size: 1rem;
+        color: var(--primary);
+        margin-top: 0.5rem;
+      }
+
+      .response-meta {
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+        display: flex;
+        gap: 1rem;
+      }
+
+      .response-meta .healthy {
+        color: #4caf50;
+      }
+
+      .response-meta .error {
+        color: #f44336;
       }
 
       /* Ensure .status-dot.healthy / .status-dot.unhealthy color them differently */
@@ -2837,40 +2890,57 @@ function getDashboardScripts() {
         ws.onmessage = async (evt) => {
           const data = JSON.parse(evt.data);
           console.log('Live metrics update:', data);
-          // Dynamically refresh dashboard fragment without full reload
-          try {
-            const res = await fetch('/dashboard/fragment');
-            const html = await res.text();
-            const container = document.getElementById('dashboardContainer');
-            if (container) {
-              container.innerHTML = html;
-            } else {
-              console.error('dashboardContainer element not found');
-            }
-          } catch (err) {
-            console.error('Error refreshing fragment:', err);
-          }
+          await refreshDashboardFragment();
         };
 
-        // --- Polling as Fallback: Refresh dashboard fragment every 3 mins ---
+        // --- Polling as Fallback: Refresh dashboard fragment every 10 mins ---
         setInterval(async () => {
+          await refreshDashboardFragment();
+        }, 600000);
+
+        // Refresh dashboard fragment and reinitialize dynamic listeners.
+        async function refreshDashboardFragment() {
           try {
             const res = await fetch('/dashboard/fragment');
             const html = await res.text();
             const container = document.getElementById('dashboardContainer');
             if (container) {
               container.innerHTML = html;
+              // Re-bind any event listeners (including API forms and copy buttons)
+              initializeApiFormListeners();
+              // Recheck the API status immediately after refresh.
+              checkApiStatus();
             } else {
               console.error('dashboardContainer element not found');
             }
           } catch (err) {
             console.error('Error refreshing dashboard fragment:', err);
           }
-        }, 180000);
+        }
 
-        // --- DOMContentLoaded: Set up event listeners and delegation ---
+        // Re-bind event listeners for API forms and copy buttons.
+        function initializeApiFormListeners() {
+          // (Re-)bind copy button events.
+          document.querySelectorAll('.copy-button[data-target]').forEach((button) => {
+            // Remove existing listener to prevent duplicate binding.
+            button.removeEventListener('click', copyButtonHandler);
+            button.addEventListener('click', copyButtonHandler);
+          });
+        }
+
+        function copyButtonHandler(e) {
+          const targetId = e.currentTarget.dataset.target;
+          const resultDiv = document.getElementById(targetId);
+          const textToCopy = resultDiv.querySelector('.result-content').textContent || '';
+          navigator.clipboard.writeText(textToCopy);
+          const icon = e.currentTarget.querySelector('i');
+          icon.className = 'fas fa-check';
+          setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500);
+        }
+
+        // --- DOMContentLoaded: Set up initial event listeners ---
         document.addEventListener('DOMContentLoaded', () => {
-          // Menu toggle scripts
+          // Menu toggle scripts.
           const mobileMenuToggle = document.getElementById('mobileMenuToggle');
           const navLinks = document.getElementById('navLinks');
           if (mobileMenuToggle && navLinks) {
@@ -2880,7 +2950,6 @@ function getDashboardScripts() {
           }
 
           createMatrixBackground();
-          //createLabEffects();
           initParticles();
           initNetworkCardAnimations();
 
@@ -2908,7 +2977,7 @@ function getDashboardScripts() {
             });
           });
 
-          // Copy the generated key
+          // Copy the generated key.
           const copyBtn = document.getElementById('copyKeyButton');
           if (copyBtn) {
             copyBtn.addEventListener('click', () => {
@@ -2920,17 +2989,25 @@ function getDashboardScripts() {
           }
 
           // ========== Event Delegation for Form Submissions ==========
-          // This single listener handles both the SentimentScrub™ and TokenScrub™ forms.
+          // This listener handles both SentimentScrub™ and TokenScrub™ forms.
           document.body.addEventListener('submit', async (e) => {
             e.preventDefault();
             const form = e.target;
             if (form.id === 'sentimentTestForm') {
-              // Sentiment API test
+              const submitButton = form.querySelector('button[type="submit"]');
+              submitButton.disabled = true;
+              const loadingIndicator = form.querySelector('.loading-indicator');
+              const responseMeta = form.querySelector('.response-meta');
+              loadingIndicator.classList.remove('hidden');
+              responseMeta.classList.add('hidden');
+              
               const query = document.getElementById('sentimentQuery').value;
               const network = document.getElementById('sentimentNetwork').value;
               const apiKey = document.getElementById('sentimentApiKey').value;
               const resultDiv = document.getElementById('sentimentResult');
               const resultContent = resultDiv.querySelector('.result-content');
+              
+              const startTime = Date.now();
               try {
                 const response = await fetch('/api/v1/sentiment', {
                   method: 'POST',
@@ -2941,20 +3018,36 @@ function getDashboardScripts() {
                   body: JSON.stringify({ query, network })
                 });
                 const data = await response.json();
+                const elapsedTime = Date.now() - startTime;
                 resultContent.textContent = JSON.stringify(data, null, 2);
-                console.log(resultContent.textContent);
+                responseMeta.querySelector('.response-time').textContent = 'Response Time: ' + elapsedTime + ' ms';
+                responseMeta.querySelector('.status-code').textContent = 'Status: ' + response.status;
+                responseMeta.querySelector('.status-code').className = 'status-code ' + (response.ok ? 'healthy' : 'error');
+
                 resultDiv.classList.remove('hidden');
+                responseMeta.classList.remove('hidden');
               } catch (err) {
                 resultContent.textContent = JSON.stringify({ error: err.message }, null, 2);
                 resultDiv.classList.remove('hidden');
+              } finally {
+                loadingIndicator.classList.add('hidden');
+                submitButton.disabled = false;
               }
             } else if (form.id === 'tokenTestForm') {
-              // Token API test
+              const submitButton = form.querySelector('button[type="submit"]');
+              submitButton.disabled = true;
+              const loadingIndicator = form.querySelector('.loading-indicator');
+              const responseMeta = form.querySelector('.response-meta');
+              loadingIndicator.classList.remove('hidden');
+              responseMeta.classList.add('hidden');
+              
               const tokenAddr = document.getElementById('tokenAddress').value;
               const network = document.getElementById('tokenNetwork').value;
               const apiKey = document.getElementById('tokenApiKey').value;
               const resultDiv = document.getElementById('tokenResult');
               const resultContent = resultDiv.querySelector('.result-content');
+              
+              const startTime = Date.now();
               try {
                 const response = await fetch('/api/v1/token', {
                   method: 'POST',
@@ -2965,31 +3058,31 @@ function getDashboardScripts() {
                   body: JSON.stringify({ token: tokenAddr, network })
                 });
                 const data = await response.json();
+                const elapsedTime = Date.now() - startTime;
                 resultContent.textContent = JSON.stringify(data, null, 2);
+                responseMeta.querySelector('.response-time').textContent = 'Response Time: ' + elapsedTime + ' ms';
+                responseMeta.querySelector('.status-code').textContent = 'Status: ' + response.status;
+                responseMeta.querySelector('.status-code').className = 'status-code ' + (response.ok ? 'healthy' : 'error');
+                
                 resultDiv.classList.remove('hidden');
+                responseMeta.classList.remove('hidden');
               } catch (err) {
                 resultContent.textContent = JSON.stringify({ error: err.message }, null, 2);
                 resultDiv.classList.remove('hidden');
+              } finally {
+                loadingIndicator.classList.add('hidden');
+                submitButton.disabled = false;
               }
             }
           });
 
-          // ========== D) COPY RESULT TEXT ==========
-          document.querySelectorAll('.copy-button[data-target]').forEach((button) => {
-            const targetId = button.dataset.target;
-            button.addEventListener('click', () => {
-              const resultDiv = document.getElementById(targetId);
-              const textToCopy = resultDiv.querySelector('.result-content').textContent || '';
-              navigator.clipboard.writeText(textToCopy);
-              const icon = button.querySelector('i');
-              icon.className = 'fas fa-check';
-              setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500);
-            });
-          });
+
+          // Bind copy result text buttons.
+          initializeApiFormListeners();
 
           // ========== F) CHECK API STATUS AT LOAD ==========
           checkApiStatus();
-          setInterval(checkApiStatus, 600000); // 10 minutes
+          setInterval(checkApiStatus, 600000); // every 10 minutes
         });
 
         // --- Utility Functions ---
