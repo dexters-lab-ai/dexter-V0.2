@@ -1158,7 +1158,8 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
  * Provides better context tracking between steps
  */
 async executeMultiStepTask(initialFunctionCall, messages, userId, msg, executionContext = {}) {
-  const results = [];
+  const results = [];  
+  const executedTaskSignatures = new Set(); // NEW 16 March Update: Track executed task signatures
   const taskTree = this.buildTaskTree(null, initialFunctionCall);
   this.compareArguments = (args1, args2) => {
     try {
@@ -1178,6 +1179,12 @@ async executeMultiStepTask(initialFunctionCall, messages, userId, msg, execution
     steps: [],
     startTime: Date.now(),
     mainFunctionName: initialFunctionCall.name
+  };
+
+  // Helper: Create a unique signature for a task
+  const getTaskSignature = (task) => {
+    // Use JSON.stringify for simplicity; in production, consider a hash function.
+    return `${task.name}-${JSON.stringify(task.arguments)}`;
   };
 
   const executeTask = async (task) => {
@@ -1359,10 +1366,16 @@ async executeMultiStepTask(initialFunctionCall, messages, userId, msg, execution
   };
 
   for (const task of taskTree) {
+    const signature = getTaskSignature(task);
+    if (executedTaskSignatures.has(signature)) {
+      // Skip task if already executed.
+      console.log(`Skipping already executed task: ${signature}`);
+      continue;
+    }
     if (!results.find((r) => r.name === task.name && this.compareArguments(r.args, task.arguments))) {
-      await executeTask(task);
-      
-      // Clear the cancellation flag after each task so subsequent steps aren't blocked.
+      await executeTask(task, signature);
+      // Mark the task as executed
+      executedTaskSignatures.add(signature);
       this.userCancellations.delete(msg.chat.id);
     }
   }
