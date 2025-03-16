@@ -2814,7 +2814,6 @@ function getDashboardStyles() {
       .api-result.visible { display: block; }
 
       .api-result {
-        max-height: 300px;  /* Fixed height – adjust as needed */
         overflow-y: auto;
         width: 100%;
         box-sizing: border-box;
@@ -2836,7 +2835,7 @@ function getDashboardStyles() {
 
       /* API Scrub Result area scrollable */
       .api-result .result-content {
-        max-height: 300px;  /* Adjust height as needed */
+        max-height: 800px;  /* Adjust height as needed */
         overflow-y: auto;
       }
 

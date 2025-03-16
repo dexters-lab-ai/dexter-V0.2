@@ -1267,13 +1267,11 @@ export const AIFunctions = [
         parameters: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["create", "update", "delete"] },
-            username: { type: "string", description: "Gmail username" },
-            password: { type: "string", description: "Gmail password" }
+            action: { type: "string", enum: ["create", "update", "delete"], description: "Action to perform: create (link), update (re-authorize), or delete (unlink)" },
           },
           required: ["action"]
         }
-      },
+      },      
 
       {
         name: "manage_calendar_event",

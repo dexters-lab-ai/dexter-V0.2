@@ -1358,12 +1358,6 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
 
   /**
    * getFunctionResponse
-   * -------------------
-   * Incorporates the function result into a new GPT prompt,
-   * compresses large results, calls openAI to see if there's a next function.
-   */
-  /**
-   * getFunctionResponse
    * --------------------
    * After a function call, decide whether follow-up functions are needed.
    * Only use recent context (trimmed messages) and a short directive.

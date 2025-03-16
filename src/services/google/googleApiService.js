@@ -1,7 +1,5 @@
-// services/googleApiService.js
 import { google } from 'googleapis';
 import { User } from '../../models/User.js';
-import { decrypt } from '../../utils/encryption.js';
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -12,23 +10,19 @@ function createOAuth2Client() {
 }
 
 /**
- * Returns an authorized OAuth2 client for the user by decrypting their tokens.
+ * Returns an authorized OAuth2 client for a user by decrypting stored tokens.
  */
 export async function getAuthorizedClient(telegramId) {
   const user = await User.findOne({ telegramId });
   if (!user) throw new Error(`User not found for telegramId=${telegramId}`);
-
   const tokens = user.getDecryptedGoogleTokens();
   if (!tokens.refresh_token) {
     throw new Error("User has not completed OAuth or has no refresh token.");
   }
-
   const oAuth2Client = createOAuth2Client();
   oAuth2Client.setCredentials(tokens);
-
-  // Attempt to refresh if needed
+  // Listen for token updates and store them
   oAuth2Client.on('tokens', async (newTokens) => {
-    // If we get new tokens, update user doc
     if (newTokens.refresh_token) {
       tokens.refresh_token = newTokens.refresh_token;
     }
@@ -40,6 +34,5 @@ export async function getAuthorizedClient(telegramId) {
     }
     await user.setGoogleTokens(tokens);
   });
-
   return oAuth2Client;
 }

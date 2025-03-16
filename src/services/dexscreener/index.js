@@ -334,6 +334,7 @@ class DexScreenerService {
       if (rawResponse?.pairs?.length > 0) {
         const tokenData = rawResponse.pairs[0];
         const priceUsd = parseFloat(tokenData.priceUsd);
+        console.log('==== PRICE USD ====:', JSON.stringify(priceUsd, null, 2));
         if (!isNaN(priceUsd) && priceUsd > 0) {
           console.log(`✅ Found price on DexScreener for ${query}: $${priceUsd}`);
           return priceUsd;

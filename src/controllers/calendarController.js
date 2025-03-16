@@ -1,41 +1,35 @@
 import { google } from 'googleapis';
-import { getAuthorizedClient } from '../services/google/googleAPIService.js';
+import { getAuthorizedClient } from '../services/google/googleAPIservice.js';
 
 /**
- * Manage a calendar event: create, update, or delete
+ * Manage a calendar event (create, update, delete).
  */
 export async function manageCalendarEvent(req, res) {
   const { telegramId, action, eventId, title, startTime, endTime, description } = req.body;
-
   try {
     const oAuth2Client = await getAuthorizedClient(telegramId);
     const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
-
     switch (action) {
       case 'create': {
         if (!title || !startTime || !endTime) {
           return res.status(400).json({ error: "Missing required fields (title, startTime, endTime)" });
         }
-
         const event = {
           summary: title,
           start: { dateTime: startTime },
           end: { dateTime: endTime },
           description
         };
-
         const { data } = await calendar.events.insert({
           calendarId: 'primary',
           requestBody: event
         });
         return res.json({ success: true, event: data });
       }
-
       case 'update': {
         if (!eventId) {
           return res.status(400).json({ error: "eventId is required for update" });
         }
-        // Load existing
         const existing = await calendar.events.get({ calendarId: 'primary', eventId });
         const updatedEvent = {
           ...existing.data,
@@ -51,7 +45,6 @@ export async function manageCalendarEvent(req, res) {
         });
         return res.json({ success: true, event: data });
       }
-
       case 'delete': {
         if (!eventId) {
           return res.status(400).json({ error: "eventId is required for delete" });
@@ -59,7 +52,6 @@ export async function manageCalendarEvent(req, res) {
         await calendar.events.delete({ calendarId: 'primary', eventId });
         return res.json({ success: true, message: "Event deleted" });
       }
-
       default:
         return res.status(400).json({ error: "Invalid action. Use create, update, or delete." });
     }
@@ -70,14 +62,13 @@ export async function manageCalendarEvent(req, res) {
 }
 
 /**
- * (Optional) Retrieve the user's upcoming events
+ * List upcoming calendar events.
  */
 export async function listCalendarEvents(req, res) {
   const { telegramId, maxResults = 10 } = req.body;
   try {
     const oAuth2Client = await getAuthorizedClient(telegramId);
     const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
-
     const now = new Date().toISOString();
     const { data } = await calendar.events.list({
       calendarId: 'primary',
@@ -86,7 +77,6 @@ export async function listCalendarEvents(req, res) {
       singleEvents: true,
       orderBy: 'startTime'
     });
-
     res.json({ success: true, events: data.items });
   } catch (error) {
     console.error("Error listing calendar events:", error);

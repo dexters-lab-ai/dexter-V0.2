@@ -34,7 +34,7 @@ import { pumpFunService } from '../../pumpfun/PumpFunService.js';
 import { networkScraper } from '../../fireCrawl/fireCrawl.js';
 
 // Google & SolanaPay
-import { sendEmail, searchEmails, replyEmail, readEmail } from '../../../controllers/gmailController.js';
+import { manageUserGoogleSettings, sendEmail, searchEmails, replyEmail, readEmail } from '../../../controllers/gmailController.js';
 import { manageCalendarEvent, listCalendarEvents } from '../../../controllers/calendarController.js';
 import { solanaPayService } from '../../solanaPay/SolanaPayService.js';
 import { recurringPaymentService } from '../../recurringPayments/RecurringPayments.js';
@@ -1763,154 +1763,175 @@ export class IntentProcessor extends EventEmitter {
       type: 'history'
     };
   }
-
-  // Google, TWilio, Nodemailer
-  async manageUserGmailSettings({ userId, action, username, password }) {
-    // Load user
-    const user = await User.findOne({ telegramId: userId });
-    if (!user) {
-      return { success: false, message: `User not found for user = ${userId}` };
-    }
   
-    switch (action) {
-      case 'create':
-      case 'update':
-        if (!username || !password) {
-          return { success: false, message: "Username and password are required for create/update." };
-        }
-        // Encrypt the password
-        const passwordHashed = encrypt(password);
-        user.gmailSettings.username = username;
-        user.gmailSettings.password = passwordHashed;
-        await user.save();
-        return { success: true, action, message: "Gmail settings saved/updated." };
-  
-      case 'delete':
-        user.gmailSettings.username = "";
-        user.gmailSettings.password = "";
-        await user.save();
-        return { success: true, action, message: "Gmail settings removed." };
-  
-      default:
-        return { success: false, message: `Unsupported action: ${action}` };
-    }
-  }  
-
   // Google API Methods
   async manageUserGmailSettings(userId, args) {
-    try {
-      const { action, username, password } = args;
-      const user = await User.findOne({ telegramId: userId });
-      if (!user) {
-        return { success: false, message: "User not found" };
-      }
+    return new Promise(async (resolve, reject) => {
+      // Extract only the "action" property as per your schema.
+      const { action } = args;
+      // Create a simulated req object
+      const req = { body: { telegramId: userId, action } };
+      // Create a dummy res object
+      const res = {
+        json: (data) => resolve(data),
+        status: (code) => ({
+          json: (errorData) => reject(new Error(errorData.error || JSON.stringify(errorData)))
+        })
+      };
   
-      const result = await gmailController.manageSettings({
-        body: { telegramId: userId, action, username, password },
-      });
-      return result;
-    } catch (error) {
-      console.error("Error managing Gmail settings:", error);
-      return { success: false, message: `Error managing Gmail settings: ${error.message}` };
-    }
-  }  
+      try {
+        await manageUserGoogleSettings(req, res);
+      } catch (error) {
+        console.error("Error managing Gmail settings:", error);
+        reject(error);
+      }
+    });
+  }    
 
   async manageCalendarEvent(userId, args) {
-    try {
+    return new Promise(async (resolve, reject) => {
       const { action, eventId, title, startTime, endTime, description } = args;
+      // Optionally check that the user exists before calling the controller.
       const user = await User.findOne({ telegramId: userId });
       if (!user) {
-        return { success: false, message: "User not found" };
+        return reject(new Error("User not found"));
       }
+      // Create a simulated request object
+      const req = {
+        body: { telegramId: userId, action, eventId, title, startTime, endTime, description }
+      };
+      // Create a simulated response object with json() and status().json() methods
+      const res = {
+        json: (data) => resolve(data),
+        status: (code) => ({
+          json: (errorData) => reject(new Error(errorData.error || JSON.stringify(errorData)))
+        })
+      };
   
-      const result = await manageCalendarEvent({
-        body: { telegramId: userId, action, eventId, title, startTime, endTime, description },
-      });
-      return result;
-    } catch (error) {
-      console.error("Error managing calendar event:", error);
-      return { success: false, message: `Error managing calendar event: ${error.message}` };
-    }
-  }  
-
+      try {
+        await manageCalendarEvent(req, res);
+      } catch (error) {
+        console.error("Error managing calendar event:", error);
+        reject(error);
+      }
+    });
+  }   
+  
   async listCalendarEvent(userId, args) {
-    try {
-      const user = await User.findOne({ telegramId: userId });
-      if (!user) {
-        return { success: false, message: "User not found" };
+    return new Promise(async (resolve, reject) => {
+      try {
+        const user = await User.findOne({ telegramId: userId });
+        if (!user) {
+          return reject(new Error("User not found"));
+        }
+        // Build simulated req object
+        const req = { body: { telegramId: userId, maxResults: args.maxResults || 10 } };
+        // Build simulated res object
+        const res = {
+          json: (data) => resolve(data),
+          status: (code) => ({
+            json: (errorData) => reject(new Error(errorData.error || JSON.stringify(errorData)))
+          })
+        };
+        await listCalendarEvents(req, res);
+      } catch (error) {
+        console.error("Error listing calendar events:", error);
+        reject(error);
       }
-  
-      const result = await listCalendarEvents({ body: { telegramId: userId, maxResults: 10 } });
-      return result;
-    } catch (error) {
-      console.error("Error listing calendar events:", error);
-      return { success: false, message: `Error listing calendar events: ${error.message}` };
-    }
+    });
   }
-  
+
   async sendEmail(userId, args) {
-    try {
-      const { to, subject, text, html } = args;
-      const user = await User.findOne({ telegramId: userId });
-      if (!user) {
-        return { success: false, message: "User not found" };
+    return new Promise(async (resolve, reject) => {
+      try {
+        const { to, subject, text, html } = args;
+        const user = await User.findOne({ telegramId: userId });
+        if (!user) {
+          return reject(new Error("User not found"));
+        }
+        const req = { body: { telegramId: userId, to, subject, text, html } };
+        const res = {
+          json: (data) => resolve(data),
+          status: (code) => ({
+            json: (errorData) => reject(new Error(errorData.error || JSON.stringify(errorData)))
+          })
+        };
+        await sendEmail(req, res);
+      } catch (error) {
+        console.error("Error sending email:", error);
+        reject(error);
       }
-  
-      const result = await sendEmail({ body: { telegramId: userId, to, subject, text, html } });
-      return result;
-    } catch (error) {
-      console.error("Error sending email:", error);
-      return { success: false, message: `Error sending email: ${error.message}` };
-    }
+    });
   }
-  
+
   async searchEmails(userId, args) {
-    try {
-      const { query, maxResults } = args;
-      const user = await User.findOne({ telegramId: userId });
-      if (!user) {
-        return { success: false, message: "User not found" };
+    return new Promise(async (resolve, reject) => {
+      try {
+        const { query, maxResults } = args;
+        const user = await User.findOne({ telegramId: userId });
+        if (!user) {
+          return reject(new Error("User not found"));
+        }
+        const req = { body: { telegramId: userId, query, maxResults } };
+        const res = {
+          json: (data) => resolve(data),
+          status: (code) => ({
+            json: (errorData) => reject(new Error(errorData.error || JSON.stringify(errorData)))
+          })
+        };
+        await searchEmails(req, res);
+      } catch (error) {
+        console.error("Error searching emails:", error);
+        reject(error);
       }
-  
-      const result = await searchEmails({ body: { telegramId: userId, query, maxResults } });
-      return result;
-    } catch (error) {
-      console.error("Error searching emails:", error);
-      return { success: false, message: `Error searching emails: ${error.message}` };
-    }
+    });
   }
-  
+
   async readEmail(userId, args) {
-    try {
-      const { messageId, format } = args;
-      const user = await User.findOne({ telegramId: userId });
-      if (!user) {
-        return { success: false, message: "User not found" };
+    return new Promise(async (resolve, reject) => {
+      try {
+        const { messageId, format } = args;
+        const user = await User.findOne({ telegramId: userId });
+        if (!user) {
+          return reject(new Error("User not found"));
+        }
+        const req = { body: { telegramId: userId, messageId, format } };
+        const res = {
+          json: (data) => resolve(data),
+          status: (code) => ({
+            json: (errorData) => reject(new Error(errorData.error || JSON.stringify(errorData)))
+          })
+        };
+        await readEmail(req, res);
+      } catch (error) {
+        console.error("Error reading email:", error);
+        reject(error);
       }
-  
-      const result = await readEmail({ body: { telegramId: userId, messageId, format } });
-      return result;
-    } catch (error) {
-      console.error("Error reading email:", error);
-      return { success: false, message: `Error reading email: ${error.message}` };
-    }
+    });
   }
-  
+
   async replyEmail(userId, args) {
-    try {
-      const { threadId, messageId, body } = args;
-      const user = await User.findOne({ telegramId: userId });
-      if (!user) {
-        return { success: false, message: "User not found" };
+    return new Promise(async (resolve, reject) => {
+      try {
+        const { threadId, messageId, body } = args;
+        const user = await User.findOne({ telegramId: userId });
+        if (!user) {
+          return reject(new Error("User not found"));
+        }
+        const req = { body: { telegramId: userId, threadId, messageId, body } };
+        const res = {
+          json: (data) => resolve(data),
+          status: (code) => ({
+            json: (errorData) => reject(new Error(errorData.error || JSON.stringify(errorData)))
+          })
+        };
+        await replyEmail(req, res);
+      } catch (error) {
+        console.error("Error replying to email:", error);
+        reject(error);
       }
-  
-      const result = await replyEmail({ body: { telegramId: userId, threadId, messageId, body } });
-      return result;
-    } catch (error) {
-      console.error("Error replying to email:", error);
-      return { success: false, message: `Error replying to email: ${error.message}` };
-    }
-  }  
+    });
+  }
 
   // SolanaPay Methods
   async createSolanaPayment(args) {
