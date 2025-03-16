@@ -3,6 +3,10 @@ import { getAuthorizedClient } from '../services/google/googleAPIservice.js';
 import { User } from '../models/User.js';
 
 export async function manageUserGoogleSettings(req, res) {
+  
+  // Determine the base URL dynamically
+  const baseUrl = global.ngrokUrl || process.env.BASE_URL || 'http://localhost:80';
+  
   const { telegramId, action } = req.body;
   if (!telegramId) {
     return res.status(400).json({ error: 'Missing telegramId' });
@@ -14,13 +18,13 @@ export async function manageUserGoogleSettings(req, res) {
     }
     switch (action) {
       case 'create': {
-        // Instruct the client to initiate OAuth flow for linking.
-        const oauthUrl = `/api/google/auth?telegramId=${encodeURIComponent(telegramId)}`;
+        // Return an absolute URL for initiating OAuth flow
+        const oauthUrl = `${baseUrl}/api/google/auth?telegramId=${encodeURIComponent(telegramId)}`;
         return res.json({ message: 'Please re-link your Google account via OAuth.', oauthUrl });
       }
       case 'update': {
-        // For update, force re-authorization.
-        const updateUrl = `/api/google/auth?telegramId=${encodeURIComponent(telegramId)}`;
+        // Force re-authorization using the absolute URL
+        const updateUrl = `${baseUrl}/api/google/auth?telegramId=${encodeURIComponent(telegramId)}`;
         return res.json({ message: 'To update your Google settings, please re-authorize your account.', oauthUrl: updateUrl });
       }
       case 'delete': {
@@ -83,13 +87,55 @@ export async function searchEmails(req, res) {
     const { telegramId, query = '', maxResults = 10 } = req.body;
     const oAuth2Client = await getAuthorizedClient(telegramId);
     const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
-    const response = await gmail.users.messages.list({
+    
+    // Get list of messages matching the query.
+    const listResponse = await gmail.users.messages.list({
       userId: 'me',
       q: query,
       maxResults
     });
-    const messages = response.data.messages || [];
-    res.json({ success: true, messages });
+    const messages = listResponse.data.messages || [];
+    
+    // Helper: Trim text to a maximum length.
+    const trimText = (text, maxLen = 100) => {
+      return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
+    };
+
+    // For each message, fetch full details and extract rich information.
+    const richResults = await Promise.all(messages.map(async (msg) => {
+      try {
+        const messageResponse = await gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id,
+          format: 'full'
+        });
+        const fullMessage = messageResponse.data;
+
+        // Extract subject from headers.
+        let subject = "";
+        if (fullMessage.payload && fullMessage.payload.headers) {
+          const subjectHeader = fullMessage.payload.headers.find(header => header.name.toLowerCase() === 'subject');
+          if (subjectHeader) subject = subjectHeader.value;
+        }
+        
+        // Use Gmail's snippet and trim it to a maximum of 100 characters.
+        let summary = fullMessage.snippet ? trimText(fullMessage.snippet, 100) : "";
+        
+        // Alternatively, if you want to extract from the HTML part, you can add similar logic
+        // as in your readEmail function—but this example uses the snippet.
+
+        return {
+          id: fullMessage.id,
+          subject,
+          summary
+        };
+      } catch (error) {
+        console.error(`Error fetching message ${msg.id}:`, error);
+        return { id: msg.id, error: error.message };
+      }
+    }));
+
+    res.json({ success: true, messages: richResults });
   } catch (error) {
     console.error("Error searching emails:", error);
     res.status(500).json({ error: error.message });

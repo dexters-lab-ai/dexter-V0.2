@@ -431,9 +431,9 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
           function_call: "auto",
           functions: this.functions,
           max_tokens: 500,
-          temperature: 0.2,
+          temperature: 0.3,
           top_p: 1,
-          frequency_penalty: 0,
+          frequency_penalty: 0.3,
           presence_penalty: 0,
           n: 1,
         });
@@ -456,9 +456,9 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
             function_call: "auto",
             functions: this.functions,
             max_tokens: 500,
-            temperature: 0.2,
+            temperature: 0.3,
             top_p: 1,
-            frequency_penalty: 0,
+            frequency_penalty: 0.3,
             presence_penalty: 0,
             n: 1,
           });
@@ -1372,7 +1372,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
     }
 
     try {
-      const maxLength = 5000;
+      const maxLength = 7000;
       const resultStr = JSON.stringify(stepResult);
       const compressed = resultStr.length > maxLength ?
         resultStr.slice(0, maxLength) + `\n\n⚠️ [Carry over Results from ${resultStr.length} chars]` :

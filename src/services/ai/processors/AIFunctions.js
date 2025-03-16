@@ -1307,7 +1307,7 @@ export const AIFunctions = [
 
       {
         name: "search_emails",
-        description: "Search a user's Gmail by text or labels using OAuth credentials",
+        description: "Search user emails. Emails from Gmail are returned in a list of objects, each containing the messageId, threadId, and snippet of the email.",
         parameters: {
           type: "object",
           properties: {
@@ -1320,7 +1320,7 @@ export const AIFunctions = [
 
       {
         name: "read_email",
-        description: "Retrieve a specific email by messageId or threadId from the user's Gmail",
+        description: "Retrieve a specific email from user's Gmail account by messageId or threadId. Iterate or search emails first if no Id is available. Fetch all if ids are iterable",
         parameters: {
           type: "object",
           properties: {

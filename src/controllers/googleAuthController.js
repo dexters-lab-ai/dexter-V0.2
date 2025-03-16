@@ -2,9 +2,12 @@ import { google } from 'googleapis';
 import { User } from '../models/User.js';
 import { config } from '../core/config.js';
 
+// Client credentials from config remain unchanged.
 const CLIENT_ID = config.googleClientID;
 const CLIENT_SECRET = config.googleClientSecret;
-const REDIRECT_URI = config.googleClientRedirect; // "https://dail.ngrok.com/api/google/callback"
+
+// Define your desired callback path.
+const CALLBACK_PATH = '/api/google/callback';
 
 // Scopes for Gmail and Calendar
 const SCOPES = [
@@ -13,14 +16,24 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar'
 ];
 
+/**
+ * Dynamically creates an OAuth2 client with the current base URL.
+ * Uses global.ngrokUrl if available, or falls back to config.googleClientRedirect.
+ */
 function createOAuth2Client() {
-  return new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+  // Determine the base URL dynamically.
+  // Ensure that your config.googleClientRedirect is a valid fallback URL (e.g. "https://dail-agent.ngrok.app")
+  const baseUrl = global.ngrokUrl || config.googleClientRedirect;
+  // Append the callback path.
+  const redirectUri = baseUrl + CALLBACK_PATH;
+  return new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, redirectUri);
 }
 
 /**
  * Initiate Google OAuth2: redirect to Google consent screen.
  */
 export function initiateGoogleAuth(req, res) {
+  console.log("Initiate OAuth called with query:", req.query);
   const { telegramId } = req.query;
   if (!telegramId) {
     return res.status(400).send("Missing telegramId");
@@ -30,8 +43,10 @@ export function initiateGoogleAuth(req, res) {
   const url = oAuth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: SCOPES,
-    state
+    state,
+    prompt: 'consent' // Force re-consent to get a refresh token
   });
+  console.log("Redirecting to:", url);
   res.redirect(url);
 }
 
@@ -39,6 +54,7 @@ export function initiateGoogleAuth(req, res) {
  * Handle OAuth callback: exchange code for tokens and store them.
  */
 export async function handleGoogleCallback(req, res) {
+  console.log("Callback called with query:", req.query);
   const code = req.query.code;
   const state = req.query.state;
   if (!code) {
