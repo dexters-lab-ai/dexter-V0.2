@@ -1,3 +1,5 @@
+import { query } from "express";
+
 export const AIFunctions = [
     // Switch AI Model
     {
@@ -645,13 +647,18 @@ export const AIFunctions = [
         parameters: {
           type: "object",
           properties: {
-            network: {
+            query: {
               type: "string",
               enum: ["ethereum", "base", "solana", "avalanche"],
-              description: "The blockchain network to fetch trending tokens for."
+              description: "The blockchain network to fetch trending tokens for. When using query parameter, make sure to omit queries paramater for single processing to avoid conflict."
+            },
+            queries: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of search terms for batch processing, e.g., ['ethereum', 'solana', 'base', 'avalanche']. When using queries parameter make sure to omit query parameter."
             }
           },
-          required: ["network"]
+          required: []
         }
       }, 
   
@@ -1559,12 +1566,17 @@ export const AIFunctions = [
         parameters: {
           type: "object",
           properties: {
-            url: {
+            query: {
               type: "string",
-              description: "The URL to scrape."
+              description: "The URL to scrape. When using query paramater, make sure to omit queries paramater to avoid conflicts"
+            },
+            queries: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of search URLs to scrape. Useful for batch processing multiple URLs. When using queries parameter make sure to omit query parameter."
             }
           },
-          required: ["url"]
+          required: []
         }
       },      
 

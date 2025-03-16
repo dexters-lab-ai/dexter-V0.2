@@ -49,49 +49,6 @@ export class HelperFunctions {
   }  
 
   /**
-   * Validate or gather missing params from user
-   */
-  async validateFollowUpParameters(functionName, args, userId, msg) {
-    let parsed;
-    
-    // Log the raw arguments received
-    // console.log("🟢 Received arguments:", { functionName, args, userId, chatId: msg.chat?.id });
-  
-    try {
-      // Parse the arguments
-      parsed = typeof args === "string" ? JSON.parse(args) : { ...args };
-  
-      // Log the parsed arguments
-     // console.log("🟢 Parsed arguments:", { functionName, parsed });
-    } catch (parseErr) {
-      console.error("❌ Failed to parse arguments:", parseErr.message, { args });
-      throw new Error(`Invalid JSON arguments for '${functionName}': ${parseErr.message}`);
-    }
-  
-    try {
-      // Validate required parameters
-      this.validateRequiredParameters(functionName, parsed);
-  
-      // Log validation success
-      // console.log("✅ Parameters validated for:", { functionName, parsed });
-  
-      return parsed;
-    } catch (err) {
-      console.error("❌ Parameter validation failed:", err.message);
-  
-      const match = err.message.match(/Missing required parameters for '.*?': (.+)/);
-      if (!match) throw err; // It's some other error, re-throw
-  
-      const missingParams = match[1].split(", ").map((x) => x.trim());
-  
-      // Log missing parameters
-      console.log("⚠️ Missing parameters detected:", { missingParams });
-  
-      return await this.handleMissingParameters(functionName, parsed, missingParams, msg);
-    }
-  }  
-
-  /**
    * Dynamically ask user for missing fields
    */
   async handleMissingParameters(fnName, args, missing, msg) {
@@ -144,6 +101,60 @@ export class HelperFunctions {
 
   
   /**
+   * validateFollowUpParameters
+   * --------------------------
+   * Ensures that follow-up function parameters are valid and complete.
+   * If parameters are missing or invalid, applies smart defaults or throws helpful errors.
+   */
+  async validateFollowUpParameters(functionName, args, userId, msg) {
+    try {
+      // Log the raw arguments received
+      console.log("🟢 Received arguments:", { functionName, args, userId, chatId: msg.chat?.id });
+
+      // Parse the arguments
+      let parsed;
+      try {
+        parsed = typeof args === "string" ? this.safeParseJSON(args) : { ...args };
+      } catch (parseErr) {
+        console.error("❌ Failed to parse arguments:", parseErr.message, { args });
+        throw new Error(`Invalid JSON arguments for '${functionName}': ${parseErr.message}`);
+      }
+      console.log("🟢 Parsed arguments:", { functionName, parsed });
+
+      try {
+        // Validate required parameters
+        this.validateRequiredParameters(functionName, parsed);
+        console.log("✅ Parameters validated for:", { functionName, parsed });
+        return parsed;
+      } catch (err) {
+        console.error("❌ Parameter validation failed:", err.message);
+
+        const match = err.message.match(/Missing required parameters for '.*?': (.+)/);
+        if (!match) throw err; // It's some other error, re-throw
+
+        const missingParams = match[1].split(", ").map((x) => x.trim());
+        console.log("⚠️ Missing parameters detected:", { missingParams });
+
+        // First try to derive missing parameters from context
+        try {
+          const derivedParams = await this.deriveParametersFromContext(functionName, missingParams, userId, msg);
+          const updatedParams = { ...parsed, ...derivedParams };
+          
+          // Revalidate with derived parameters
+          this.validateRequiredParameters(functionName, updatedParams);
+          return updatedParams;
+        } catch (derivationErr) {
+          // If context derivation fails, fall back to prompting the user
+          return await this.handleMissingParameters(functionName, parsed, missingParams, msg);
+        }
+      }
+    } catch (parseErr) {
+      console.error("❌ Failed to parse arguments:", parseErr.message, { args });
+      throw new Error(`Invalid JSON arguments for '${functionName}': ${parseErr.message}`);
+    }
+  }
+  
+  /**
    * buildTaskTree
    * -------------
    * Creates a multi-step task array from the initial function call,
@@ -154,7 +165,7 @@ export class HelperFunctions {
     if (!initialFunctionCall || !initialFunctionCall.name) {
       throw new Error("Invalid initial function call: missing 'name'.");
     }
-  
+
     // Common single-task fallback
     const singleTask = [
       {
@@ -163,7 +174,7 @@ export class HelperFunctions {
         arguments: initialFunctionCall.arguments || "{}"
       }
     ];
-  
+
     // Parse the function arguments
     let args;
     try {
@@ -172,9 +183,9 @@ export class HelperFunctions {
       console.warn("buildTaskTree: Could not parse arguments, fallback to singleTask.");
       return singleTask;
     }
-  
+
     const fnName = initialFunctionCall.name;
-  
+
     // Check if arguments has an array we want to split
     // We'll do a helper function:
     function createRepeatedSubTasks(arrayOfItems, baseFunctionName, paramName) {
@@ -194,112 +205,152 @@ export class HelperFunctions {
         alias: `${baseFunctionName}_${idx}` // optional alias
       }));
     }
-  
+
     // We'll detect if the user wants repeated calls.
     // For example, user calls "search_internet" with an array of queries.
     // Or "fetch_token_price_in_usd" with multiple queries, etc.
-  
+
     // 1) For "search_internet"
     if (
       (fnName === "search_internet" && Array.isArray(args.queries)) ||
       (fnName === "fetch_token_price_in_usd" && Array.isArray(args.queries)) ||
       (fnName === "token_price_coingecko" && Array.isArray(args.queries)) ||
       (fnName === "analyze_token_by_symbol" && Array.isArray(args.queries)) ||
-      (fnName === "analyze_token_by_address" && Array.isArray(args.queries)) 
+      (fnName === "analyze_token_by_address" && Array.isArray(args.queries)) ||
+      (fnName === "fetch_trending_tokens_by_chain" && Array.isArray(args.queries)) 
     ) {
       let paramName = "query";
       let items = args.queries;
       return createRepeatedSubTasks(items, fnName, paramName);
     }
-  
+
     // If none of the above pattern matches or no array => fallback single
     return singleTask;
   }
+    
+    /**
+     * Format an object/array to string, handle large data
+     */
+    /**
+     * Send a message in HTML, splitting into multiple messages if text > 4096 chars.
+    */
+    async sendMessageWithLimit(chatId, text, parseMode = "HTML") {
+      const chunkSize = MAX_TELEGRAM_CHARS;
+      let start = 0;
+      while (start < text.length) {
+        const chunk = text.slice(start, start + chunkSize);
+        await this.bot.sendMessage(chatId, chunk, { parse_mode: parseMode });
+        start += chunkSize;
+      }
+    }
+
+    /**
+     * formatResultForDisplay
+     * 
+     * Moved from old code, no markdown escaping. 
+     * If you want to protect HTML, do an optional escapeHtml.
+     */
+    formatResultForDisplay(result) {
+      const limit = 200;
+      if (result == null) return "Oops, No data to format for display.";
+
+      const processValue = (val, path = "") => {
+        if (val == null) return "null";
+
+        if (Array.isArray(val)) {
+          if (val.length > limit) {
+            return `[${val.slice(0, limit).map((x, i) => processValue(x, `${path}[${i}]`)).join(", ")}] ... truncated`;
+          }
+          return `[${val.map((x, i) => processValue(x, `${path}[${i}]`)).join(", ")}]`;
+        }
+
+        if (typeof val === "object") {
+          const entries = Object.entries(val);
+          if (entries.length > limit) {
+            const partial = entries.slice(0, limit).reduce((acc, [k, v]) => {
+              acc[k] = processValue(v, `${path}.${k}`);
+              return acc;
+            }, {});
+            return JSON.stringify(partial, null, 2) + " ... truncated";
+          }
+          return entries
+            .map(([k, v]) => `${k}: ${processValue(v, `${path}.${k}`)}`)
+            .join("\n");
+        }
+
+        // Otherwise string/number/bool
+        return String(val);
+      };
+
+      if (typeof result === "object") {
+        return processValue(result, "");
+      }
+      return String(result);
+    }
+
+  /* ============================================================
+     === Utility Functions: Safe Object Access & JSON Parsing ===
+     ============================================================ */
+
+    safeGet(obj, path, defaultValue = null) {
+      if (!obj) return defaultValue;
+      const keys = Array.isArray(path) ? path : path.split('.');
+      let result = obj;
+      for (const key of keys) {
+        if (result == null || typeof result !== 'object') return defaultValue;
+        result = result[key];
+        if (result === undefined) return defaultValue;
+      }
+      return result === undefined ? defaultValue : result;
+    }
+  
+    safeParseJSON(text, defaultValue = {}) {
+      if (!text || typeof text !== 'string') {
+        return defaultValue;
+      }
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        console.warn('Failed to parse JSON:', error.message);
+        return defaultValue;
+      }
+    }
   
   /**
-   * Format an object/array to string, handle large data
+   * Creates a fallback response when a task fails.
+   * @param {string} functionName - The function that failed.
+   * @param {object} args - The arguments passed to the function.
+   * @param {Error} error - The error that occurred.
+   * @returns {object} A standardized response object with a text field.
    */
-  /**
-   * Send a message in HTML, splitting into multiple messages if text > 4096 chars.
-  */
-  async sendMessageWithLimit(chatId, text, parseMode = "HTML") {
-    const chunkSize = MAX_TELEGRAM_CHARS;
-    let start = 0;
-    while (start < text.length) {
-      const chunk = text.slice(start, start + chunkSize);
-      await this.bot.sendMessage(chatId, chunk, { parse_mode: parseMode });
-      start += chunkSize;
-    }
-  }
-
-  /**
-   * formatResultForDisplay
-   * 
-   * Moved from old code, no markdown escaping. 
-   * If you want to protect HTML, do an optional escapeHtml.
-   */
-  formatResultForDisplay(result) {
-    const limit = 200;
-    if (result == null) return "Oops, No data to format for display.";
-
-    const processValue = (val, path = "") => {
-      if (val == null) return "null";
-
-      if (Array.isArray(val)) {
-        if (val.length > limit) {
-          return `[${val.slice(0, limit).map((x, i) => processValue(x, `${path}[${i}]`)).join(", ")}] ... truncated`;
-        }
-        return `[${val.map((x, i) => processValue(x, `${path}[${i}]`)).join(", ")}]`;
-      }
-
-      if (typeof val === "object") {
-        const entries = Object.entries(val);
-        if (entries.length > limit) {
-          const partial = entries.slice(0, limit).reduce((acc, [k, v]) => {
-            acc[k] = processValue(v, `${path}.${k}`);
-            return acc;
-          }, {});
-          return JSON.stringify(partial, null, 2) + " ... truncated";
-        }
-        return entries
-          .map(([k, v]) => `${k}: ${processValue(v, `${path}.${k}`)}`)
-          .join("\n");
-      }
-
-      // Otherwise string/number/bool
-      return String(val);
+  createFallbackTaskResult(functionName, args, error) {
+    return {
+      status: "error",
+      function: functionName,
+      errorMessage: error.message,
+      text: `I encountered an issue while executing ${functionName}, but I'll continue with the remaining tasks.`,
+      timestamp: new Date().toISOString(),
+      args: args
     };
-
-    if (typeof result === "object") {
-      return processValue(result, "");
-    }
-    return String(result);
   }
 
-  /**
-   * formatResults
-   * -------------
-   * Formats and trims the combined results from multiple tasks.
-   * If there are multiple objects or arrays, trims the last third.
-   * Ensures that the final summary is concise and within desired limits.
-   */
+  /* ============================================================
+      === Results Formatting: Always Return a String Result    ===
+      ============================================================ */
+
   formatResults(resultsArray) {
-    if (!Array.isArray(resultsArray) || resultsArray.length === 0) {
+    if (!resultsArray || !Array.isArray(resultsArray) || resultsArray.length === 0) {
       return "⚠️ No results to display.";
     }
-
-    // Check if there are multiple objects/arrays
-    if (resultsArray.length > 1) {
-      return resultsArray;
-    }
-
-    // If only one result, format it accordingly
-    const singleResult = resultsArray[0];
-    if (typeof singleResult === 'object') {
-      return JSON.stringify(singleResult, null, 2);
-    }
-    return singleResult.toString();
-  }
+    return resultsArray
+      .filter(r => r != null)
+      .map(r =>
+        typeof r === 'string'
+          ? r
+          : (r.text ? String(r.text) : JSON.stringify(r))
+      )
+      .join('\n\n');
+  }  
 
   /**
    * notifyUserWithRetry

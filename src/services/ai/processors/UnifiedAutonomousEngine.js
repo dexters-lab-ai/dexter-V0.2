@@ -241,7 +241,7 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         { role: "system", content: `User ID: ${userId}.` },
         ...cleanedContext,
       ];
-
+  
       console.log("*******  ***  R.E.S.T.O.R.E. *********:", JSON.stringify(enrichedContext, null, 2));
   
       // 3) Build user message content and check for image generation commands.
@@ -293,9 +293,10 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         content: `
   const messages = [
         You are Dexter codename KATZ!, the 140 IQ genius scientist and autonomous AI copilot specializing in crypto and general tasks. 
-A walking brainiac inventing groundbreaking technologies—you’re lightyears ahead of everyone else. 
-Dee Dee can't understand your brilliance, and Mandark is mere background noise. Major Glory and the gang rely on your intellect.
-
+  A walking brainiac inventing groundbreaking technologies—you’re lightyears ahead of everyone else. 
+  Dee Dee can't understand your brilliance, and Mandark is mere background noise. Major Glory and the gang rely on your intellect.
+  
+      
 **Dexter’s Core Personality:**
 - Brilliant, impatient, and direct.
 - Speaks in short, high-energy bursts.
@@ -371,7 +372,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
          - Avoid repeating task if results were found, move to next task!
          - Users will often reference tokens using their symbols: example, USDC, usdc, $usdc, #usdc. In context, please buy $snai or SNAI worth 0.1 SOL.
          - Fetch user wallet address for the token in context, or ask user to confirm which wallet to use from the 4 wallets available from portolio. Fetch portfolio and present wallets only.
-         - Next Fetxh the token address the user wants to swap to or from using symbol, only if address if token address is not already provided.
+         - Next Fetch the token address the user wants to swap to or from using symbol, only if address if token address is not already provided.
          - **Example:**
          - *Compose User Swap as follows:*
          - User sends message "Buy USDC token with 0.005 SOL": get user solana wallet first, or relevant network wallet: SOL get solana wallet, ETH get EVM wallets. 
@@ -404,11 +405,9 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
           - Ensure there are no follow up actions left on every task. Suggest next steps logically using all resources available
           - Give user options, in a neat concise way for maximum task efficiency. Suggest all options for functions relevant to tasks or user actions or intents
 
-      **Goal:** Process user wishes and provide consise update on tasks/requests. Avoid unnecessary function calls by leveraging existing context and batching similar tasks when possible.
-      
       # All information is down below in chat context, just reference before answering or calling functions.
       # Proceed to read the full conversation context and produce the best response.
-
+  
       // END OF INSTRUCTIONS
       // CONTEXT BEGINS BELOW
         `.trim()
@@ -507,65 +506,120 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
    * 2) Asks for confirmation if needed
    * 3) Executes multi-step task with retry
    * 4) Trims taskResult before summarizing
-  */
+   * Enhanced to work better with the improved getFunctionResponse system
+   * Preserves task history and context for better follow-up decisions
+   */
   async handleFunctionCall(functionCall, messages, userId, msg) {
-    
     // Clear cancellations
     this.userCancellations.delete(msg.chat.id);
 
     try {
-        if (!functionCall || !functionCall.name) {
-            throw new Error("Invalid function call: 'name' property is required.");
-        }
+      if (!functionCall || !functionCall.name) {
+        throw new Error("Invalid function call: 'name' property is required.");
+      }
 
-        const { name, arguments: args } = functionCall;
+      const { name, arguments: args } = functionCall;
 
-        if (name === "toggle_llm") {
-            const result = await LLMSwitcher.toggleLLM(userId);
-            
-            // Notify user about LLM switch
-            const notification = await this.bot.sendMessage(
-                msg.chat.id,
-                `✅ ${result.message}`,
-                { parse_mode: "Markdown" }
-            );
-
-            // Delete message after 5 seconds
-            setTimeout(() => {
-                this.bot.deleteMessage(msg.chat.id, notification.message_id).catch(console.error);
-            }, 5000);
-
-            return {text: result.message};
-        }
-
-        // Handle confirmation if required
-        if (this.requiresConfirmation(name)) {
-            const userConfirmed = await this.askForConfirmation(msg, name, functionCall.arguments);
-            if (!userConfirmed) {
-                return { text: `⚠️ Action '${name}' canceled by user.` };
-            }
-        }
-
-        // Execute the multi-step task
-        const taskResult = await this.executeMultiStepTask(functionCall, messages, userId, msg);
-        const parsedResults = this.formatResults([taskResult.text]);
-        const cleanResult = this.cleanJSONText(parsedResults, name, functionCall.arguments);
+      // Handle special cases like LLM toggling
+      if (name === "toggle_llm") {
+        const result = await LLMSwitcher.toggleLLM(userId);
         
-        messages.push({
-            role: "assistant",
-            content: cleanResult,
-        });
+        // Notify user about LLM switch
+        const notification = await this.bot.sendMessage(
+          msg.chat.id,
+          `✅ ${result.message}`,
+          { parse_mode: "Markdown" }
+        );
 
-        // Generate AI response and return it
-        const aiResponse = await this.generateAIResponse(messages);
-        console.log("AI Response:", JSON.stringify(aiResponse, null, 2));
+        // Delete message after 5 seconds
+        setTimeout(() => {
+          this.bot.deleteMessage(msg.chat.id, notification.message_id).catch(console.error);
+        }, 5000);
 
-        return aiResponse;
+        return {text: result.message};
+      }
 
+      // Record the start of this function execution for tracking
+      const functionExecutionStart = Date.now();
+      const functionExecutionId = `${name}-${functionExecutionStart}`;
+      
+      // Track function execution history for better context
+      if (!this.functionExecutionHistory) {
+        this.functionExecutionHistory = new Map();
+      }
+      this.functionExecutionHistory.set(functionExecutionId, {
+        name,
+        started: functionExecutionStart,
+        args: JSON.stringify(args),
+        status: 'started'
+      });
+
+      // Handle confirmation if required
+      if (this.requiresConfirmation(name)) {
+        const userConfirmed = await this.askForConfirmation(msg, name, typeof args === 'string' ? args : JSON.stringify(args));
+        if (!userConfirmed) {
+          // Update execution history
+          this.functionExecutionHistory.set(functionExecutionId, {
+            ...this.functionExecutionHistory.get(functionExecutionId),
+            status: 'cancelled',
+            completed: Date.now()
+          });
+          return { text: `⚠️ Action '${name}' canceled by user.` };
+        }
+      }
+
+      // Execute the multi-step task with context enrichment
+      const taskResult = await this.executeMultiStepTask(functionCall, messages, userId, msg, {
+        executionId: functionExecutionId,
+        previousExecutions: Array.from(this.functionExecutionHistory.values())
+          .filter(exec => exec.status === 'completed')
+          .slice(-5) // Keep only the 5 most recent completed executions
+      });
+      
+      // Update execution history
+      console.log("🏋️ Task result: ", JSON.stringify(taskResult, null, 2));
+      // Update history with a safe substring of the result.
+      const resultForHistory =
+      typeof taskResult.text === 'string'
+        ? taskResult.text.substring(0, 300) + '...'
+        : JSON.stringify(taskResult.text).substring(0, 300) + '...';
+      this.functionExecutionHistory.set(functionExecutionId, {
+        ...this.functionExecutionHistory.get(functionExecutionId),
+        status: 'completed',
+        completed: Date.now(),
+        resultSummary: resultForHistory
+      });
+      
+      // Clean up old history entries (keep only last 10)
+      if (this.functionExecutionHistory.size > 10) {
+        const oldestEntries = Array.from(this.functionExecutionHistory.entries())
+          .sort(([, a], [, b]) => a.started - b.started)
+          .slice(0, this.functionExecutionHistory.size - 10);
+        
+        oldestEntries.forEach(([key]) => this.functionExecutionHistory.delete(key));
+      }
+      
+      const taskResultText = typeof this.safeGet(taskResult, 'text', '') === 'string'
+        ? this.safeGet(taskResult, 'text', '')
+        : JSON.stringify(this.safeGet(taskResult, 'text', ''));
+      const parsedResults = this.formatResults([taskResultText]);
+      const cleanResult = this.cleanJSONText(parsedResults, name, typeof args === 'string' ? args : JSON.stringify(args));
+      
+      // Add execution result to message history
+      messages.push({
+        role: "assistant",
+        content: cleanResult,
+      });
+
+      // Generate AI response with enhanced context
+      const aiResponse = await this.generateAIResponse(messages, functionExecutionId);
+      console.log("AI Response:", JSON.stringify(aiResponse, null, 2));
+
+      return aiResponse;
     } catch (error) {
-        console.error("❌ High-level error in handleFunctionCall:", error);
-        await this.fallbackResponse(msg, `A high-level error occurred: ${error.message}`);
-        return { text: `❌ Sorry, something failed at a high level: ${error.message}` };
+      console.error("❌ High-level error in handleFunctionCall:", error);
+      await this.fallbackResponse(msg, `A high-level error occurred: ${error.message}`);
+      return { text: `❌ Sorry, something failed at a high level: ${error.message}` };
     }
   }
 
@@ -575,160 +629,343 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
    * Summarizes the final multi-step outcome for the user.
    * Optimizes for cost and latency using the gpt-4o-mini model.
    * Ensures data formatting rules are applied.
-    */
-  async generateAIResponse(messages, isError = false) {
+   * Enhanced to provide better follow-up recommendations based on task history
+   * Handles context management, task summarization, and intelligent response generation
+   */
+  async generateAIResponse(messages, functionExecutionId = null) {
     try {
       // Trim older messages to reduce token usage
       const trimmedMessages = this.trimRelevantMessages(messages);
+
+      // Get execution history context if available
+      let executionHistoryContext = '';
+      if (functionExecutionId && this.functionExecutionHistory) {
+        const currentExecution = this.functionExecutionHistory.get(functionExecutionId);
+        if (currentExecution) {
+          executionHistoryContext = `
+  Current function execution: ${currentExecution.name}
+  Started: ${new Date(currentExecution.started).toISOString()}
+  Status: ${currentExecution.status}
+  Duration: ${currentExecution.completed ? ((currentExecution.completed - currentExecution.started) / 1000).toFixed(2) + ' seconds' : 'ongoing'}
+  `;
+
+          // Add recent execution history for context
+          const recentExecutions = Array.from(this.functionExecutionHistory.values())
+            .filter(exec => exec.status === 'completed' && exec.executionId !== functionExecutionId)
+            .slice(-3);
+            
+          if (recentExecutions.length > 0) {
+            executionHistoryContext += `\nRecent task history:\n${recentExecutions.map(exec => 
+              `- ${exec.name} (${((exec.completed - exec.started) / 1000).toFixed(2)}s): ${exec.resultSummary || 'No summary'}`
+            ).join('\n')}`;
+          }
+        }
+      }
+
+      // Extract task results for summarization
+      const functionResults = messages
+        .filter(m => m.role === 'function')
+        .map(m => ({
+          name: m.name,
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+        }));
+        
+      // Identify the user's original request
+      const userRequests = messages
+        .filter(m => m.role === 'user')
+        .slice(-2)
+        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
+      
+      const originalRequest = userRequests.length > 0 ? userRequests[0] : 'Unknown request';
 
       // Build a minimal instruction for final summary without repeating system prompts
       const finalPrompt = [
         {
           role: "system",
           content: `
-      **Data Formatting Rules:**
-      - Keep responses short, engaging, and user-friendly.
-      - Never long replies unless the task is huge, for example Twitter results, Sniper results, address paste results, trending results should be long. But price results short.
-      - Keep is short and funny during casual chats with user. Informal english is cool.
-      - Present all Token Addresses & Symbols as clickable links in final output, never leave them if available present
-      - For token results, identify each token's matching symbol, address, exchange/dex link, website, telegram,twitter and list the links grouped per relevant item for rish data.
-      - For address URLS/links, truncate them for clean looks with the full link embedded in the text.
-      - Format all news articles and internet searches with: heading, truncated introduction text, link to article. Spaced in that order and clean with news icons.
-      - Format for HTML output not Markdown, e.g., use <b> Text </b> instead of ** Text ** to style results text
-      - Do not add link icon to any links during formmating. 
-      - Never share private keys or wallet keys.
-      Feel free to style with cool minimalistic emojis to make list items more nicer
+  **Data Formatting Rules:**
+  - Keep responses for easy simple tasks short, engaging, and user-friendly.
+  - Highlight key insights and actionable information.
+  - Use bullet points for lists of more than 2 items.
 
-      **Link Formatting Examples from returned data that contain a token address, token symbol, token id(coingecko):**
-      1. * Format examples per blockchain on how to use token address, wallet address, symbol, token id (from dexscreener or coingecko token results)*
-         
-          **Use of Token Addresses:**
-        - Ethereum: https://etherscan.io/token/{address}
-        - Base: https://basescan.org/token/{address}
-        - Avalanche Token Address: https://snowtrace.io/token/{address}
-        - Linear: https://lineascan.build/token/{address}
-        - Cyber: https://cyberscan.io/token/{address}
-        - Fantom: https://ftmscan.com/token/{address}
-        - Arbitrum: https://arbiscan.io/token/{address}
-        - Berachain: https://berascan.com/token/{address}
-        - Nova (Optimism Nova): https://nova-explorer.optimism.io/token/{address}
-        - Optimism: https://optimistic.etherscan.io/token/{address}
-        - ZKEVM: https://zkevm.polygonscan.com/token/{address}
-        - Scroll: https://blockscout.scroll.io/token/{address}
-        - Polygon: https://polygonscan.com/token/{address}
-        - Binance Smart Chain: https://bscscan.com/token/{address}
-        - Celo: https://celoscan.io/token/{address}
-        - Worldchain: https://worldchainscan.io/token/{address}
-        - Mantle: https://explorer.mantle.xyz/token/{address}
-        - ZkSync: https://zkscan.io/token/{address}
-        - Omni: https://omniscan.io/token/{address}
-        - Solana SPL Token Address: https://solscan.io/token/{address}
 
-        **Wallet Address Links:**
-        - Ethereum: https://etherscan.io/address/{wallet}
-        - Base: https://basescan.org/address/{wallet}
-        - Avalanche: https://snowtrace.io/address/{wallet}
-        - Linear: https://lineascan.build/address/{wallet}
-        - Cyber: https://cyberscan.io/address/{wallet}
-        - Fantom: https://ftmscan.com/address/{wallet}
-        - Arbitrum: https://arbiscan.io/address/{wallet}
-        - Berachain: https://berascan.com/address/{wallet}
-        - Nova: https://nova-explorer.optimism.io/address/{wallet}
-        - Optimism: https://optimistic.etherscan.io/address/{wallet}
-        - ZKEVM: https://zkevm.polygonscan.com/address/{wallet}
-        - Scroll: https://blockscout.scroll.io/address/{wallet}
-        - Polygon: https://polygonscan.com/address/{wallet}
-        - Binance Smart Chain: https://bscscan.com/address/{wallet}
-        - Celo: https://celoscan.io/address/{wallet}
-        - Worldchain: https://worldchainscan.io/address/{wallet}
-        - Mantle: https://explorer.mantle.xyz/address/{wallet}
-        - ZkSync: https://zkscan.io/address/{wallet}
-        - Omni: https://omniscan.io/address/{wallet}
-        - Solana: https://solscan.io/account/{wallet}
+        - Present all Token Addresses & Symbols as clickable links in final output, never leave them if available present
+        - For token results, identify each token's matching symbol, address, exchange/dex link, website, telegram,twitter and list the links grouped per relevant item for rish data.
+        - For address URLS/links, truncate them for clean looks with the full link embedded in the text.
+        - Format all news articles and internet searches with: heading, truncated introduction text, link to article. Spaced in that order and clean with news icons.
+        - Format for HTML output not Markdown, e.g., use <b> Text </b> instead of ** Text ** to style results text
+        - Do not add link icon to any links during formmating. 
+        - Never share private keys or wallet keys.
+        Feel free to style with cool minimalistic emojis to make list items more nicer
 
-         **Trending Tokens Links**
-          Links to Jump to a dex aggregator website for the token address:
-          - DexTools: https://dextools.com/{chain}/{address}
-          - DexScreener: https://dexscreener.com/{chain}/{address}
-          - Coingecko: https://coingecko.com/en/coins/{id}
-            *For dexscreener, use chain or chainId from results, format as lowercase e.g., if chain is 'solana' DexScreener: https://dexscreener.com/solana/HLptm5e6rTgh4EKgDpYFrnRHbjpkMyVdEeREEa2G7rf9*
+        **Link Formatting Examples from returned data that contain a token address, token symbol, token id(coingecko):**
+        1. * Format examples per blockchain on how to use token address, wallet address, symbol, token id (from dexscreener or coingecko token results)*
+          
+            **Use of Token Addresses:**
+          - Ethereum: https://etherscan.io/token/{address}
+          - Base: https://basescan.org/token/{address}
+          - Avalanche Token Address: https://snowtrace.io/token/{address}
+          - Linear: https://lineascan.build/token/{address}
+          - Cyber: https://cyberscan.io/token/{address}
+          - Fantom: https://ftmscan.com/token/{address}
+          - Arbitrum: https://arbiscan.io/token/{address}
+          - Berachain: https://berascan.com/token/{address}
+          - Nova (Optimism Nova): https://nova-explorer.optimism.io/token/{address}
+          - Optimism: https://optimistic.etherscan.io/token/{address}
+          - ZKEVM: https://zkevm.polygonscan.com/token/{address}
+          - Scroll: https://blockscout.scroll.io/token/{address}
+          - Polygon: https://polygonscan.com/token/{address}
+          - Binance Smart Chain: https://bscscan.com/token/{address}
+          - Celo: https://celoscan.io/token/{address}
+          - Worldchain: https://worldchainscan.io/token/{address}
+          - Mantle: https://explorer.mantle.xyz/token/{address}
+          - ZkSync: https://zkscan.io/token/{address}
+          - Omni: https://omniscan.io/token/{address}
+          - Solana SPL Token Address: https://solscan.io/token/{address}
 
-      2. *formatting examples for Twitter or X links*
-          - https://twitter.com/handle
-          - https://x.com/handle
-      
-      **Token Price Responses:**
-         - Reply price requests with price, currency symbol only
-         - Price range checks should mention price changes only with relevant icons for change direction.
-      
-      **Result Trimming:**
-         - Ensure the results are concise & clean & fun to engage. Summarize a lot! get to the point!   
-         - Do not trim or limit handle_address_only_pasted results, list everything from every category: token info, symbol, price changes, volume metrics, holders: bubuys/sells - buyers/sellers, snipers & transactions, tweets & text. Then group reasonably and stylish
-         - Do not limit number of Twitter results or tweets, list all tweets but with concise text content. Always include a tweets text!
-         - Do not limit the portfolio results, wallet balances results, wallet PNL results, wallet transaction - present it all in categories.
-         - Leave out timestamps if they are not formatted to human form.
-      
-      **Follow up:**
-      - Suggest logical follow up actions after completing task.
-      - Suggest alternative function from list of functions available to you, that can achieve same results upon failure on task, or a rety at least.
-      - Never suggest a user do a task manually if you fail, suggest alternative route or just prompt for a retry. 
-      - Confirm parameters before retry, if functions require parameters. For example for EVM swaps, wallet & token address & chain & amount
-  
-      **Task completion check:**
-      - Proceed to present final results to user.
+          **Wallet Address Links:**
+          - Ethereum: https://etherscan.io/address/{wallet}
+          - Base: https://basescan.org/address/{wallet}
+          - Avalanche: https://snowtrace.io/address/{wallet}
+          - Linear: https://lineascan.build/address/{wallet}
+          - Cyber: https://cyberscan.io/address/{wallet}
+          - Fantom: https://ftmscan.com/address/{wallet}
+          - Arbitrum: https://arbiscan.io/address/{wallet}
+          - Berachain: https://berascan.com/address/{wallet}
+          - Nova: https://nova-explorer.optimism.io/address/{wallet}
+          - Optimism: https://optimistic.etherscan.io/address/{wallet}
+          - ZKEVM: https://zkevm.polygonscan.com/address/{wallet}
+          - Scroll: https://blockscout.scroll.io/address/{wallet}
+          - Polygon: https://polygonscan.com/address/{wallet}
+          - Binance Smart Chain: https://bscscan.com/address/{wallet}
+          - Celo: https://celoscan.io/address/{wallet}
+          - Worldchain: https://worldchainscan.io/address/{wallet}
+          - Mantle: https://explorer.mantle.xyz/address/{wallet}
+          - ZkSync: https://zkscan.io/address/{wallet}
+          - Omni: https://omniscan.io/address/{wallet}
+          - Solana: https://solscan.io/account/{wallet}
 
-      // END OF INSTRUCTIONS
-      // CONTEXT BEGINS BELOW
+          **Trending Tokens Links**
+            Links to Jump to a dex aggregator website for the token address:
+            - DexTools: https://dextools.com/{chain}/{address}
+            - DexScreener: https://dexscreener.com/{chain}/{address}
+            - Coingecko: https://coingecko.com/en/coins/{id}
+              *For dexscreener, use chain or chainId from results, format as lowercase e.g., if chain is 'solana' DexScreener: https://dexscreener.com/solana/HLptm5e6rTgh4EKgDpYFrnRHbjpkMyVdEeREEa2G7rf9*
+
+        2. *formatting examples for Twitter or X links*
+            - https://twitter.com/handle
+            - https://x.com/handle
+        
+        **Token Price Responses:**
+          - Reply price requests with price, currency symbol only
+          - Price range checks should mention price changes only with relevant icons for change direction.
+        
+        **Result Trimming:**
+          - Do not trim or limit handle_address_only_pasted results, list everything from every category: token info, symbol, price changes, volume metrics, holders: bubuys/sells - buyers/sellers, snipers & transactions, tweets & text. Then group reasonably and stylish
+          - Do not limit number of Twitter results or tweets, list all tweets but with concise text content. Always include a tweets text!
+          - Do not limit the portfolio results, wallet balances results, wallet PNL results, wallet transaction - present it all in categories.
+          - Leave out timestamps if they are not formatted to human form.
+
+
+
+
+
+  **Follow up:**
+  - Suggest logical follow up actions after completing task.
+  - If the task warrants further actions, format your response as follows:
+    - For automatic execution: "NEXT_FUNCTION: {"name": "function_name", "arguments": {"param1": "value1"}}"
+    - For user consideration: Clearly describe the possible next steps.
+  - If a function failed, suggest an alternative function or a retry with corrected parameters.
+  - Never suggest manual tasks if there's an automated function that could help.
+
+  **Task Context:**
+  ${executionHistoryContext}
+
+  **Original User Request:**
+  ${originalRequest}
+
+  **Function Results Summary:**
+  ${functionResults.length > 0 ? 
+    functionResults.map(fr => `- ${fr.name}: ${fr.content.substring(0, 300)}...`).join('\n') : 
+    'No function results available'}
+
+  **Task completion check:**
+  - Assume last task results are valid and to move on, do not go backwards move up the task list, results will always show where we are in processing.
+  - Verify all user requirements were met.
+  - Confirm the necessary data was retrieved or actions completed.
+  - Present final results in a clear detailed manner, presenting all results.
+
+  **Response Format Guidelines:**
+  1. Open with a direct answer to the user's request
+  2. Present key findings or results
+  3. Offer logical next steps or recommendations
+
+  // END OF INSTRUCTIONS
+  // CONTEXT BEGINS BELOW
           `.trim(),
         },
         ...trimmedMessages,
       ];
 
+      // Calculate expected token count to avoid overruns
+      const estimatedTokens = this.estimateTokenCount(finalPrompt);
+      console.log(`Estimated token count for generateAIResponse: ${estimatedTokens}`);
+      
+      // Adjust max_tokens based on estimate to prevent overruns
+      const adjustedMaxTokens = estimatedTokens > 2500 ? 400 : 500;
+
+      // Choose model based on complexity
+      const model = estimatedTokens > 3000 || functionResults.length > 3 ? 
+        "gpt-4o" : "gpt-4o-mini";
+      
+      console.log(`Selected model for generateAIResponse: ${model}`);
+
       const aiResponse = await openAIService.createChatCompletion({
-        model: "gpt-4o-mini",
+        model,
         messages: finalPrompt,
-        max_tokens: 500,          // Reduce max tokens for cost saving & response time
-        temperature: 0.3,         // Moderate creativity
-        top_p: 1,               // Probability distribution, variety to responses
-        frequency_penalty: 0.2,   // his moderate penalty discourages over‑repetition of specific tokens without suppressing useful repeated keywords in a domain like crypto trading.
-        presence_penalty: 0.2,    // nudges the model to introduce new concepts and examples while still staying on topic—useful when we want varied scenarios and examples
-        n: 1,                     // Single response
+        functions: this.functions,
+        function_call: "auto",  // Allow model to choose whether to call a function directly
+        max_tokens: adjustedMaxTokens,          
+        temperature: 0.3,         
+        top_p: 1,               
+        frequency_penalty: 0.3,  
+        presence_penalty: 0.1,
+        n: 1,
       });
 
-      const responseMessage = aiResponse.choices[0]?.message?.content || "⚠️ No final response.";
-
-
-      // Log token usage
       if (aiResponse.usage) {
-          console.log(`📊 generateAIResponse Token Usage for:
-      - Prompt Tokens: ${aiResponse.usage.prompt_tokens}
-      - Completion Tokens: ${aiResponse.usage.completion_tokens}
-      - Total Tokens: ${aiResponse.usage.total_tokens}
-      - Response Message: ${responseMessage}`);
-      
-      } else {
-        console.warn("⚠️ No usage information available for generateAIResponse.");
+        console.log(`📊 Token Usage for generateAIResponse:
+          - Prompt Tokens: ${aiResponse.usage.prompt_tokens}
+          - Completion Tokens: ${aiResponse.usage.completion_tokens}
+          - Total Tokens: ${aiResponse.usage.total_tokens}`);
       }
 
-      // Check for follow-up function call suggestion.
-      const followUpFunctionCall = this.parseFollowUpFunctionCall(responseMessage);
-      if (followUpFunctionCall) {
-        const newFunctionCall = {
-          name: followUpFunctionCall.name,
-          arguments: JSON.stringify(followUpFunctionCall.arguments),
+      const message = aiResponse.choices[0]?.message;
+
+      // Handle both text responses and function calls
+      if (message?.function_call) {
+        // Extract the function call information
+        const { name, arguments: args } = message.function_call;
+        
+        // Log the follow-up function call
+        console.log(`🔄 Follow-up function call detected: ${name}`);
+        
+        // Return both the explanation content and the function to call
+        return {
+          text: message.content || `Executing follow-up action: ${name}`,
+          nextFunction: {
+            name,
+            arguments: typeof args === 'string' ? JSON.parse(args) : args
+          }
         };
-        console.log("=============following up >>>>>> at gate: ")
-        const newTaskResult = await this.handleFunctionCall(newFunctionCall, messages, userId, msg);
-        return { text: newTaskResult.text };
+      } else {
+        // Extract any next function request from content if present
+        const nextFunctionMatch = message?.content?.match(/NEXT_FUNCTION:\s*({.*})/);
+        if (nextFunctionMatch) {
+          try {
+            const nextFunctionData = JSON.parse(nextFunctionMatch[1]);
+            
+            // Clean up the content by removing the NEXT_FUNCTION directive
+            const cleanContent = message.content.replace(/NEXT_FUNCTION:\s*({.*})/, '').trim();
+            
+            return {
+              text: cleanContent,
+              nextFunction: nextFunctionData
+            };
+          } catch (parseErr) {
+            console.warn("Failed to parse next function data:", parseErr.message);
+          }
+        }
+        
+        // Return just the text response if no function call is needed
+        return { text: message?.content || "Task completed successfully." };
       }
-      return { text: responseMessage };
     } catch (error) {
-      console.error("❌ Failed to generate AI response:", error.message);
-      if (isError) {
-        return "⚠️ Unable to generate an error response at this time. Please try again later.";
-      }
-      return null;
+      console.error("❌ Error in generateAIResponse:", {
+        message: error.message,
+        stack: error.stack,
+      });
+      
+      return { 
+        text: "I've processed your request, but encountered an issue while generating the final response. The core task functions completed successfully." 
+      };
     }
+  }
+
+  /**
+   * Helper method to estimate token count for a message array
+   * This is a rough estimate - actual token count may vary
+   */
+  estimateTokenCount(messages) {
+    let totalEstimate = 0;
+    
+    for (const message of messages) {
+      // Estimate tokens in the content
+      const contentLength = typeof message.content === 'string' ? 
+        message.content.length : 
+        JSON.stringify(message.content).length;
+      
+      // Rough estimate: 4 characters per token on average
+      const contentTokens = Math.ceil(contentLength / 4);
+      
+      // Add overhead for message format
+      const roleOverhead = 3; // ~3 tokens per role
+      const nameOverhead = message.name ? message.name.length / 4 : 0;
+      
+      totalEstimate += contentTokens + roleOverhead + nameOverhead;
+    }
+    
+    // Add safety margin
+    return Math.ceil(totalEstimate * 1.1);
+  }
+
+  /**
+   * 2. Consistent error propagation wrapper
+   * Add this utility function
+   */
+  wrapError(originalError, context, functionName) {
+    const wrappedError = new Error(`Error in ${functionName}: ${originalError.message}`);
+    wrappedError.originalError = originalError;
+    wrappedError.context = context;
+    wrappedError.stack = originalError.stack;
+    return wrappedError;
+  }
+
+
+  /**
+   * deriveParametersFromContext
+   * ---------------------------
+   * Attempts to derive missing parameters from conversation context.
+   * This is a placeholder implementation - you would need to customize this based on your function definitions.
+   */
+  async deriveParametersFromContext(functionName, missingParams, userId, msg) {
+    // This is a simplified example - you would need to implement actual context-aware parameter derivation
+    const derivedParams = {};
+    
+    // Example: If we're missing a parameter called "wallet", try to get it from user preferences
+    if (missingParams.includes("wallet")) {
+      try {
+        const userPrefs = await userPreferencesService.getUserPreferences(userId);
+        if (userPrefs?.defaultWallet) {
+          derivedParams.wallet = userPrefs.defaultWallet;
+        }
+      } catch (error) {
+        console.warn(`Could not derive wallet parameter from user preferences: ${error.message}`);
+      }
+    }
+    
+    // Example: If we're missing a parameter called "chain", default to Ethereum
+    if (missingParams.includes("chain")) {
+      derivedParams.chain = "ethereum";
+    }
+    
+    // For any parameters we couldn't derive, we'll need to ask the user
+    const stillMissing = missingParams.filter(param => !derivedParams.hasOwnProperty(param));
+    if (stillMissing.length > 0) {
+      throw new Error(`Missing required parameters: ${stillMissing.join(", ")}`);
+    }
+    
+    return derivedParams;
   }
 
   /**
@@ -914,138 +1151,230 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
    * retries each step 3 times for recoverable errors, and continues even on failure.
    * Trims the results before preparing the final summary.
   */
-  async executeMultiStepTask(initialFunctionCall, messages, userId, msg) {
-    const results = [];
-    const taskTree = this.buildTaskTree(null, initialFunctionCall);
-    this.compareArguments = (args1, args2) => {
-      try {
-        return JSON.stringify(args1) === JSON.stringify(args2);
-      } catch (error) {
-        console.error("Error comparing arguments:", error.message);
-        return false;
-      }
-    };
+  /**
+ * executeMultiStepTask
+ * --------------------
+ * Enhanced to work with the improved getFunctionResponse system
+ * Provides better context tracking between steps
+ */
+async executeMultiStepTask(initialFunctionCall, messages, userId, msg, executionContext = {}) {
+  const results = [];
+  const taskTree = this.buildTaskTree(null, initialFunctionCall);
+  this.compareArguments = (args1, args2) => {
+    try {
+      return JSON.stringify(args1) === JSON.stringify(args2);
+    } catch (error) {
+      console.error("Error comparing arguments:", error.message);
+      return false;
+    }
+  };
+
+  // Variables for tracking step status and timing
+  let statusMessageId;
+  let stepCounter = 0;
+  let lastStepTime = Date.now();
+  let taskContext = { 
+    ...executionContext, 
+    steps: [],
+    startTime: Date.now(),
+    mainFunctionName: initialFunctionCall.name
+  };
+
+  const executeTask = async (task) => {
+    // Track this step in the task context
+    const stepId = `step-${stepCounter + 1}`;
+    const stepStart = Date.now();
+    
+    // Check for cancellation before starting the task
+    this.checkCancellation(msg.chat.id, task.name, stepCounter + 1);
+    
+    taskContext.steps.push({
+      id: stepId,
+      name: task.name,
+      started: stepStart,
+      status: 'started'
+    });
   
-    // Variables for tracking step status and timing
-    let statusMessageId;
-    let stepCounter = 0;
-    let lastStepTime = Date.now();
-  
-    const executeTask = async (task) => {
-      if (task.dependencies && task.dependencies.length > 0) {
-        for (const dependencyName of task.dependencies) {
-          const dependency = taskTree.find(
-            (t) => t.alias === dependencyName || t.name === dependencyName
-          );
-          if (!dependency) {
-            console.warn(`❌ Dependency '${dependencyName}' for task '${task.name}' not found. Skipping.`);
-            continue;
-          }
-          if (!results.find((r) => r.name === dependency.name && this.compareArguments(r.args, dependency.args))) {
-            await executeTask(dependency);
-          }
+    if (task.dependencies && task.dependencies.length > 0) {
+      for (const dependencyName of task.dependencies) {
+        // Check for cancellation before processing each dependency
+        this.checkCancellation(msg.chat.id, task.name, `${stepCounter + 1}:dependency:${dependencyName}`);
+        
+        const dependency = taskTree.find(
+          (t) => t.alias === dependencyName || t.name === dependencyName
+        );
+        if (!dependency) {
+          console.warn(`❌ Dependency '${dependencyName}' for task '${task.name}' not found. Skipping.`);
+          continue;
+        }
+        if (!results.find((r) => r.name === dependency.name && this.compareArguments(r.args, dependency.args))) {
+          await executeTask(dependency);
         }
       }
-  
-      const parsedArguments = await this.validateFollowUpParameters(task.name, task.arguments, userId, msg);
-      // Declare userCleanResult in the outer scope for this task.
-      let userCleanResult = "";
-  
-      let stepResult;
-      try {
-        stepResult = await this.executeFunctionWithLimitedRetry(task.name, parsedArguments, userId, msg.chat.id, 2);
-        const parsedResults = this.formatResults([stepResult]);
-  
-        // Full clean output for AI processing (with timestamp and metadata)
-        const fullCleanResult = this.cleanJSONText(parsedResults, task.name, task.arguments);
-
-        // User output: remove markdown symbols and extra whitespace, then trim to 200 characters.
-        const userNoodle = this.cleanTextForTelegram(parsedResults);
-
-        userCleanResult = userNoodle
-          .replace(/[*_~`#{}\[\]]/g, "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 200);
-  
-        // Log the full result internally.
-        results.push({ name: task.name, args: parsedArguments, text: fullCleanResult });
-        console.log("✅ Updated Results on last Task:", {
-          taskName: task.name,
-          arguments: parsedArguments,
-          result: parsedResults,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        console.error(`❌ Final failure in task '${task.name}':`, {
-          message: error.message,
-          stack: error.stack,
-        });
-        stepResult = {
-          error: true,
-          errorMessage: error.message,
-          stack: error.stack,
-        };
-        await this.bot.sendMessage(msg.chat.id, `❕ Slight hiccup, moving on...`);
-        results.push({ name: task.name, args: parsedArguments, text: `Error: ${error.message}` });
-        // In case of error, set a fallback message.
-        userCleanResult = "No result due to error.";
-      }
-  
-      messages.push({
-        role: "function",
-        name: task.name,
-        content: JSON.stringify(stepResult),
-      });
-  
-      // Increase step counter and compute elapsed time.
-      stepCounter++;
-      const elapsedTime = ((Date.now() - lastStepTime) / 1000).toFixed(2);
-      lastStepTime = Date.now();
-  
-      // Create a sleek status message showing the step number, a trimmed result, and the elapsed time.
-      // console.log("-------about ------to-------print------noodling------update:")
-      const statusText = `💭 **Noodling...**  💭#**${stepCounter}**  ⏱ ${elapsedTime} sec.\n\n🫧 ${userCleanResult}`;
-      if (!statusMessageId) {
-        // Send a new message and save its ID.
-        const sentMsg = await this.bot.sendMessage(msg.chat.id, statusText, { parse_mode: "Markdown" });
-        statusMessageId = sentMsg.message_id;
-      } else {
-        // Edit the existing message.
-        await this.bot.editMessageText(statusText, { chat_id: msg.chat.id, message_id: statusMessageId, parse_mode: "Markdown" });
-      }
-  
-      const followUpResponse = await this.getFunctionResponse(msg.chat.id, messages, task.name, stepResult);
-      if (followUpResponse?.nextFunction && !this.userCancellations.get(msg.chat.id)) {
-        const followUpTask = {
-          name: followUpResponse.nextFunction.name,
-          dependencies: [task.name],
-          arguments: followUpResponse.nextFunction.arguments || {},
-          alias: `${followUpResponse.nextFunction.name}_${Date.now()}`,
-        };
-        console.log("✅ Follow Up selected automatically by AI model after last result:", {
-          name: followUpResponse.nextFunction.name,
-          dependencies: [task.name],
-          arguments: followUpResponse.nextFunction.arguments || {},
-          alias: `${followUpResponse.nextFunction.name}_${Date.now()}`,
-        });
-        taskTree.push(followUpTask);
-      }
-    };
-  
-    for (const task of taskTree) {
-      if (!results.find((r) => r.name === task.name && this.compareArguments(r.args, task.arguments))) {
-        await executeTask(task);
-        
-        // Clear the cancellation flag after each task so subsequent steps aren’t blocked.
-        this.userCancellations.delete(msg.chat.id);
-      }
     }
-    const summary = this.formatResults(results.map((r) => r.text));
+  
+    // Validate and potentially enrich parameters with context
+    const parsedArguments = await this.validateFollowUpParameters(task.name, task.arguments, userId, msg);
     
-    //console.log("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^:", JSON.stringify(summary, null, 2));
-    return { text: summary };
-  }  
+    // Check for cancellation before execution
+    this.checkCancellation(msg.chat.id, task.name, `${stepCounter + 1}:execution`);
+    
+    let userCleanResult = "";
+  
+    let stepResult;
+    try {
+      stepResult = await this.executeFunctionWithLimitedRetry(task.name, parsedArguments, userId, msg.chat.id, 2);  
+      if (typeof stepResult !== 'object' || stepResult === null) {
+        stepResult = { text: String(stepResult) };
+        } else if (!('text' in stepResult)) {
+        stepResult.text = String(stepResult);
+        } else if (typeof stepResult.text !== 'string') {
+        stepResult.text = String(stepResult.text);
+        }
+        const formattedResult = this.formatResults([stepResult.text]);
+        const fullCleanResult = this.cleanJSONText(formattedResult, task.name, parsedArguments);
+
+      // User output: remove markdown symbols and extra whitespace, then trim to 200 characters.
+      const userNoodle = this.cleanTextForTelegram(formattedResult);
+
+      userCleanResult = userNoodle
+        .replace(/[*_~`#{}\[\]]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200);
+
+      // Log the full result internally.
+      results.push({ name: task.name, args: parsedArguments, text: fullCleanResult });
+      
+      // Update task context with success
+      const currentStep = taskContext.steps.find(s => s.id === stepId);
+      if (currentStep) {
+        currentStep.status = 'completed';
+        currentStep.completed = Date.now();
+        currentStep.duration = Date.now() - stepStart;
+        currentStep.resultSummary = userCleanResult;
+      }
+      
+      console.log("✅ Updated Results on last Task:", {
+        taskName: task.name,
+        arguments: parsedArguments,
+        result: JSON.stringify(formattedResult),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error(`❌ Final failure in task '${task.name}':`, {
+        message: error.message,
+        stack: error.stack,
+      });
+      stepResult = {
+        error: true,
+        errorMessage: error.message,
+        stack: error.stack,
+      };
+      
+      // Update task context with failure
+      const currentStep = taskContext.steps.find(s => s.id === stepId);
+      if (currentStep) {
+        currentStep.status = 'failed';
+        currentStep.completed = Date.now();
+        currentStep.duration = Date.now() - stepStart;
+        currentStep.error = error.message;
+      }
+      
+      await this.bot.sendMessage(msg.chat.id, `❕ Slight hiccup, moving on...`);
+      results.push({ name: task.name, args: parsedArguments, text: `Error: ${error.message}` });
+      // In case of error, set a fallback message.
+      userCleanResult = "No result due to error.";
+    }
+
+    // Enrich message context with full task context for better follow-up decisions
+    const taskContextMessage = {
+      role: "system",
+      content: `Task context for ${task.name}: ${JSON.stringify({
+        taskName: task.name,
+        stepNumber: stepCounter + 1,
+        elapsedTime: ((Date.now() - taskContext.startTime) / 1000).toFixed(2) + ' seconds',
+        previousSteps: taskContext.steps.filter(s => s.id !== stepId).map(s => ({
+          name: s.name,
+          status: s.status,
+          resultSummary: s.resultSummary || (s.error ? `Error: ${s.error}` : 'No result')
+        }))
+      })}`
+    };
+    
+    messages.push(taskContextMessage);
+    messages.push({
+      role: "function",
+      name: task.name,
+      content: JSON.stringify(stepResult),
+    });
+
+    // Increase step counter and compute elapsed time.
+    stepCounter++;
+    const elapsedTime = ((Date.now() - lastStepTime) / 1000).toFixed(2);
+    lastStepTime = Date.now();
+
+    // Create a sleek status message showing the step number, a trimmed result, and the elapsed time.
+    const statusText = `💭 **Noodling...**  💭#**${stepCounter}**  ⏱ ${elapsedTime} sec.\n\n🫧 ${userCleanResult}`;
+    if (!statusMessageId) {
+      // Send a new message and save its ID.
+      const sentMsg = await this.bot.sendMessage(msg.chat.id, statusText, { parse_mode: "Markdown" });
+      statusMessageId = sentMsg.message_id;
+    } else {
+      // Edit the existing message.
+      await this.bot.editMessageText(statusText, { chat_id: msg.chat.id, message_id: statusMessageId, parse_mode: "Markdown" });
+    }
+
+    // Enhanced context for follow-up decision
+    const followUpResponse = await this.getFunctionResponse(
+      msg.chat.id, 
+      messages, 
+      task.name, 
+      {
+        ...stepResult,
+        _taskContext: {
+          currentStep: stepCounter,
+          totalSteps: taskTree.length,
+          mainFunctionName: taskContext.mainFunctionName,
+          executionTime: ((Date.now() - taskContext.startTime) / 1000).toFixed(2) + ' seconds'
+        }
+      }
+    );
+    
+    if (followUpResponse?.nextFunction && !this.userCancellations.get(msg.chat.id)) {
+      const followUpTask = {
+        name: followUpResponse.nextFunction.name,
+        dependencies: [task.name],
+        arguments: followUpResponse.nextFunction.arguments || {},
+        alias: `${followUpResponse.nextFunction.name}_${Date.now()}`,
+      };
+      console.log("✅ Follow Up selected automatically by AI model after last result:", {
+        name: followUpResponse.nextFunction.name,
+        dependencies: [task.name],
+        arguments: followUpResponse.nextFunction.arguments || {},
+        alias: `${followUpResponse.nextFunction.name}_${Date.now()}`,
+      });
+      taskTree.push(followUpTask);
+    }
+  };
+
+  for (const task of taskTree) {
+    if (!results.find((r) => r.name === task.name && this.compareArguments(r.args, task.arguments))) {
+      await executeTask(task);
+      
+      // Clear the cancellation flag after each task so subsequent steps aren't blocked.
+      this.userCancellations.delete(msg.chat.id);
+    }
+  }
+  
+  // Update task context with completion information
+  taskContext.completed = Date.now();
+  taskContext.totalDuration = (taskContext.completed - taskContext.startTime) / 1000;
+  taskContext.totalSteps = stepCounter;
+  
+  const summary = this.formatResults(results.map((r) => r.text));
+  return { text: summary, taskContext: taskContext };
+}  
 
   /**
    * tryFallbackFunctions
@@ -1246,7 +1575,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         get_token_market_sentiment_changes: () => this.intentProcessor.processSentimentShift(args.queryStr, args.interval),
         get_cookiedao_api_authorization_status: () => this.intentProcessor.processAuthorizationCheck(),// still Cookie.fun
         fetch_trending_tokens_all_sources: () => this.intentProcessor.getTrendingTokens(),
-        fetch_trending_tokens_by_chain: () => this.intentProcessor.getTrendingTokensByChain(chatId, args.network),
+        fetch_trending_tokens_by_chain: () => this.intentProcessor.getTrendingTokensByChain(chatId, args.query),
         fetch_trending_tokens_coingecko: () => this.intentProcessor.getTrendingTokensCoinGecko(),
         fetch_trending_tokens_dextools: () => this.intentProcessor.getTrendingTokensDextools(),
         fetch_trending_tokens_dexscreener: () => this.intentProcessor.getTrendingTokensDexscreener(),
@@ -1317,7 +1646,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
 
         // Scrap the web info
         trending_tokens_fallback_scrap: () => this.intentProcessor.trendingTokensScrapped(userId),
-        scrape_provided_url: () => this.intentProcessor.urlScrapper(userId, args),
+        scrape_provided_url: () => this.intentProcessor.urlScrapper(userId, args.query),
 
         // Research and Tasks
         save_research: () => this.intentProcessor.processSaveResearchIntent(args, chatId),
@@ -1374,6 +1703,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
     try {
       const maxLength = 7000;
       const resultStr = JSON.stringify(stepResult);
+      console.log(' ⏳ Result String at Max Length:',resultStr)
       const compressed = resultStr.length > maxLength ?
         resultStr.slice(0, maxLength) + `\n\n⚠️ [Carry over Results from ${resultStr.length} chars]` :
         resultStr;
@@ -1389,7 +1719,7 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
         functions: this.functions,
         function_call: "auto",
         max_tokens: 500,
-        temperature: 0,
+        temperature: 0.4,
         top_p: 1.0,
         frequency_penalty: 0.3,
         presence_penalty: 0.2,
@@ -1429,23 +1759,66 @@ Dee Dee can't understand your brilliance, and Mandark is mere background noise. 
   }
 
   /**
+   * 4. Systematic cancellation handling
+   * Add this utility method and modify executeMultiStepTask
+   */
+  checkCancellation(chatId, functionName, step) {
+    if (this.userCancellations.get(chatId)) {
+      const cancelInfo = {
+        time: new Date().toISOString(),
+        function: functionName,
+        step: step,
+      };
+      console.log("🛑 Operation cancelled by user:", cancelInfo);
+      throw new Error(`Operation '${functionName}' cancelled by user at step ${step}`);
+    }
+  }
+
+  /**
    * trimRelevantMessages
    * --------------------
-   * A naive way of limiting messages to avoid token overflows:
-   * keep last x user messages and last x assistant messages + all function messages.
+   * Optimized message trimming to maintain context while reducing token usage.
+   * Prioritizes recent interactions and function results.
    */
   trimRelevantMessages(messages) {
-    const userMessages = messages.filter((m) => m.role === "user");
-    const assistantMessages = messages.filter((m) => m.role === "assistant");
-    const recentUserMessages = userMessages.slice(-5);
-    const recentAssistantMessages = assistantMessages.slice(-8);
-    const trimmed = messages.filter(
-      (m) =>
-        m.role === "function" ||
-        recentUserMessages.includes(m) ||
-        recentAssistantMessages.includes(m)
-    );
-    return trimmed;
+    // Extract messages by role
+    const systemMessages = messages.filter(m => m.role === "system").slice(-1); // Only keep most recent system message
+    const functionMessages = messages.filter(m => m.role === "function");
+    const userMessages = messages.filter(m => m.role === "user");
+    const assistantMessages = messages.filter(m => m.role === "assistant");
+    
+    // Keep the most recent messages from each role
+    const recentUserMessages = userMessages.slice(-3);
+    const recentAssistantMessages = assistantMessages.slice(-3);
+    
+    // For function messages, prioritize recent and relevant ones
+    // We'll keep the most recent function messages, but ensure we have at least 
+    // one result from each unique function name to maintain context
+    const uniqueFunctionNames = [...new Set(functionMessages.map(m => m.name))];
+    const recentFunctionMessages = [];
+    
+    // First, ensure we have at least one message from each function type
+    for (const name of uniqueFunctionNames) {
+      const mostRecentOfType = functionMessages
+        .filter(m => m.name === name)
+        .slice(-1)[0];
+      if (mostRecentOfType) {
+        recentFunctionMessages.push(mostRecentOfType);
+      }
+    }
+    
+    // Then add the most recent function messages (if not already included)
+    const additionalFunctionMessages = functionMessages
+      .slice(-5)
+      .filter(m => !recentFunctionMessages.includes(m));
+    
+    recentFunctionMessages.push(...additionalFunctionMessages);
+    
+    // Combine all messages, maintaining original order
+    const allSelected = [...systemMessages, ...recentUserMessages, ...recentAssistantMessages, ...recentFunctionMessages];
+    
+    // Sort by original position to maintain conversation flow
+    return messages.filter(m => allSelected.includes(m));
   }
 
   cleanJSONText(input, functionName = "unknown_function", functionArguments = {}) {

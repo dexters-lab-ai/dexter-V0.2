@@ -1661,22 +1661,30 @@ export class IntentProcessor extends EventEmitter {
 
   // Trending
   async getTrendingTokensByChain(chatId, network) {
-    console.log("==============network: ", network);
+    console.log("============== Network:", network);
     
     // Normalize the input network name.
     const normalizedNetwork = normalizeNetwork(network);
     
-    // Get trending tokens from your trendingService
-    const trendingTokens = await trendingService.getTrendingTokensByChain(network);
-  
-    // If the trending service indicates a fallback condition
-    if (trendingTokens && trendingTokens[0] && trendingTokens[0].fallback) {
-      // Fallback: scrape using networkScraper (passing the network if needed)
-      const trendingResult = await networkScraper.trendingNetworkScrap(network);
+    let trendingTokens;
+    try {
+      // Call the trending service (which may have its own caching and error handling)
+      trendingTokens = await trendingService.getTrendingTokensByChain(normalizedNetwork);
+    } catch (error) {
+      console.error("Error fetching trending tokens:", error);
+      trendingTokens = [];
+    }
+    
+    // Fallback detection:
+    // 1. If trendingTokens is not an array, or is empty.
+    // 2. Or if the first token contains a fallback flag.
+    if (!Array.isArray(trendingTokens) || trendingTokens.length === 0 || trendingTokens[0].fallback) {
+      console.warn("Fallback condition triggered in getTrendingTokensByChain. Using networkScraper fallback.");
+      const trendingResult = await networkScraper.trendingNetworkScrap(normalizedNetwork);
       return trendingResult;
     }
     
-    // Otherwise, return trending tokens as is
+    // Otherwise, return the trending tokens as provided.
     return trendingTokens;
   }
 

@@ -90,32 +90,47 @@ class TrendingService extends EventEmitter {
     }
   }
 
-  // Fetches trending tokens for a specific network
+  // This function fetches trending tokens for a given network and handles fallback internally.
   async getTrendingTokensByChain(network) {
     const cacheKey = `trending:chain:${network}`;
     try {
+      // Check if there's a valid cache entry.
       const cached = await cacheService.get(cacheKey);
-      if (cached && Array.isArray(cached) && cached.length > 0) return cached.slice(0, 15);
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        return cached.slice(0, 15);
+      }
       
+      // Fetch trending tokens from dextools.
       const tokens = await dextools.fetchTrendingTokens(network);
       
-      // Check if tokens is an array; if not, return a fallback
-      if (!Array.isArray(tokens)) {
-        console.warn(`Expected tokens to be an array but got: ${JSON.stringify(tokens)}`);
+      // Check if tokens is an array and not empty.
+      if (!Array.isArray(tokens) || tokens.length === 0) {
+        console.warn(`Expected tokens to be a non-empty array, but got: ${JSON.stringify(tokens)}`);
         return [this.getTrendingFallback(network)];
       }
-      if (tokens.length === 0) return [this.getTrendingFallback(network)];
       
+      // Optionally, detect fallback if the first token indicates it.
+      if (tokens[0].fallback) {
+        console.warn("Fallback flag detected in trending tokens response.");
+        return [this.getTrendingFallback(network)];
+      }
+      
+      // Format tokens as needed.
       const formatted = tokens.map(token => this.formatterNeeded(token));
       const limited = formatted.slice(0, 15);
+      
+      // Cache the result.
       await cacheService.set(cacheKey, limited, CACHE_DURATION);
       return limited;
     } catch (error) {
+      // Log error and return a fallback result.
       await ErrorHandler.handle(error);
       return [this.getTrendingFallback(network)];
     }
-  }  
+  }
   
+  // This function generates a fallback object that indicates a fallback condition.
+// It includes a URL and a prompt for the user.
   getTrendingFallback(network) {
     const lower = network.toLowerCase();
     let url, prompt;
@@ -177,7 +192,7 @@ class TrendingService extends EventEmitter {
         prompt = "Check out trending tokens";
     }
     return { fallback: true, url, prompt };
-  }  
+  }
 
   formatterNeeded(token) {
     return {
