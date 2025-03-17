@@ -157,6 +157,12 @@ class Config {
     // Network Configurations – Extended to Cover All Supported Networks
     // -------------------------------------------------------------------------
     this.networks = {
+      sonic: {
+        rpcUrl: process.env.SONIC_ENDPOINT,
+        name: 'sonic-mainnet',
+        chainId: 146,
+        fallbackRpcUrls: this.parseFallbackUrls(process.env.SONIC_ENDPOINT),
+      },
       ethereum: {        
         rpcUrl: process.env.ETHEREUM_RPC_URL,
         alchemyApiKey: process.env.ALCHEMY_API_KEY,

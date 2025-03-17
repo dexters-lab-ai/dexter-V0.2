@@ -6,6 +6,7 @@ import cacheManager from './cacheMoralis.js';
 // EVM Chain Mapping
 // --------------------
 export const evmChainMapping = {
+  sonic: "0x146",
   solana: "mainnet",
   ethereum: "0x1",
   sepolia: "0xaa36a7",
@@ -17,7 +18,7 @@ export const evmChainMapping = {
   arbitrum: "0xa4b1",
   base: "0x2105",
   base_sepolia: "0x14a34",
-  optimism: "0xa",
+  optimism: "0x0a",
   linea: "0xe708",
   linea_sepolia: "0xe705",
   avalanche: "0xa86a",

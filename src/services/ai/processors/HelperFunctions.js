@@ -336,21 +336,21 @@ export class HelperFunctions {
 
   /* ============================================================
       === Results Formatting: Always Return a String Result    ===
-      ============================================================ */
+  ============================================================ */
 
   formatResults(resultsArray) {
-    if (!resultsArray || !Array.isArray(resultsArray) || resultsArray.length === 0) {
+    if (!Array.isArray(resultsArray) || resultsArray.length === 0) {
       return "⚠️ No results to display.";
     }
-    return resultsArray
-      .filter(r => r != null)
-      .map(r =>
-        typeof r === 'string'
-          ? r
-          : (r.text ? String(r.text) : JSON.stringify(r))
-      )
-      .join('\n\n');
-  }  
+    // Map over each result and ensure it is a string
+    const stringResults = resultsArray.map((result) => {
+      if (typeof result === 'string') return result;
+      return typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+    });
+    // Join the results with two newlines for readability
+    return stringResults.join("\n\n");
+  }
+  
 
   /**
    * notifyUserWithRetry

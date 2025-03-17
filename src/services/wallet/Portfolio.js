@@ -64,37 +64,177 @@ async function retryOperation(operation, attempts = 3, delay = 1000) {
 
 // Mapping natural chain names to their EVM hex IDs.
 const moralisChainMapping = {
-  solana: "mainnet",
-  ethereum: "0x1",
-  sepolia: "0xaa36a7",
-  holesky: "0x4268",
-  polygon: "0x89",
-  polygon_amoy: "0x13882",
-  binance: "0x38",
-  bsc_testnet: "0x61",
-  arbitrum: "0xa4b1",
-  base: "0x2105",
-  base_sepolia: "0x14a34",
-  optimism: "0xa",
-  linea: "0xe708",
-  linea_sepolia: "0xe705",
-  avalanche: "0xa86a",
-  fantom: "0xfa",
-  cronos: "0x19",
-  gnosis: "0x64",
-  gnosis_chiado: "0x27d8",
-  chiliz: "0x15b38",
-  chiliz_testnet: "0x15b32",
-  moonbeam: "0x504",
-  moonriver: "0x505",
-  moonbase: "0x507",
-  flow: "0x2eb",
-  flow_testnet: "0x221",
-  ronin: "0x7e4",
-  ronin_saigon: "0x7e5",
-  lisk: "0x46f",
-  lisk_sepolia: "0x106a",
-  pulsechain: "0x171"
+  // Sonic Mainnet
+  "sonic": "0x146",
+  "sonic mainnet": "0x146",
+
+  // Ethereum Mainnet
+  "ethereum": "0x1",
+  "mainnet": "0x1",
+  "eth": "0x1",
+  "ethereum mainnet": "0x1",
+
+  // Ethereum Sepolia
+  "sepolia": "0xaa36a7",
+  "ethereum sepolia": "0xaa36a7",
+
+  // Ethereum Holesky
+  "holesky": "0x4268",
+  "ethereum holesky": "0x4268",
+
+  // Polygon
+  "polygon": "0x89",
+  "polygon mainnet": "0x89",
+
+  // Polygon Amoy
+  "polygon amoy": "0x13882",
+
+  // Binance Smart Chain Mainnet
+  "bsc": "0x38",
+  "binance": "0x38",
+  "binance smart chain": "0x38",
+  "bsc mainnet": "0x38",
+
+  // Binance Smart Chain Testnet
+  "bsc testnet": "0x61",
+  "binance smart chain testnet": "0x61",
+
+  // Arbitrum
+  "arbitrum": "0xa4b1",
+  "arbitrum mainnet": "0xa4b1",
+
+  // Arbitrum Sepolia
+  "arbitrum sepolia": "0x66eee",
+
+  // Base
+  "base": "0x2105",
+  "base mainnet": "0x2105",
+
+  // Base Sepolia
+  "base sepolia": "0x14a34",
+
+  // Optimism
+  "optimism": "0x0a",
+  "optimism mainnet": "0x0a",
+
+  // Optimism Sepolia
+  "optimism sepolia": "0xaa37dc",
+
+  // Linea
+  "linea": "0xe708",
+  "linea mainnet": "0xe708",
+
+  // Linea Sepolia
+  "linea sepolia": "0xe705",
+
+  // Avalanche
+  "avalanche": "0xa86a",
+  "avalanche mainnet": "0xa86a",
+
+  // Fantom
+  "fantom": "0xfa",
+  "fantom mainnet": "0xfa",
+
+  // Fantom Testnet
+  "fantom testnet": "0xfa2",
+
+  // Cronos
+  "cronos": "0x19",
+  "cronos mainnet": "0x19",
+
+  // Gnosis (xDai)
+  "gnosis": "0x64",
+  "xdai": "0x64",
+  "gnosis mainnet": "0x64",
+
+  // Gnosis Chiado (Testnet)
+  "gnosis chiado": "0x27d8",
+  "chiado": "0x27d8",
+  "gnosis testnet": "0x27d8",
+
+  // Chiliz
+  "chiliz": "0x15b38",
+  "chiliz mainnet": "0x15b38",
+
+  // Chiliz Testnet
+  "chiliz testnet": "0x15b32",
+
+  // Moonbeam
+  "moonbeam": "0x504",
+  "moonbeam mainnet": "0x504",
+
+  // Moonriver
+  "moonriver": "0x505",
+  "moonriver testnet": "0x505",
+
+  // Moonbase
+  "moonbase": "0x507",
+  "moonbase testnet": "0x507",
+
+  // Blast
+  "blast": "0x13e31",
+  "blast mainnet": "0x13e31",
+
+  // Blast Sepolia
+  "blast sepolia": "0xa0c71fd",
+
+  // zkSync
+  "zksync": "0x144",
+  "zksync mainnet": "0x144",
+
+  // zkSync Sepolia
+  "zksync sepolia": "0x12c",
+
+  // Mantle
+  "mantle": "0x1388",
+  "mantle mainnet": "0x1388",
+
+  // Mantle Sepolia
+  "mantle sepolia": "0x138b",
+
+  // opBNB
+  "opbnb": "0xcc",
+  "opbnb mainnet": "0xcc",
+
+  // Polygon zkEVM
+  "polygon zkevm": "0x44d",
+  "polygon zkevm mainnet": "0x44d",
+
+  // Polygon zkEVM Cardona
+  "polygon zkevm cardona": "0x98a",
+  "polygon zkevm cardona testnet": "0x98a",
+
+  // Zetachain
+  "zetachain": "0x1b58",
+  "zetachain mainnet": "0x1b58",
+
+  // Zetachain Testnet
+  "zetachain testnet": "0x1b59",
+
+  // Flow
+  "flow": "0x2eb",
+  "flow mainnet": "0x2eb",
+
+  // Flow Testnet
+  "flow testnet": "0x221",
+
+  // Ronin
+  "ronin": "0x7e4",
+  "ronin mainnet": "0x7e4",
+
+  // Ronin Testnet (Saigon)
+  "ronin testnet": "0x7e5",
+
+  // Lisk
+  "lisk": "0x46f",
+  "lisk mainnet": "0x46f",
+
+  // Lisk Sepolia Testnet
+  "lisk testnet": "0x106a",
+
+  // Pulsechain
+  "pulsechain": "0x171",
+  "pulsechain mainnet": "0x171"
 };
 
 /**
@@ -263,7 +403,6 @@ export async function getWalletNetWorth(chain, walletAddress) {
 export async function getWalletPNL(chain, walletAddress) {
   try {
     if (chain.toLowerCase() === "solana") {
-      
       // SOLANA CALL via Moralis SDK
       const response = await Moralis.SolApi.account.getPortfolio({
         network: "mainnet",
@@ -275,7 +414,7 @@ export async function getWalletPNL(chain, walletAddress) {
       // For EVM chains, use the profitability summary endpoint.
       const hexChainId = moralisChainMapping[chain.toLowerCase()];
       if (!hexChainId) {
-        throw new Error(`Chain "${chain}" is not supported for getWalletPNL.`);
+        return { error: `Moralis balance API: Chain "${chain}" is not linked.` };
       }
       const response = await retryOperation(() =>
         Moralis.EvmApi.wallets.getWalletProfitabilitySummary({
@@ -288,7 +427,7 @@ export async function getWalletPNL(chain, walletAddress) {
     }
   } catch (error) {
     console.error("Error fetching wallet PNL:", error);
-    throw error;
+    return { error: error.message || "Error fetching wallet PNL" };
   }
 }
 

@@ -75,10 +75,24 @@ class NetworkScraper {
           "timeout":30000,
           "location":{"country":"US"},
           "blockAds":true,
-          "excludeTags":["script"],
-          "removeBase64Images":true,
-          "proxy":"stealth"
+         // "excludeTags":["script"],
+         // "removeBase64Images":true,
+          "proxy":"basic"
         });  
+
+        const options = {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer fc-6001b7ba789342de8e9ad2e6d096dce6',
+            'Content-Type': 'application/json'
+          },
+          body: '{"formats":["markdown"],"onlyMainContent":true,"waitFor":0,"mobile":false,"skipTlsVerification":true,"timeout":30000,"location":{"country":"US"},"blockAds":false,"url":"https://dexscreener.com/sonic","excludeTags":[],"removeBase64Images":false,"proxy":"basic"}'
+        };
+        
+        fetch('https://api.firecrawl.dev/v1/scrape', options)
+          .then(response => response.json())
+          .then(response => console.log(response))
+          .catch(err => console.error(err));
        
       const result = this.extractDescriptionAndContent(rawResult);
       

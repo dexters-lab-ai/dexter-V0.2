@@ -10,6 +10,7 @@ import { normalizeNetwork, NETWORKS, NETWORK_DISPLAY_NAMES } from '../../../core
 
 // Service imports
 import { Wallet } from "ethers";
+import { Avalanche } from 'avalanche';
 import { addressBookService } from '../../addressBook/AddressBookService.js';
 import { tradeService } from '../../trading/TradeService.js';
 import { dextools } from '../../dextools/index.js';
@@ -61,6 +62,187 @@ const defaultConfig = {
   aggregatorEndpoint: config.baseAggregatorEndpoint || null
 };
 
+// 1. Map user input (short/long names) to canonical Morlis chain IDs.
+const chainAliasMapping = {
+  // Sonic Mainnet
+  "sonic": "0x146",
+  "sonic mainnet": "0x146",
+
+  // Ethereum Mainnet
+  "ethereum": "0x1",
+  "mainnet": "0x1",
+  "eth": "0x1",
+  "ethereum mainnet": "0x1",
+
+  // Ethereum Sepolia
+  "sepolia": "0xaa36a7",
+  "ethereum sepolia": "0xaa36a7",
+
+  // Ethereum Holesky
+  "holesky": "0x4268",
+  "ethereum holesky": "0x4268",
+
+  // Polygon
+  "polygon": "0x89",
+  "polygon mainnet": "0x89",
+
+  // Polygon Amoy
+  "polygon amoy": "0x13882",
+
+  // Binance Smart Chain Mainnet
+  "bsc": "0x38",
+  "binance": "0x38",
+  "binance smart chain": "0x38",
+  "bsc mainnet": "0x38",
+
+  // Binance Smart Chain Testnet
+  "bsc testnet": "0x61",
+  "binance smart chain testnet": "0x61",
+
+  // Arbitrum
+  "arbitrum": "0xa4b1",
+  "arbitrum mainnet": "0xa4b1",
+
+  // Arbitrum Sepolia
+  "arbitrum sepolia": "0x66eee",
+
+  // Base
+  "base": "0x2105",
+  "base mainnet": "0x2105",
+
+  // Base Sepolia
+  "base sepolia": "0x14a34",
+
+  // Optimism
+  "optimism": "0x0a",
+  "optimism mainnet": "0x0a",
+
+  // Optimism Sepolia
+  "optimism sepolia": "0xaa37dc",
+
+  // Linea
+  "linea": "0xe708",
+  "linea mainnet": "0xe708",
+
+  // Linea Sepolia
+  "linea sepolia": "0xe705",
+
+  // Avalanche
+  "avalanche": "0xa86a",
+  "avalanche mainnet": "0xa86a",
+
+  // Fantom
+  "fantom": "0xfa",
+  "fantom mainnet": "0xfa",
+
+  // Fantom Testnet
+  "fantom testnet": "0xfa2",
+
+  // Cronos
+  "cronos": "0x19",
+  "cronos mainnet": "0x19",
+
+  // Gnosis (xDai)
+  "gnosis": "0x64",
+  "xdai": "0x64",
+  "gnosis mainnet": "0x64",
+
+  // Gnosis Chiado (Testnet)
+  "gnosis chiado": "0x27d8",
+  "chiado": "0x27d8",
+  "gnosis testnet": "0x27d8",
+
+  // Chiliz
+  "chiliz": "0x15b38",
+  "chiliz mainnet": "0x15b38",
+
+  // Chiliz Testnet
+  "chiliz testnet": "0x15b32",
+
+  // Moonbeam
+  "moonbeam": "0x504",
+  "moonbeam mainnet": "0x504",
+
+  // Moonriver
+  "moonriver": "0x505",
+  "moonriver testnet": "0x505",
+
+  // Moonbase
+  "moonbase": "0x507",
+  "moonbase testnet": "0x507",
+
+  // Blast
+  "blast": "0x13e31",
+  "blast mainnet": "0x13e31",
+
+  // Blast Sepolia
+  "blast sepolia": "0xa0c71fd",
+
+  // zkSync
+  "zksync": "0x144",
+  "zksync mainnet": "0x144",
+
+  // zkSync Sepolia
+  "zksync sepolia": "0x12c",
+
+  // Mantle
+  "mantle": "0x1388",
+  "mantle mainnet": "0x1388",
+
+  // Mantle Sepolia
+  "mantle sepolia": "0x138b",
+
+  // opBNB
+  "opbnb": "0xcc",
+  "opbnb mainnet": "0xcc",
+
+  // Polygon zkEVM
+  "polygon zkevm": "0x44d",
+  "polygon zkevm mainnet": "0x44d",
+
+  // Polygon zkEVM Cardona
+  "polygon zkevm cardona": "0x98a",
+  "polygon zkevm cardona testnet": "0x98a",
+
+  // Zetachain
+  "zetachain": "0x1b58",
+  "zetachain mainnet": "0x1b58",
+
+  // Zetachain Testnet
+  "zetachain testnet": "0x1b59",
+
+  // Flow
+  "flow": "0x2eb",
+  "flow mainnet": "0x2eb",
+
+  // Flow Testnet
+  "flow testnet": "0x221",
+
+  // Ronin
+  "ronin": "0x7e4",
+  "ronin mainnet": "0x7e4",
+
+  // Ronin Testnet (Saigon)
+  "ronin testnet": "0x7e5",
+
+  // Lisk
+  "lisk": "0x46f",
+  "lisk mainnet": "0x46f",
+
+  // Lisk Sepolia Testnet
+  "lisk testnet": "0x106a",
+
+  // Pulsechain
+  "pulsechain": "0x171",
+  "pulsechain mainnet": "0x171"
+};
+
+// Helper: Convert user input to canonical chain ID.
+function normalizeChain(inputChain) {
+  const lower = inputChain.trim().toLowerCase();
+  return chainAliasMapping[lower] || lower; // fallback to input if not found
+}
+
 export class IntentProcessor extends EventEmitter {
   constructor(bot) {
     super();
@@ -97,108 +279,346 @@ export class IntentProcessor extends EventEmitter {
   }
 
   async getPortfolio(userId, network) {
-    // 1. Retrieve wallet addresses for the user.
+    // 1. Retrieve wallet addresses for the user
     const walletAddresses = await walletService.getWallets(userId);
-  
-    // 2. If a chain is specified, process only that chain.
+    console.log("Wallet addresses:", walletAddresses);
+    
+    // 2. Fetch balances for specified network or all networks
+    // If network is provided, normalize it before passing to getBalances
+    const balanceResults = await this.getBalances("portfolio", userId, { 
+      network: network ? normalizeChain(network.toLowerCase()) : undefined 
+    });
+    
+    // 3. If user specified a single chain, return data for just that chain
     if (network) {
-      const chain = network.toLowerCase();
-      let walletBalances = null;
-      try {
-        // Call getBalances with a dummy chatId ("portfolio") and parameters.
-        walletBalances = await this.getBalances("portfolio", userId, { network: chain });
-      } catch (e) {
-        console.error(`Error fetching balances for ${chain}:`, e);
+      const normalizedChain = normalizeChain(network.toLowerCase());
+      const networksData = balanceResults.data.filter(result => 
+        normalizeChain(result.network.toLowerCase()) === normalizedChain
+      );
+      
+      if (networksData.length === 0) {
+        return {
+          chain: normalizedChain,
+          walletAddresses,
+          error: `No data found for chain: ${normalizedChain}`
+        };
       }
+      
+      return {
+        chain: normalizedChain,
+        walletAddresses: walletAddresses.filter(w => 
+          normalizeChain(w.network.toLowerCase()) === normalizedChain
+        ),
+        walletBalances: networksData
+      };
+    }
+    
+    // 4. No specific chain requested - organize data by chain
+    const walletBalancesByChain = {};
+    
+    for (const result of balanceResults.data) {
+      const networkId = result.network.toLowerCase();
+      walletBalancesByChain[networkId] = result;
+    }
+    
+    return {
+      walletAddresses,
+      walletBalances: walletBalancesByChain
+    };
+  }
   
-      if (chain === "solana") {
-        const solWallets = walletAddresses.solana || [];
-        let portfolio = null;
-        if (solWallets.length) {
-          try {
-            portfolio = await getPortfolioData("solana", solWallets[0].address);
-          } catch (error) {
-            console.error("Solana portfolio fetch failed:", error);
-          }
-        }
-        return {
-          chain: "solana",
-          walletAddresses,
-          walletBalances,
-          portfolio,
-        };
-      } else {
-        // Process EVM chain (e.g., "ethereum", "base", "avalanche").
-        const evmWallets = walletAddresses[chain] || [];
-        const networthResults = await Promise.all(
-          evmWallets.map(async (wallet) => {
-            try {
-              const networthData = await getWalletNetWorth(wallet.address);
-              return { title: `Networth for ${wallet.address}`, data: networthData };
-            } catch (error) {
-              console.error(`Error fetching networth for ${wallet.address}:`, error);
-              return { title: `Networth for ${wallet.address}`, data: null };
-            }
-          })
-        );
-        return {
-          chain,
-          walletAddresses,
-          walletBalances,
-          networth: networthResults,
-        };
+  async getBalances(chatId, userId, parameters) {
+    let { network, tokenList = [] } = parameters;
+  
+    // 1. Normalize network name if provided
+    if (network) {
+      try {
+        const normalizedChainId = normalizeChain(network);
+        network = normalizedChainId || network;
+      } catch (error) {
+        console.error("Normalization failed, falling back to original network input:", network, error);
       }
     }
   
-    // 3. No chain specified: Process default chains.
-    const defaultChains = ["solana", "ethereum", "base", "avalanche"];
-    const portfolioByChain = {};
-    const walletBalancesByChain = {};
+    // 2. Retrieve and validate user wallet data
+    const user = await User.findOne({ telegramId: userId });
+    if (!user || !user.wallets) {
+      throw new Error("User wallet data not found.");
+    }
   
-    for (const ch of defaultChains) {
-      // Fetch wallet balances for this chain.
+    // 3. Determine which networks to query
+    const networksToQuery = network ? [network] : Object.keys(user.wallets);
+    const results = [];
+  
+    // 4. Process each network
+    for (const net of networksToQuery) {
+      // Skip networks that should be excluded (like Avalanche in your example)
+      /*
+      if (net.toLowerCase() === "avalanche") {
+        console.log("Skipping Avalanche wallet processing");
+        results.push(this.createNetworkResult(net, "N/A", {}, "N/A", "N/A", "Skipped Avalanche wallet processing"));
+        continue;
+      }
+        */
+  
       try {
-        walletBalancesByChain[ch] = await this.getBalances("portfolio", userId, { network: ch });
-      } catch (e) {
-        console.error(`Error fetching balances for ${ch}:`, e);
-        walletBalancesByChain[ch] = null;
-      }
-  
-      // Process portfolio (Solana) or networth (EVM) for this chain.
-      if (ch === "solana") {
-        const solWallets = walletAddresses.solana || [];
-        let portfolio = null;
-        try {
-          portfolio = solWallets.length ? await getPortfolioData("solana", solWallets[0].address) : null;
-        } catch (error) {
-          console.error("Solana portfolio fetch failed:", error);
+        // Ensure the user has wallet data for this network
+        if (!user.wallets[net] || !user.wallets[net][0]?.encryptedPrivateKey) {
+          results.push(this.createNetworkResult(net, "N/A", {}, "N/A", "N/A", `Wallet for network "${net}" not found.`));
+          continue;
         }
-        portfolioByChain[ch] = { portfolio };
-      } else {
-        const evmWallets = walletAddresses[ch] || [];
-        const networthResults = await Promise.all(
-          evmWallets.map(async (wallet) => {
-            try {
-              const networthData = await getWalletNetWorth(wallet.address);
-              return { title: `Networth for ${wallet.address}`, data: networthData };
-            } catch (error) {
-              console.error(`Error fetching networth for ${wallet.address}:`, error);
-              return { title: `Networth for ${wallet.address}`, data: null };
-            }
-          })
-        );
-        portfolioByChain[ch] = { networth: networthResults };
+  
+        const key = user.wallets[net][0].encryptedPrivateKey;
+        const networkResult = await this.processNetworkWallet(net, key, chatId, userId);
+        results.push(networkResult);
+      } catch (error) {
+        console.error(`Unhandled error processing wallet for ${net}: ${error.message}`);
+        results.push(this.createNetworkResult(net, "N/A", {}, "N/A", "N/A", error.message));
       }
+    }
+  
+    if (!results || results.length === 0) {
+      return {
+        message: "No wallet data found.",
+        data: {},
+      };
     }
   
     return {
-      walletAddresses,
-      walletBalances: walletBalancesByChain,
-      portfolioByChain,
+      message: "Wallet data retrieved successfully.",
+      data: results,
     };
-  }  
+  }
+  
+  // Helper method to create a standardized network result object
+  createNetworkResult(network, publicKey, balances, walletPNL, walletNetWorth, error = null) {
+    const result = {
+      network,
+      publicKey: publicKey || "N/A",
+      balances: balances || {},
+      walletPNL: walletPNL || "N/A", 
+      walletNetWorth: walletNetWorth || "N/A"
+    };
+    
+    if (error) {
+      result.error = error;
+    }
+    
+    return result;
+  }
+  
+  // Process a specific network wallet
+  async processNetworkWallet(network, encryptedKey, chatId, userId) {
+    const net = network.toLowerCase();
+    
+    // Process Solana wallet
+    if (net === "solana") {
+      return await this.processSolanaWallet(encryptedKey, chatId, userId);
+    }
+    // Process Avalanche wallet
+    else if (net === "avalanche") {
+      return await this.processAvalancheWallet(encryptedKey, chatId, userId);
+    }
+    // Process other EVM chain wallets
+    else if (evmChainMapping[net]) {
+      return await this.processEvmWallet(net, encryptedKey, chatId, userId);
+    } 
+    // Handle unsupported networks
+    else {
+      return this.createNetworkResult(network, "N/A", {}, "N/A", "N/A", `Unsupported network: ${network}`);
+    }
+  }
 
-  // Helper to process a Solana private key.
+  // Process a Solana wallet and return its data
+  async processSolanaWallet(encryptedKey, chatId, userId) {
+    let publicKey = null;
+    let wallet = null;
+    let formattedBalances = {};
+    let walletPNL = "N/A";
+    let walletNetWorth = "N/A";
+
+    try {
+      // Decrypt the encrypted private key
+      const privateKey = decrypt(encryptedKey);
+      
+      if (!privateKey) {
+        throw new Error("Failed to decrypt Solana private key");
+      }
+      
+      // For Solana, we need to create a Keypair from the private key
+      // The key could be in either hex or base58 format
+      let secretKeyUint8;
+      
+      if (/^[0-9a-fA-F]{128}$/.test(privateKey)) {
+        // It's a hex string
+        secretKeyUint8 = Uint8Array.from(Buffer.from(privateKey, "hex"));
+      } else {
+        // Try to decode as base58
+        try {
+          secretKeyUint8 = bs58.decode(privateKey);
+        } catch (error) {
+          throw new Error(`Invalid Solana private key format: ${error.message}`);
+        }
+      }
+      
+      // Create the wallet from the secret key
+      wallet = Keypair.fromSecretKey(secretKeyUint8);
+      publicKey = wallet.publicKey.toBase58();
+      
+      // Send message to user if reconstruction was successful
+      await this.safeSendMessage(
+        this.bot,
+        userId,
+        `✅ **Solana Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${publicKey}\n\`\`\``,
+        { parse_mode: "Markdown" }
+      );
+      
+      // Fetch portfolio data with fallback
+      try {
+        formattedBalances = await getPortfolioData("solana", publicKey);
+      } catch (error) {
+        console.error("Primary Solana balance fetch failed, falling back", error);
+        try {
+          formattedBalances = await getDetailedFormattedBalancesSOL(wallet, this.solanaConnection);
+        } catch (fallbackError) {
+          console.error("Fallback balance fetch also failed", fallbackError);
+        }
+      }
+      
+      // Get PNL and net worth
+      try { walletPNL = await getWalletPNL("solana", publicKey); } catch (e) {}
+      try { walletNetWorth = await getWalletNetWorth("solana", publicKey); } catch (e) {}
+      
+    } catch (error) {
+      console.error(`Error reconstructing Solana wallet: ${error.message}`);
+      return this.createNetworkResult("solana", "N/A", {}, "N/A", "N/A", error.message);
+    }
+
+    return this.createNetworkResult("solana", publicKey, formattedBalances, walletPNL, walletNetWorth);
+  }
+
+  // Process an Avalanche wallet and return its data
+  async processAvalancheWallet(encryptedKey, chatId, userId) {
+    let walletAddress = null;
+    let formattedBalances = {};
+    let walletPNL = "N/A";
+    let walletNetWorth = "N/A";
+
+    try {
+      // Decrypt the private key
+      const privateKey = decrypt(encryptedKey);
+      
+      if (!privateKey) {
+        throw new Error("Failed to decrypt Avalanche private key");
+      }
+      
+      // Create an Avalanche instance using the config
+      const avalanche = new Avalanche(
+        config.networks.avalanche.host,
+        config.networks.avalanche.port,
+        config.networks.avalanche.protocol
+      );
+      
+      // Get the PChain API
+      const pchain = avalanche.PChain();
+      
+      // Get the keyChain instance
+      const keyChain = pchain.keyChain();
+      
+      // Import the key into the keychain
+      const keyPair = keyChain.importKey(privateKey);
+      
+      // Get the wallet address
+      walletAddress = keyPair.getAddressString();
+      
+      console.log(`✅ Avalanche Wallet Reconstructed:`, walletAddress);
+      
+      await this.safeSendMessage(
+        this.bot,
+        userId,
+        `✅ **Avalanche Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${walletAddress}\n\`\`\``,
+        { parse_mode: "Markdown" }
+      );
+
+      // Fetch portfolio data
+      try {
+        formattedBalances = await getPortfolioData("avalanche", walletAddress);
+      } catch (error) {
+        console.error(`Avalanche balance fetch failed`, error);
+      }
+      
+      // Get PNL and net worth
+      try { walletPNL = await getWalletPNL("avalanche", walletAddress); } catch (e) {}
+      try { walletNetWorth = await getWalletNetWorth("avalanche", walletAddress); } catch (e) {}
+      
+    } catch (error) {
+      console.error(`Error reconstructing Avalanche wallet: ${error.message}`);
+      return this.createNetworkResult("avalanche", "N/A", {}, "N/A", "N/A", error.message);
+    }
+
+    return this.createNetworkResult("avalanche", walletAddress, formattedBalances, walletPNL, walletNetWorth);
+  }
+
+  // Process an EVM wallet and return its data
+  async processEvmWallet(network, encryptedKey, chatId, userId) {
+    let walletAddress = null;
+    let formattedBalances = {};
+    let walletPNL = "N/A";
+    let walletNetWorth = "N/A";
+
+    try {
+      let privateKey = decrypt(encryptedKey);
+      
+      if (!privateKey) {
+        throw new Error("Failed to decrypt private key.");
+      }
+      
+      // Ensure the private key has the correct format
+      if (!privateKey.startsWith("0x")) {
+        privateKey = "0x" + privateKey;
+      }
+      
+      console.log(
+        `🔓 Private Key Decrypted Successfully for ${network}`
+      );
+
+      const providerForNetwork = providers[network.toLowerCase()];
+      if (!providerForNetwork) {
+        throw new Error(`Provider for network "${network}" is not configured.`);
+      }
+
+      const wallet = new Wallet(privateKey, providerForNetwork);
+      walletAddress = wallet.address;
+      
+      console.log(`✅ ${network.toUpperCase()} Wallet Reconstructed:`, walletAddress);
+      
+      await this.safeSendMessage(
+        this.bot,
+        userId,
+        `✅ **${network.toUpperCase()} Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${walletAddress}\n\`\`\``,
+        { parse_mode: "Markdown" }
+      );
+
+      // Fetch portfolio data
+      try {
+        formattedBalances = await getPortfolioData(network, walletAddress);
+      } catch (error) {
+        console.error(`Primary ${network.toUpperCase()} balance fetch failed`, error);
+      }
+      
+      // Get PNL and net worth
+      try { walletPNL = await getWalletPNL(network, walletAddress); } catch (e) {}
+      try { walletNetWorth = await getWalletNetWorth(network, walletAddress); } catch (e) {}
+      
+    } catch (error) {
+      console.error(`Error reconstructing ${network.toUpperCase()} wallet: ${error.message}`);
+      return this.createNetworkResult(network, "N/A", {}, "N/A", "N/A", error.message);
+    }
+
+    return this.createNetworkResult(network, walletAddress, formattedBalances, walletPNL, walletNetWorth);
+  }
+  
+  // Keep your existing processSolanaKey function
   async processSolanaKey(key) {
     // If key is already in base58 format (44 characters and matching regex), return it.
     if (key.length === 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(key)) {
@@ -211,219 +631,6 @@ export class IntentProcessor extends EventEmitter {
       decrypted = String(decrypted);
     }
     return decrypted;
-  }
-
-  /**
-   * Get wallet balances for a user on a specified network.
-   * Validates the user, decrypts the private key if needed, reconstructs the wallet,
-   * and fetches portfolio balances using getPortfolioData (with fallbacks).
-   *
-   * @param {string} chatId - Chat identifier.
-   * @param {string} userId - Telegram user ID.
-   * @param {object} parameters - Contains network and optional tokenList.
-   * @returns {object} Formatted portfolio balances.
-   * @throws {Error} If user/wallet data is missing, decryption fails, or network is unsupported.
-  */
-
-  async getBalances(chatId, userId, parameters) {
-    const { network, tokenList = [] } = parameters;
-    
-    // 1. Retrieve and validate user wallet data.
-    const user = await User.findOne({ telegramId: userId });
-    if (!user || !user.wallets) {
-      throw new Error("User wallet data not found.");
-    }
-    
-    // Determine which networks to query:
-    const networksToQuery = network
-      ? [network]
-      : Object.keys(user.wallets);
-  
-    // Prepare an array to accumulate results.
-    const results = [];
-  
-    for (const net of networksToQuery) {
-      // Ensure the user has wallet data for this network.
-      if (!user.wallets[net] || !user.wallets[net][0]?.encryptedPrivateKey) {
-        // Skip or add a fallback entry.
-        results.push({
-          network: net,
-          publicKey: "N/A",
-          balances: {},
-          walletPNL: "N/A",
-          walletNetWorth: "N/A",
-          error: `Wallet for network "${net}" not found.`,
-        });
-        continue;
-      }
-      
-      const key = user.wallets[net][0].encryptedPrivateKey;
-      
-      // Process Solana
-      if (net.toLowerCase() === "solana") {
-        try {
-          // Determine if decryption is needed.
-          let needsDecryption = true;
-          if (
-            (key.length === 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(key)) ||
-            (key.length === 128 && /^[0-9a-fA-F]+$/.test(key))
-          ) {
-            needsDecryption = false;
-          }
-          const processedKey = needsDecryption ? decrypt(key) : key;
-          if (!processedKey) {
-            throw new Error("Failed to decrypt private key.");
-          }
-          // Decode the processed key.
-          const secretKeyUint8 = /^[0-9a-fA-F]{128}$/.test(processedKey)
-            ? Uint8Array.from(Buffer.from(processedKey, "hex"))
-            : bs58.decode(processedKey);
-          const wallet = Keypair.fromSecretKey(secretKeyUint8);
-          const publicKey = wallet.publicKey.toBase58();
-          /*
-          console.log("✅ Solana Wallet Reconstructed:", publicKey);
-          await this.safeSendMessage(
-            this.bot,
-            userId,
-            `✅ **Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${publicKey}\n\`\`\``,
-            { parse_mode: "Markdown" }
-          );
-          */
-  
-          // Fetch balances with fallback.
-          let formattedBalances;
-          try {
-            formattedBalances = await getPortfolioData("solana", publicKey);
-          } catch (error) {
-            console.error("Primary Solana balance fetch failed, falling back", error);
-            formattedBalances = await getDetailedFormattedBalancesSOL(wallet, this.solanaConnection);
-          }
-          
-          // Retrieve extra data (PNL and Net Worth)
-          let walletPNL, walletNetWorth;
-          try {
-            walletPNL = await getWalletPNL("solana", publicKey);
-          } catch (e) {
-            walletPNL = "N/A";
-          }
-          try {
-            walletNetWorth = await getWalletNetWorth("solana", publicKey);
-          } catch (e) {
-            walletNetWorth = "N/A";
-          }
-  
-          results.push({
-            network: "solana",
-            publicKey,
-            balances: formattedBalances || {},
-            walletPNL: walletPNL || "N/A",
-            walletNetWorth: walletNetWorth || "N/A",
-          });
-        } catch (error) {
-          console.error(`Error processing Solana wallet: ${error.message}`);
-          results.push({
-            network: "solana",
-            publicKey: "N/A",
-            balances: {},
-            walletPNL: "N/A",
-            walletNetWorth: "N/A",
-            error: error.message,
-          });
-        }
-      }
-      // Process EVM chains
-      else if (evmChainMapping[net.toLowerCase()]) {
-        try {
-          let privateKey;
-          if (key.startsWith("0x") && key.length === 66) {
-            privateKey = key;
-          } else {
-            privateKey = decrypt(key);
-            if (!privateKey) throw new Error("Failed to decrypt private key.");
-            if (!privateKey.startsWith("0x")) {
-              privateKey = "0x" + privateKey;
-            }
-            console.log(`🔓 Private Key Decrypted Successfully for ${net}`);
-          }
-          const providerForNetwork = providers[net.toLowerCase()];
-          if (!providerForNetwork)
-            throw new Error(`Provider for network "${net}" is not configured.`);
-          
-          const wallet = new Wallet(privateKey, providerForNetwork);
-          /*
-          console.log(`✅ ${net.toUpperCase()} Wallet Reconstructed:`, wallet.address);
-          await this.safeSendMessage(
-            this.bot,
-            userId,
-            `✅ **Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${wallet.address}\n\`\`\``,
-            { parse_mode: "Markdown" }
-          );
-          */
-          
-          let formattedBalances;
-          try {
-            formattedBalances = await getPortfolioData(net, wallet.address);
-          } catch (error) {
-            console.error(`Primary ${net.toUpperCase()} balance fetch failed`, error);
-            formattedBalances = {};
-          }
-          
-          let walletPNL, walletNetWorth;
-          try {
-            walletPNL = await getWalletPNL(net, wallet.address);
-          } catch (e) {
-            walletPNL = "N/A";
-          }
-          try {
-            walletNetWorth = await getWalletNetWorth(net, wallet.address);
-          } catch (e) {
-            walletNetWorth = "N/A";
-          }
-          
-          results.push({
-            network: net,
-            publicKey: wallet.address,
-            balances: formattedBalances || {},
-            walletPNL: walletPNL || "N/A",
-            walletNetWorth: walletNetWorth || "N/A",
-          });
-        } catch (error) {
-          console.error(`Error processing ${net.toUpperCase()} wallet: ${error.message}`);
-          results.push({
-            network: net,
-            publicKey: "N/A",
-            balances: {},
-            walletPNL: "N/A",
-            walletNetWorth: "N/A",
-            error: error.message,
-          });
-        }
-      } else {
-        // For unsupported networks, return a standardized error structure.
-        results.push({
-          network: net,
-          publicKey: "N/A",
-          balances: {},
-          walletPNL: "N/A",
-          walletNetWorth: "N/A",
-          error: `Unsupported network: ${net}`,
-        });
-      }
-    }
-  
-    // Even if no result was found, ensure the return structure is complete.
-    if (!results || results.length === 0) {
-      return {
-        message: "No wallet data found.",
-        data: {},
-      };
-    }
-  
-    // Format the final result for presentation.
-    return {
-      message: "Wallet data retrieved successfully.",
-      data: results,
-    };
   }  
 
   /**
@@ -1679,7 +1886,7 @@ export class IntentProcessor extends EventEmitter {
     // 1. If trendingTokens is not an array, or is empty.
     // 2. Or if the first token contains a fallback flag.
     if (!Array.isArray(trendingTokens) || trendingTokens.length === 0 || trendingTokens[0].fallback) {
-      console.warn("Fallback condition triggered in getTrendingTokensByChain. Using networkScraper fallback.");
+      console.warn("Fallback condition triggered in getTrendingTokensByChain. Using networkScraper fallback. ", normalizedNetwork);
       const trendingResult = await networkScraper.trendingNetworkScrap(normalizedNetwork);
       return trendingResult;
     }

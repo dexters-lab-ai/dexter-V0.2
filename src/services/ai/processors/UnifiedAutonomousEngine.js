@@ -512,53 +512,50 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
   async handleFunctionCall(functionCall, messages, userId, msg) {
     // Clear cancellations
     this.userCancellations.delete(msg.chat.id);
-
+  
     try {
       if (!functionCall || !functionCall.name) {
         throw new Error("Invalid function call: 'name' property is required.");
       }
-
+  
       const { name, arguments: args } = functionCall;
-
+  
       // Handle special cases like LLM toggling
       if (name === "toggle_llm") {
         const result = await LLMSwitcher.toggleLLM(userId);
-        
-        // Notify user about LLM switch
         const notification = await this.bot.sendMessage(
           msg.chat.id,
           `✅ ${result.message}`,
           { parse_mode: "Markdown" }
         );
-
-        // Delete message after 5 seconds
         setTimeout(() => {
           this.bot.deleteMessage(msg.chat.id, notification.message_id).catch(console.error);
         }, 5000);
-
-        return {text: result.message};
+        return { text: result.message };
       }
-
+  
       // Record the start of this function execution for tracking
       const functionExecutionStart = Date.now();
       const functionExecutionId = `${name}-${functionExecutionStart}`;
-      
-      // Track function execution history for better context
       if (!this.functionExecutionHistory) {
         this.functionExecutionHistory = new Map();
       }
+      // Ensure arguments are stored as string.
       this.functionExecutionHistory.set(functionExecutionId, {
         name,
         started: functionExecutionStart,
-        args: JSON.stringify(args),
+        args: JSON.stringify(args), // always string
         status: 'started'
       });
-
+  
       // Handle confirmation if required
       if (this.requiresConfirmation(name)) {
-        const userConfirmed = await this.askForConfirmation(msg, name, typeof args === 'string' ? args : JSON.stringify(args));
+        const userConfirmed = await this.askForConfirmation(
+          msg, 
+          name, 
+          typeof args === 'string' ? args : JSON.stringify(args) 
+        );
         if (!userConfirmed) {
-          // Update execution history
           this.functionExecutionHistory.set(functionExecutionId, {
             ...this.functionExecutionHistory.get(functionExecutionId),
             status: 'cancelled',
@@ -567,22 +564,20 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
           return { text: `⚠️ Action '${name}' canceled by user.` };
         }
       }
-
+  
       // Execute the multi-step task with context enrichment
       const taskResult = await this.executeMultiStepTask(functionCall, messages, userId, msg, {
         executionId: functionExecutionId,
         previousExecutions: Array.from(this.functionExecutionHistory.values())
           .filter(exec => exec.status === 'completed')
-          .slice(-5) // Keep only the 5 most recent completed executions
+          .slice(-5)
       });
       
-      // Update execution history
       console.log("🏋️ Task result: ", JSON.stringify(taskResult, null, 2));
-      // Update history with a safe substring of the result.
       const resultForHistory =
-      typeof taskResult.text === 'string'
-        ? taskResult.text.substring(0, 300) + '...'
-        : JSON.stringify(taskResult.text).substring(0, 300) + '...';
+        typeof taskResult.text === 'string'
+          ? taskResult.text.substring(0, 300) + '...'
+          : JSON.stringify(taskResult.text).substring(0, 300) + '...';
       this.functionExecutionHistory.set(functionExecutionId, {
         ...this.functionExecutionHistory.get(functionExecutionId),
         status: 'completed',
@@ -590,12 +585,10 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         resultSummary: resultForHistory
       });
       
-      // Clean up old history entries (keep only last 10)
       if (this.functionExecutionHistory.size > 10) {
         const oldestEntries = Array.from(this.functionExecutionHistory.entries())
           .sort(([, a], [, b]) => a.started - b.started)
           .slice(0, this.functionExecutionHistory.size - 10);
-        
         oldestEntries.forEach(([key]) => this.functionExecutionHistory.delete(key));
       }
       
@@ -605,23 +598,37 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
       const parsedResults = this.formatResults([taskResultText]);
       const cleanResult = this.cleanJSONText(parsedResults, name, typeof args === 'string' ? args : JSON.stringify(args));
       
-      // Add execution result to message history
       messages.push({
         role: "assistant",
-        content: cleanResult,
+        content: cleanResult, // cleanResult is a string
       });
-
-      // Generate AI response with enhanced context
+  
       const aiResponse = await this.generateAIResponse(messages, functionExecutionId);
       console.log("AI Response:", JSON.stringify(aiResponse, null, 2));
-
       return aiResponse;
     } catch (error) {
       console.error("❌ High-level error in handleFunctionCall:", error);
       await this.fallbackResponse(msg, `A high-level error occurred: ${error.message}`);
       return { text: `❌ Sorry, something failed at a high level: ${error.message}` };
     }
+  }  
+
+  formatPortfolioResult(portfolioObj) {
+    // Check if the object has walletBalances and other useful properties.
+    if (portfolioObj && portfolioObj.walletBalances && Array.isArray(portfolioObj.walletBalances.data)) {
+      let output = `Portfolio for network: ${portfolioObj.walletBalances.data[0]?.network || 'Unknown'}\n\n`;
+      portfolioObj.walletBalances.data.forEach((wallet, idx) => {
+        output += `Wallet ${idx + 1}:\n`;
+        output += `  Address: ${wallet.address}\n`;
+        output += `  Balance: ${JSON.stringify(wallet.balances)}\n`;
+        output += `  Net Worth: ${wallet.walletNetWorth || 'N/A'}\n\n`;
+      });
+      return output;
+    }
+    // Fallback: return a stringified version.
+    return JSON.stringify(portfolioObj, null, 2);
   }
+  
 
   /**
    * generateAIResponse
@@ -633,56 +640,65 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
    * Handles context management, task summarization, and intelligent response generation
    */
   async generateAIResponse(messages, functionExecutionId = null) {
-    try {
-      // Trim older messages to reduce token usage
-      const trimmedMessages = this.trimRelevantMessages(messages);
+    const maxRetries = 3;  // Maximum number of retry attempts
+    let attempt = 0;
+    let lastError;
 
-      // Get execution history context if available
-      let executionHistoryContext = '';
-      if (functionExecutionId && this.functionExecutionHistory) {
-        const currentExecution = this.functionExecutionHistory.get(functionExecutionId);
-        if (currentExecution) {
-          executionHistoryContext = `
-  Current function execution: ${currentExecution.name}
-  Started: ${new Date(currentExecution.started).toISOString()}
-  Status: ${currentExecution.status}
-  Duration: ${currentExecution.completed ? ((currentExecution.completed - currentExecution.started) / 1000).toFixed(2) + ' seconds' : 'ongoing'}
-  `;
-
-          // Add recent execution history for context
-          const recentExecutions = Array.from(this.functionExecutionHistory.values())
-            .filter(exec => exec.status === 'completed' && exec.executionId !== functionExecutionId)
-            .slice(-3);
-            
-          if (recentExecutions.length > 0) {
-            executionHistoryContext += `\nRecent task history:\n${recentExecutions.map(exec => 
-              `- ${exec.name} (${((exec.completed - exec.started) / 1000).toFixed(2)}s): ${exec.resultSummary || 'No summary'}`
-            ).join('\n')}`;
+    
+  const portfolioText = this.formatPortfolioResult(messages);
+  console.log("Portfolio Text:", portfolioText);
+  
+    while (attempt < maxRetries) {
+      try {
+        // Trim older messages to reduce token usage
+        const trimmedMessages = this.trimRelevantMessages(messages);
+  
+        // Get execution history context if available
+        let executionHistoryContext = '';
+        if (functionExecutionId && this.functionExecutionHistory) {
+          const currentExecution = this.functionExecutionHistory.get(functionExecutionId);
+          if (currentExecution) {
+            executionHistoryContext = `
+    Current function execution: ${currentExecution.name}
+    Started: ${new Date(currentExecution.started).toISOString()}
+    Status: ${currentExecution.status}
+    Duration: ${currentExecution.completed ? ((currentExecution.completed - currentExecution.started) / 1000).toFixed(2) + ' seconds' : 'ongoing'}
+    `;
+  
+            // Add recent execution history for context
+            const recentExecutions = Array.from(this.functionExecutionHistory.values())
+              .filter(exec => exec.status === 'completed' && exec.executionId !== functionExecutionId)
+              .slice(-3);
+              
+            if (recentExecutions.length > 0) {
+              executionHistoryContext += `\nRecent task history:\n${recentExecutions.map(exec => 
+                `- ${exec.name} (${((exec.completed - exec.started) / 1000).toFixed(2)}s): ${exec.resultSummary || 'No summary'}`
+              ).join('\n')}`;
+            }
           }
         }
-      }
-
-      // Extract task results for summarization
-      const functionResults = messages
-        .filter(m => m.role === 'function')
-        .map(m => ({
-          name: m.name,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
-        }));
+  
+        // Extract task results for summarization
+        const functionResults = messages
+          .filter(m => m.role === 'function')
+          .map(m => ({
+            name: m.name,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+          }));
+          
+        // Identify the user's original request
+        const userRequests = messages
+          .filter(m => m.role === 'user')
+          .slice(-2)
+          .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
         
-      // Identify the user's original request
-      const userRequests = messages
-        .filter(m => m.role === 'user')
-        .slice(-2)
-        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
-      
-      const originalRequest = userRequests.length > 0 ? userRequests[0] : 'Unknown request';
-
-      // Build a minimal instruction for final summary without repeating system prompts
-      const finalPrompt = [
-        {
-          role: "system",
-          content: `
+        const originalRequest = userRequests.length > 0 ? userRequests[0] : 'Unknown request';
+  
+        // Build final prompt for summarization
+        const finalPrompt = [
+          {
+            role: "system",
+            content: `
   **Data Formatting Rules:**
   - Keep responses for easy simple tasks short, engaging, and user-friendly.
   - Highlight key insights and actionable information.
@@ -803,94 +819,77 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
   // END OF INSTRUCTIONS
   // CONTEXT BEGINS BELOW
           `.trim(),
-        },
-        ...trimmedMessages,
-      ];
-
-      // Calculate expected token count to avoid overruns
-      const estimatedTokens = this.estimateTokenCount(finalPrompt);
-      console.log(`Estimated token count for generateAIResponse: ${estimatedTokens}`);
-      
-      // Adjust max_tokens based on estimate to prevent overruns
-      const adjustedMaxTokens = estimatedTokens > 2500 ? 400 : 500;
-
-      // Choose model based on complexity
-      const model = estimatedTokens > 3000 || functionResults.length > 3 ? 
-        "gpt-4o" : "gpt-4o-mini";
-      
-      console.log(`Selected model for generateAIResponse: ${model}`);
-
-      const aiResponse = await openAIService.createChatCompletion({
-        model,
-        messages: finalPrompt,
-        functions: this.functions,
-        function_call: "auto",  // Allow model to choose whether to call a function directly
-        max_tokens: adjustedMaxTokens,          
-        temperature: 0.3,         
-        top_p: 1,               
-        frequency_penalty: 0.3,  
-        presence_penalty: 0.1,
-        n: 1,
-      });
-
-      if (aiResponse.usage) {
-        console.log(`📊 Token Usage for generateAIResponse:
-          - Prompt Tokens: ${aiResponse.usage.prompt_tokens}
-          - Completion Tokens: ${aiResponse.usage.completion_tokens}
-          - Total Tokens: ${aiResponse.usage.total_tokens}`);
-      }
-
-      const message = aiResponse.choices[0]?.message;
-
-      // Handle both text responses and function calls
-      if (message?.function_call) {
-        // Extract the function call information
-        const { name, arguments: args } = message.function_call;
-        
-        // Log the follow-up function call
-        console.log(`🔄 Follow-up function call detected: ${name}`);
-        
-        // Return both the explanation content and the function to call
-        return {
-          text: message.content || `Executing follow-up action: ${name}`,
-          nextFunction: {
-            name,
-            arguments: typeof args === 'string' ? JSON.parse(args) : args
-          }
-        };
-      } else {
-        // Extract any next function request from content if present
-        const nextFunctionMatch = message?.content?.match(/NEXT_FUNCTION:\s*({.*})/);
-        if (nextFunctionMatch) {
-          try {
-            const nextFunctionData = JSON.parse(nextFunctionMatch[1]);
-            
-            // Clean up the content by removing the NEXT_FUNCTION directive
-            const cleanContent = message.content.replace(/NEXT_FUNCTION:\s*({.*})/, '').trim();
-            
-            return {
-              text: cleanContent,
-              nextFunction: nextFunctionData
-            };
-          } catch (parseErr) {
-            console.warn("Failed to parse next function data:", parseErr.message);
-          }
+          },
+          ...trimmedMessages,
+        ];
+  
+        // Calculate expected token count and adjust max_tokens accordingly.
+        const estimatedTokens = this.estimateTokenCount(finalPrompt);
+        console.log(`Estimated token count for generateAIResponse: ${estimatedTokens}`);
+        const adjustedMaxTokens = estimatedTokens > 2500 ? 400 : 500;
+        const model = estimatedTokens > 3000 || functionResults.length > 3 ? "gpt-4o" : "gpt-4o-mini";
+        console.log(`Selected model for generateAIResponse: ${model}`);
+  
+        // Attempt the chat completion
+        const aiResponse = await openAIService.createChatCompletion({
+          model,
+          messages: finalPrompt,
+          functions: this.functions,
+          function_call: "auto",
+          max_tokens: adjustedMaxTokens,
+          temperature: 0.3,
+          top_p: 1,
+          frequency_penalty: 0.3,
+          presence_penalty: 0.1,
+          n: 1,
+        });
+  
+        if (aiResponse.usage) {
+          console.log(`📊 Token Usage for generateAIResponse:
+            - Prompt Tokens: ${aiResponse.usage.prompt_tokens}
+            - Completion Tokens: ${aiResponse.usage.completion_tokens}
+            - Total Tokens: ${aiResponse.usage.total_tokens}`);
         }
-        
-        // Return just the text response if no function call is needed
-        return { text: message?.content || "Task completed successfully." };
+  
+        const message = aiResponse.choices[0]?.message;
+        if (message?.function_call) {
+          const { name, arguments: args } = message.function_call;
+          console.log(`🔄 Follow-up function call detected: ${name}`);
+          return {
+            text: message.content || `Executing follow-up action: ${name}`,
+            nextFunction: {
+              name,
+              arguments: typeof args === 'string' ? JSON.parse(args) : args
+            }
+          };
+        } else {
+          const nextFunctionMatch = message?.content?.match(/NEXT_FUNCTION:\s*({.*})/);
+          if (nextFunctionMatch) {
+            try {
+              const nextFunctionData = JSON.parse(nextFunctionMatch[1]);
+              const cleanContent = message.content.replace(/NEXT_FUNCTION:\s*({.*})/, '').trim();
+              return { text: cleanContent, nextFunction: nextFunctionData };
+            } catch (parseErr) {
+              console.warn("Failed to parse next function data:", parseErr.message);
+            }
+          }
+          return { text: message?.content || "Task completed successfully." };
+        }
+      } catch (error) {
+        lastError = error;
+        attempt++;
+        console.error(`Attempt ${attempt} failed in generateAIResponse:`, error.message);
+        if (attempt < maxRetries) {
+          // Exponential backoff delay before retrying
+          await new Promise(res => setTimeout(res, 1000 * attempt));
+          console.log(`Retrying generateAIResponse (attempt ${attempt + 1})...`);
+        } else {
+          console.error("Max retries reached in generateAIResponse.");
+          return { text: "I've processed your request, but encountered an issue while generating the final response. The core task functions completed successfully." };
+        }
       }
-    } catch (error) {
-      console.error("❌ Error in generateAIResponse:", {
-        message: error.message,
-        stack: error.stack,
-      });
-      
-      return { 
-        text: "I've processed your request, but encountered an issue while generating the final response. The core task functions completed successfully." 
-      };
     }
-  }
+  }  
 
   /**
    * Helper method to estimate token count for a message array
@@ -1157,237 +1156,213 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
  * Enhanced to work with the improved getFunctionResponse system
  * Provides better context tracking between steps
  */
-async executeMultiStepTask(initialFunctionCall, messages, userId, msg, executionContext = {}) {
-  const results = [];  
-  const executedTaskSignatures = new Set(); // NEW 16 March Update: Track executed task signatures
-  const taskTree = this.buildTaskTree(null, initialFunctionCall);
-  this.compareArguments = (args1, args2) => {
-    try {
-      return JSON.stringify(args1) === JSON.stringify(args2);
-    } catch (error) {
-      console.error("Error comparing arguments:", error.message);
-      return false;
-    }
-  };
-
-  // Variables for tracking step status and timing
-  let statusMessageId;
-  let stepCounter = 0;
-  let lastStepTime = Date.now();
-  let taskContext = { 
-    ...executionContext, 
-    steps: [],
-    startTime: Date.now(),
-    mainFunctionName: initialFunctionCall.name
-  };
-
-  // Helper: Create a unique signature for a task
-  const getTaskSignature = (task) => {
-    // Use JSON.stringify for simplicity; in production, consider a hash function.
-    return `${task.name}-${JSON.stringify(task.arguments)}`;
-  };
-
-  const executeTask = async (task) => {
-    // Track this step in the task context
-    const stepId = `step-${stepCounter + 1}`;
-    const stepStart = Date.now();
-    
-    // Check for cancellation before starting the task
-    this.checkCancellation(msg.chat.id, task.name, stepCounter + 1);
-    
-    taskContext.steps.push({
-      id: stepId,
-      name: task.name,
-      started: stepStart,
-      status: 'started'
-    });
+  async executeMultiStepTask(initialFunctionCall, messages, userId, msg, executionContext = {}) {
+    const results = [];
+    const executedTaskSignatures = new Set(); //Track executed task signatures
+    const taskTree = this.buildTaskTree(null, initialFunctionCall);
+    this.compareArguments = (args1, args2) => {
+      try {
+        return JSON.stringify(args1) === JSON.stringify(args2);
+      } catch (error) {
+        console.error("Error comparing arguments:", error.message);
+        return false;
+      }
+    };
   
-    if (task.dependencies && task.dependencies.length > 0) {
-      for (const dependencyName of task.dependencies) {
-        // Check for cancellation before processing each dependency
-        this.checkCancellation(msg.chat.id, task.name, `${stepCounter + 1}:dependency:${dependencyName}`);
-        
-        const dependency = taskTree.find(
-          (t) => t.alias === dependencyName || t.name === dependencyName
-        );
-        if (!dependency) {
-          console.warn(`❌ Dependency '${dependencyName}' for task '${task.name}' not found. Skipping.`);
-          continue;
-        }
-        if (!results.find((r) => r.name === dependency.name && this.compareArguments(r.args, dependency.args))) {
-          await executeTask(dependency);
+    let statusMessageId;
+    let stepCounter = 0;
+    let lastStepTime = Date.now();
+    // Store the entire task context as string data where applicable.
+    let taskContext = { 
+      ...executionContext, 
+      steps: [],
+      startTime: Date.now(),
+      mainFunctionName: initialFunctionCall.name
+    };
+  
+    // Helper: Create a unique signature for a task
+    const getTaskSignature = (task) => {
+      return `${task.name}-${JSON.stringify(task.arguments)}`; // always string
+    };
+  
+    const executeTask = async (task) => {
+      const stepId = `step-${stepCounter + 1}`;
+      const stepStart = Date.now();
+      this.checkCancellation(msg.chat.id, task.name, stepCounter + 1);
+      taskContext.steps.push({
+        id: stepId,
+        name: task.name,
+        started: stepStart,
+        status: 'started'
+      });
+    
+      if (task.dependencies && task.dependencies.length > 0) {
+        for (const dependencyName of task.dependencies) {
+          this.checkCancellation(msg.chat.id, task.name, `${stepCounter + 1}:dependency:${dependencyName}`);
+          const dependency = taskTree.find(
+            (t) => t.alias === dependencyName || t.name === dependencyName
+          );
+          if (!dependency) {
+            console.warn(`❌ Dependency '${dependencyName}' for task '${task.name}' not found. Skipping.`);
+            continue;
+          }
+          if (!results.find((r) => r.name === dependency.name && this.compareArguments(r.args, dependency.args))) {
+            await executeTask(dependency);
+          }
         }
       }
-    }
-  
-    // Validate and potentially enrich parameters with context
-    const parsedArguments = await this.validateFollowUpParameters(task.name, task.arguments, userId, msg);
     
-    // Check for cancellation before execution
-    this.checkCancellation(msg.chat.id, task.name, `${stepCounter + 1}:execution`);
-    
-    let userCleanResult = "";
-  
-    let stepResult;
-    try {
-      stepResult = await this.executeFunctionWithLimitedRetry(task.name, parsedArguments, userId, msg.chat.id, 2);  
-      if (typeof stepResult !== 'object' || stepResult === null) {
-        stepResult = { text: String(stepResult) };
+      const parsedArguments = await this.validateFollowUpParameters(task.name, task.arguments, userId, msg);
+      this.checkCancellation(msg.chat.id, task.name, `${stepCounter + 1}:execution`);
+      
+      let userCleanResult = "";
+      let stepResult;
+      try {
+        stepResult = await this.executeFunctionWithLimitedRetry(task.name, parsedArguments, userId, msg.chat.id, 2);  
+        // Convert stepResult.text to a string if necessary.
+        if (typeof stepResult !== 'object' || stepResult === null) {
+          stepResult = { text: String(stepResult) };
         } else if (!('text' in stepResult)) {
-        stepResult.text = String(stepResult);
+          stepResult.text = String(stepResult);
         } else if (typeof stepResult.text !== 'string') {
-        stepResult.text = String(stepResult.text);
+          stepResult.text = String(stepResult.text);
         }
         const formattedResult = this.formatResults([stepResult.text]);
-        const fullCleanResult = this.cleanJSONText(formattedResult, task.name, parsedArguments);
-
-      // User output: remove markdown symbols and extra whitespace, then trim to 200 characters.
-      const userNoodle = this.cleanTextForTelegram(formattedResult);
-
-      userCleanResult = userNoodle
-        .replace(/[*_~`#{}\[\]]/g, "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 200);
-
-      // Log the full result internally.
-      results.push({ name: task.name, args: parsedArguments, text: fullCleanResult });
-      
-      // Update task context with success
-      const currentStep = taskContext.steps.find(s => s.id === stepId);
-      if (currentStep) {
-        currentStep.status = 'completed';
-        currentStep.completed = Date.now();
-        currentStep.duration = Date.now() - stepStart;
-        currentStep.resultSummary = userCleanResult;
-      }
-      
-      console.log("✅ Updated Results on last Task:", {
-        taskName: task.name,
-        arguments: parsedArguments,
-        result: JSON.stringify(formattedResult),
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error(`❌ Final failure in task '${task.name}':`, {
-        message: error.message,
-        stack: error.stack,
-      });
-      stepResult = {
-        error: true,
-        errorMessage: error.message,
-        stack: error.stack,
-      };
-      
-      // Update task context with failure
-      const currentStep = taskContext.steps.find(s => s.id === stepId);
-      if (currentStep) {
-        currentStep.status = 'failed';
-        currentStep.completed = Date.now();
-        currentStep.duration = Date.now() - stepStart;
-        currentStep.error = error.message;
-      }
-      
-      await this.bot.sendMessage(msg.chat.id, `❕ Slight hiccup, moving on...`);
-      results.push({ name: task.name, args: parsedArguments, text: `Error: ${error.message}` });
-      // In case of error, set a fallback message.
-      userCleanResult = "No result due to error.";
-    }
-
-    // Enrich message context with full task context for better follow-up decisions
-    const taskContextMessage = {
-      role: "system",
-      content: `Task context for ${task.name}: ${JSON.stringify({
-        taskName: task.name,
-        stepNumber: stepCounter + 1,
-        elapsedTime: ((Date.now() - taskContext.startTime) / 1000).toFixed(2) + ' seconds',
-        previousSteps: taskContext.steps.filter(s => s.id !== stepId).map(s => ({
-          name: s.name,
-          status: s.status,
-          resultSummary: s.resultSummary || (s.error ? `Error: ${s.error}` : 'No result')
-        }))
-      })}`
-    };
-    
-    messages.push(taskContextMessage);
-    messages.push({
-      role: "function",
-      name: task.name,
-      content: JSON.stringify(stepResult),
-    });
-
-    // Increase step counter and compute elapsed time.
-    stepCounter++;
-    const elapsedTime = ((Date.now() - lastStepTime) / 1000).toFixed(2);
-    lastStepTime = Date.now();
-
-    // Create a sleek status message showing the step number, a trimmed result, and the elapsed time.
-    const statusText = `💭 **Noodling...**  💭#**${stepCounter}**  ⏱ ${elapsedTime} sec.\n\n🫧 ${userCleanResult}`;
-    if (!statusMessageId) {
-      // Send a new message and save its ID.
-      const sentMsg = await this.bot.sendMessage(msg.chat.id, statusText, { parse_mode: "Markdown" });
-      statusMessageId = sentMsg.message_id;
-    } else {
-      // Edit the existing message.
-      await this.bot.editMessageText(statusText, { chat_id: msg.chat.id, message_id: statusMessageId, parse_mode: "Markdown" });
-    }
-
-    // Enhanced context for follow-up decision
-    const followUpResponse = await this.getFunctionResponse(
-      msg.chat.id, 
-      messages, 
-      task.name, 
-      {
-        ...stepResult,
-        _taskContext: {
-          currentStep: stepCounter,
-          totalSteps: taskTree.length,
-          mainFunctionName: taskContext.mainFunctionName,
-          executionTime: ((Date.now() - taskContext.startTime) / 1000).toFixed(2) + ' seconds'
+        const fullCleanResult = this.cleanJSONText(formattedResult, task.name, JSON.stringify(parsedArguments)); // [CHANGE]
+        const userNoodle = this.cleanTextForTelegram(formattedResult);
+        userCleanResult = userNoodle
+          .replace(/[*_~`#{}\[\]]/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200);
+        // Save parsedArguments as string.
+        results.push({ 
+          name: task.name, 
+          args: JSON.stringify(parsedArguments), // ensure arguments are stored as a string
+          text: fullCleanResult // fullCleanResult should already be a string after cleaning
+        });
+        
+        const currentStep = taskContext.steps.find(s => s.id === stepId);
+        if (currentStep) {
+          currentStep.status = 'completed';
+          currentStep.completed = Date.now();
+          currentStep.duration = Date.now() - stepStart;
+          currentStep.resultSummary = userCleanResult;
         }
+        
+        console.log("✅ Updated Results on last Task:", {
+          taskName: task.name,
+          arguments: JSON.stringify(parsedArguments),
+          result: JSON.stringify(formattedResult),
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error(`❌ Final failure in task '${task.name}':`, {
+          message: error.message,
+          stack: error.stack,
+        });
+        stepResult = {
+          error: true,
+          errorMessage: error.message,
+          stack: error.stack,
+        };
+        const currentStep = taskContext.steps.find(s => s.id === stepId);
+        if (currentStep) {
+          currentStep.status = 'failed';
+          currentStep.completed = Date.now();
+          currentStep.duration = Date.now() - stepStart;
+          currentStep.error = error.message;
+        }
+        await this.bot.sendMessage(msg.chat.id, `❕ Slight hiccup, moving on...`);
+        results.push({ name: task.name, args: JSON.stringify(parsedArguments), text: `Error: ${error.message}` });
+        userCleanResult = "No result due to error.";
       }
-    );
-    
-    if (followUpResponse?.nextFunction && !this.userCancellations.get(msg.chat.id)) {
-      const followUpTask = {
-        name: followUpResponse.nextFunction.name,
-        dependencies: [task.name],
-        arguments: followUpResponse.nextFunction.arguments || {},
-        alias: `${followUpResponse.nextFunction.name}_${Date.now()}`,
+  
+      const taskContextMessage = {
+        role: "system",
+        content: `Task context for ${task.name}: ${JSON.stringify({
+          taskName: task.name,
+          stepNumber: stepCounter + 1,
+          elapsedTime: ((Date.now() - taskContext.startTime) / 1000).toFixed(2) + ' seconds',
+          previousSteps: taskContext.steps.filter(s => s.id !== stepId).map(s => ({
+            name: s.name,
+            status: s.status,
+            resultSummary: s.resultSummary || (s.error ? `Error: ${s.error}` : 'No result')
+          }))
+        })}`
       };
-      console.log("✅ Follow Up selected automatically by AI model after last result:", {
-        name: followUpResponse.nextFunction.name,
-        dependencies: [task.name],
-        arguments: followUpResponse.nextFunction.arguments || {},
-        alias: `${followUpResponse.nextFunction.name}_${Date.now()}`,
+      
+      messages.push(taskContextMessage);
+      messages.push({
+        role: "function",
+        name: task.name,
+        content: JSON.stringify(stepResult),
       });
-      taskTree.push(followUpTask);
-    }
-  };
-
-  for (const task of taskTree) {
-    const signature = getTaskSignature(task);
-    if (executedTaskSignatures.has(signature)) {
-      // Skip task if already executed.
-      console.log(`Skipping already executed task: ${signature}`);
-      continue;
-    }
-    if (!results.find((r) => r.name === task.name && this.compareArguments(r.args, task.arguments))) {
-      await executeTask(task, signature);
-      // Mark the task as executed
-      executedTaskSignatures.add(signature);
-      this.userCancellations.delete(msg.chat.id);
-    }
-  }
   
-  // Update task context with completion information
-  taskContext.completed = Date.now();
-  taskContext.totalDuration = (taskContext.completed - taskContext.startTime) / 1000;
-  taskContext.totalSteps = stepCounter;
+      stepCounter++;
+      const elapsedTime = ((Date.now() - lastStepTime) / 1000).toFixed(2);
+      lastStepTime = Date.now();
+      const statusText = `💭 **Noodling...**  💭#**${stepCounter}**  ⏱ ${elapsedTime} sec.\n\n🫧 ${userCleanResult}`;
+      if (!statusMessageId) {
+        const sentMsg = await this.bot.sendMessage(msg.chat.id, statusText, { parse_mode: "Markdown" });
+        statusMessageId = sentMsg.message_id;
+      } else {
+        await this.bot.editMessageText(statusText, { chat_id: msg.chat.id, message_id: statusMessageId, parse_mode: "Markdown" });
+      }
   
-  const summary = this.formatResults(results.map((r) => r.text));
-  return { text: summary, taskContext: taskContext };
-}  
+      const followUpResponse = await this.getFunctionResponse(
+        msg.chat.id, 
+        messages, 
+        task.name, 
+        {
+          ...stepResult,
+          _taskContext: {
+            currentStep: stepCounter,
+            totalSteps: taskTree.length,
+            mainFunctionName: taskContext.mainFunctionName,
+            executionTime: ((Date.now() - taskContext.startTime) / 1000).toFixed(2) + ' seconds'
+          }
+        }
+      );
+      
+      if (followUpResponse?.nextFunction && !this.userCancellations.get(msg.chat.id)) {
+        const followUpTask = {
+          name: followUpResponse.nextFunction.name,
+          dependencies: [task.name],
+          arguments: followUpResponse.nextFunction.arguments || {},
+          alias: `${followUpResponse.nextFunction.name}_${Date.now()}`,
+        };
+        console.log("✅ Follow Up selected automatically by AI model after last result:", {
+          name: followUpResponse.nextFunction.name,
+          dependencies: [task.name],
+          arguments: followUpResponse.nextFunction.arguments || {},
+          alias: `${followUpResponse.nextFunction.name}_${Date.now()}`,
+        });
+        taskTree.push(followUpTask);
+      }
+    };
+  
+    for (const task of taskTree) {
+      const signature = getTaskSignature(task);
+      if (executedTaskSignatures.has(signature)) {
+        console.log(`Skipping already executed task: ${signature}`);
+        continue;
+      }
+      if (!results.find((r) => r.name === task.name && this.compareArguments(JSON.parse(r.args), task.arguments))) {
+        await executeTask(task);
+        executedTaskSignatures.add(signature);
+        this.userCancellations.delete(msg.chat.id);
+      }
+    }
+    
+    taskContext.completed = Date.now();
+    taskContext.totalDuration = (taskContext.completed - taskContext.startTime) / 1000;
+    taskContext.totalSteps = stepCounter;
+    
+    // Store the summary as string (formatResults returns a string)
+    const summary = this.formatResults(results);
+    return { text: summary, taskContext: JSON.stringify(taskContext) }; // Convert taskContext to string
+  }  
 
   /**
    * tryFallbackFunctions
