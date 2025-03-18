@@ -60,6 +60,9 @@ const providers = {
     // Binance Smart Chain (BSC)
     bsc: getDefaultProvider(config.bscEndpoint),
     
+    // Binance Smart Chain (BSC)
+    binance: getDefaultProvider(config.bscEndpoint),
+    
     // Celo
     celo: getDefaultProvider(config.celoEndpoint),
     

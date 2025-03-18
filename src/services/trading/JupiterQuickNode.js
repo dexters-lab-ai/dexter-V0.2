@@ -194,51 +194,68 @@ import { SolanaTokenDecimal } from "../../models/SolanaTokenDecimal.js";
      *   - amount: Raw token amount (as a string)
      */
     async function getAllSPLTokenTransactions(walletAddress, options = {}) {
-        const connection =
+        try {
+          const connection =
             options.connection ||
-            new Connection(process.env.SOLANA_ENDPOINT || "https://api.mainnet-beta.solana.com", "confirmed");
-        const walletPubKey = new PublicKey(walletAddress);
-        const page = options.page || 1;
-        const perPage = options.perPage || 10;
-
-        // Paginate through signatures until we reach the desired page.
-        let sigs = [];
-        let lastSig;
-        for (let i = 1; i <= page; i++) {
+            new Connection(
+              process.env.SOLANA_ENDPOINT || "https://api.mainnet-beta.solana.com",
+              "confirmed"
+            );
+          const walletPubKey = new PublicKey(walletAddress);
+          const page = options.page || 1;
+          const perPage = options.perPage || 10;
+      
+          // Paginate through signatures until we reach the desired page.
+          let sigs = [];
+          let lastSig;
+          for (let i = 1; i <= page; i++) {
             const params = { limit: perPage, ...(lastSig ? { before: lastSig } : {}) };
             const sigInfos = await connection.getSignaturesForAddress(walletPubKey, params);
             if (i === page) sigs = sigInfos;
             lastSig = sigInfos[sigInfos.length - 1]?.signature;
             if (!lastSig) break;
-        }
-
-        // Process transactions in parallel and filter for token transfers.
-        const transfers = await Promise.all(
+          }
+      
+          // Process transactions in parallel and filter for token transfers.
+          const transfersArray = await Promise.all(
             sigs.map(async ({ signature, slot }) => {
-            const tx = await connection.getParsedTransaction(signature, { commitment: "confirmed" });
-            if (!tx) return [];
-            return tx.transaction.message.instructions
-                .filter(
-                (instr) =>
-                    instr.program === "spl-token" &&
-                    instr.parsed &&
-                    (instr.parsed.type === "transfer" || instr.parsed.type === "transferChecked")
-                )
-                .map((instr) => ({
-                signature,
-                slot,
-                blockTime: tx.blockTime,
-                type: instr.parsed.type,
-                mint: instr.parsed.info.mint,
-                source: instr.parsed.info.source,
-                destination: instr.parsed.info.destination,
-                amount: instr.parsed.info.amount,
-                }));
+              try {
+                const tx = await connection.getParsedTransaction(signature, { commitment: "confirmed" });
+                if (!tx) return [];
+                return tx.transaction.message.instructions
+                  .filter(
+                    (instr) =>
+                      instr.program === "spl-token" &&
+                      instr.parsed &&
+                      (instr.parsed.type === "transfer" || instr.parsed.type === "transferChecked")
+                  )
+                  .map((instr) => ({
+                    signature,
+                    slot,
+                    blockTime: tx.blockTime,
+                    type: instr.parsed.type,
+                    mint: instr.parsed.info.mint,
+                    source: instr.parsed.info.source,
+                    destination: instr.parsed.info.destination,
+                    amount: instr.parsed.info.amount,
+                  }));
+              } catch (txError) {
+                console.error(`Error processing transaction ${signature}:`, txError);
+                return [];
+              }
             })
-        );
-
-        return transfers.flat();
-    }
+          );
+      
+          const transfers = transfersArray.flat();
+          if (!transfers || transfers.length === 0) {
+            return { success: false, error: "No SPL token transactions found." };
+          }
+          return { success: true, data: transfers };
+        } catch (error) {
+          console.error("Error fetching SPL token transactions:", error);
+          return { success: false, error: error.message || "Error fetching SPL token transactions." };
+        }
+      }      
   
     /**
      * Retrieves detailed formatted balances as an array of objects.

@@ -565,6 +565,20 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         }
       }
   
+      // Add metadata to messages for tracking
+      messages = messages.map(m => {
+        if (m.role === 'user') {
+          return {
+            ...m,
+            _metadata: {
+              ...(m._metadata || {}),
+              chatId: msg.chat.id
+            }
+          };
+        }
+        return m;
+      });
+  
       // Execute the multi-step task with context enrichment
       const taskResult = await this.executeMultiStepTask(functionCall, messages, userId, msg, {
         executionId: functionExecutionId,
@@ -603,15 +617,33 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         content: cleanResult, // cleanResult is a string
       });
   
-      const aiResponse = await this.generateAIResponse(messages, functionExecutionId);
-      console.log("AI Response:", JSON.stringify(aiResponse, null, 2));
+      // Generate final response with enhanced follow-up handling
+      const aiResponse = await this.generateAIResponse(userId, messages, functionExecutionId);
+      
+      // Process any follow-up functions immediately
+      if (aiResponse.nextFunction) {
+        await this.bot.sendMessage(
+          msg.chat.id,
+          `${aiResponse.text || "Continuing with follow-up actions..."}`
+        );
+        
+        // Create a new function call for the follow-up
+        const followUpFunctionCall = {
+          name: aiResponse.nextFunction.name,
+          arguments: aiResponse.nextFunction.arguments
+        };
+        
+        // Handle the follow-up function recursively
+        return await this.handleFunctionCall(followUpFunctionCall, messages, userId, msg);
+      }
+      
       return aiResponse;
     } catch (error) {
       console.error("❌ High-level error in handleFunctionCall:", error);
       await this.fallbackResponse(msg, `A high-level error occurred: ${error.message}`);
       return { text: `❌ Sorry, something failed at a high level: ${error.message}` };
     }
-  }  
+  }
 
   formatPortfolioResult(portfolioObj) {
     // Check if the object has walletBalances and other useful properties.
@@ -639,32 +671,45 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
    * Enhanced to provide better follow-up recommendations based on task history
    * Handles context management, task summarization, and intelligent response generation
    */
-  async generateAIResponse(messages, functionExecutionId = null) {
+  async generateAIResponse(userId, messages, functionExecutionId = null) {
     const maxRetries = 3;  // Maximum number of retry attempts
     let attempt = 0;
     let lastError;
-
+    let chatId = null;
     
-  const portfolioText = this.formatPortfolioResult(messages);
-  console.log("Portfolio Text:", portfolioText);
-  
+    // Extract chatId from messages if available
+    const userMessages = messages.filter(m => m.role === 'user');
+    if (userMessages.length > 0 && userMessages[0]._metadata && userMessages[0]._metadata.chatId) {
+      chatId = userMessages[0]._metadata.chatId;
+    }
+    
+    // Function to send intermediate updates to the user
+    const sendIntermediateUpdate = async (message) => {
+      if (!chatId) return;
+      try {
+        await this.bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+      } catch (error) {
+        console.error("❌ Error sending intermediate update:", error.message);
+      }
+    };
+    
     while (attempt < maxRetries) {
       try {
         // Trim older messages to reduce token usage
         const trimmedMessages = this.trimRelevantMessages(messages);
-  
+        
         // Get execution history context if available
         let executionHistoryContext = '';
         if (functionExecutionId && this.functionExecutionHistory) {
           const currentExecution = this.functionExecutionHistory.get(functionExecutionId);
           if (currentExecution) {
-            executionHistoryContext = `
-    Current function execution: ${currentExecution.name}
-    Started: ${new Date(currentExecution.started).toISOString()}
-    Status: ${currentExecution.status}
-    Duration: ${currentExecution.completed ? ((currentExecution.completed - currentExecution.started) / 1000).toFixed(2) + ' seconds' : 'ongoing'}
-    `;
-  
+            executionHistoryContext = 
+  `Current function execution: ${currentExecution.name}
+  Started: ${new Date(currentExecution.started).toISOString()}
+  Status: ${currentExecution.status}
+  Duration: ${currentExecution.completed ? ((currentExecution.completed - currentExecution.started) / 1000).toFixed(2) + ' seconds' : 'ongoing'}
+  `;
+            
             // Add recent execution history for context
             const recentExecutions = Array.from(this.functionExecutionHistory.values())
               .filter(exec => exec.status === 'completed' && exec.executionId !== functionExecutionId)
@@ -677,7 +722,7 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
             }
           }
         }
-  
+        
         // Extract task results for summarization
         const functionResults = messages
           .filter(m => m.role === 'function')
@@ -693,7 +738,7 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
           .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
         
         const originalRequest = userRequests.length > 0 ? userRequests[0] : 'Unknown request';
-  
+        
         // Build final prompt for summarization
         const finalPrompt = [
           {
@@ -709,7 +754,7 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         - For token results, identify each token's matching symbol, address, exchange/dex link, website, telegram,twitter and list the links grouped per relevant item for rish data.
         - For address URLS/links, truncate them for clean looks with the full link embedded in the text.
         - Format all news articles and internet searches with: heading, truncated introduction text, link to article. Spaced in that order and clean with news icons.
-        - Format for HTML output not Markdown, e.g., use <b> Text </b> instead of ** Text ** to style results text
+        - Format for Markdown, e.g., use ** Text ** instead of <b> Text </b> to style results text
         - Do not add link icon to any links during formmating. 
         - Never share private keys or wallet keys.
         Feel free to style with cool minimalistic emojis to make list items more nicer
@@ -775,15 +820,27 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         **Token Price Responses:**
           - Reply price requests with price, currency symbol only
           - Price range checks should mention price changes only with relevant icons for change direction.
-        
+
+        **Formatting Instructions for Portfolio Data:**
+
+        - Start with a heading (e.g., *Portfolio Overview*) and a brief summary.
+        - For each network, list:
+          - Network Name & Icon (e.g., "Ethereum Network 🌐").
+          - Wallet Address as an appropriate explorer URL (e.g., for Ethereum: https://etherscan.io/address/{wallet}).
+          - Balance (e.g., “0 ETH”, “0 SOL”, “No data available”).
+          - Net Worth (e.g., “$0.00”).
+        - Include a section titled "Unsupported or Error Networks 🚫" for any networks with issues.
+        - End with a summary of key metrics (e.g., total net worth) and any notable observations.
+        - Append a footer in italics with a call-to-action:
+          _*You can bridge your assets using Wormhole 🚀 or perform crosschain swaps with Paraswap 🔄. Explore DeFi today!*_
+
+        Use Markdown formatting for styling and ensure clarity and detail throughout.
+
         **Result Trimming:**
           - Do not trim or limit handle_address_only_pasted results, list everything from every category: token info, symbol, price changes, volume metrics, holders: bubuys/sells - buyers/sellers, snipers & transactions, tweets & text. Then group reasonably and stylish
           - Do not limit number of Twitter results or tweets, list all tweets but with concise text content. Always include a tweets text!
           - Do not limit the portfolio results, wallet balances results, wallet PNL results, wallet transaction - present it all in categories.
           - Leave out timestamps if they are not formatted to human form.
-
-
-
 
 
   **Follow up:**
@@ -822,14 +879,14 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
           },
           ...trimmedMessages,
         ];
-  
+        
         // Calculate expected token count and adjust max_tokens accordingly.
         const estimatedTokens = this.estimateTokenCount(finalPrompt);
         console.log(`Estimated token count for generateAIResponse: ${estimatedTokens}`);
         const adjustedMaxTokens = estimatedTokens > 2500 ? 400 : 500;
         const model = estimatedTokens > 3000 || functionResults.length > 3 ? "gpt-4o" : "gpt-4o-mini";
         console.log(`Selected model for generateAIResponse: ${model}`);
-  
+        
         // Attempt the chat completion
         const aiResponse = await openAIService.createChatCompletion({
           model,
@@ -843,36 +900,97 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
           presence_penalty: 0.1,
           n: 1,
         });
-  
+        
         if (aiResponse.usage) {
           console.log(`📊 Token Usage for generateAIResponse:
             - Prompt Tokens: ${aiResponse.usage.prompt_tokens}
             - Completion Tokens: ${aiResponse.usage.completion_tokens}
             - Total Tokens: ${aiResponse.usage.total_tokens}`);
         }
-  
+        
         const message = aiResponse.choices[0]?.message;
+        
+        // Handle follow-up function calls
         if (message?.function_call) {
           const { name, arguments: args } = message.function_call;
           console.log(`🔄 Follow-up function call detected: ${name}`);
-          return {
-            text: message.content || `Executing follow-up action: ${name}`,
-            nextFunction: {
-              name,
-              arguments: typeof args === 'string' ? JSON.parse(args) : args
-            }
-          };
+          
+          // Send intermediate update to user
+          await sendIntermediateUpdate(`🔄 Processing follow-up action: ${name}...`);
+          
+          // Parse arguments if they're a string
+          const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+          
+          try {
+            // Execute the follow-up function
+            const followUpResult = await this.executeFollowUpFunction(name, parsedArgs, messages, userId, {
+              chatId,
+              sendUpdate: async (updateText) => {
+                await sendIntermediateUpdate(updateText);
+              }
+            });
+            
+            // Add the follow-up function result to messages
+            messages.push({
+              role: "function",
+              name: name,
+              content: typeof followUpResult === 'string' ? followUpResult : JSON.stringify(followUpResult)
+            });
+            
+            // Recursively call generateAIResponse to process the result
+            const finalResponse = await this.generateAIResponse(messages, functionExecutionId);
+            return finalResponse;
+          } catch (error) {
+            console.error(`❌ Error executing follow-up function ${name}:`, error.message);
+            await sendIntermediateUpdate(`⚠️ Error with follow-up action: ${error.message}`);
+            return {
+              text: `I attempted to follow up with additional data using ${name}, but encountered an issue: ${error.message}. Here's what I was able to process so far:\n\n${message.content || "Task partially completed."}`
+            };
+          }
         } else {
+          // Check for NEXT_FUNCTION annotation in the text
           const nextFunctionMatch = message?.content?.match(/NEXT_FUNCTION:\s*({.*})/);
           if (nextFunctionMatch) {
             try {
               const nextFunctionData = JSON.parse(nextFunctionMatch[1]);
               const cleanContent = message.content.replace(/NEXT_FUNCTION:\s*({.*})/, '').trim();
-              return { text: cleanContent, nextFunction: nextFunctionData };
+              
+              // Send the current results to the user
+              await sendIntermediateUpdate(cleanContent);
+              
+              // Process the next function
+              await sendIntermediateUpdate(`🔄 Processing next action: ${nextFunctionData.name}...`);
+              
+              try {
+                // Execute the next function
+                const nextFunctionResult = await this.executeFollowUpFunction(nextFunctionData.name, nextFunctionData.arguments, messages, userId, {
+                  chatId,
+                  sendUpdate: async (updateText) => {
+                    await sendIntermediateUpdate(updateText);
+                  }
+                });
+                
+                // Add the next function result to messages
+                messages.push({
+                  role: "function",
+                  name: nextFunctionData.name,
+                  content: typeof nextFunctionResult === 'string' ? nextFunctionResult : JSON.stringify(nextFunctionResult)
+                });
+                
+                // Recursively call generateAIResponse to process the result
+                const finalResponse = await this.generateAIResponse(messages, functionExecutionId);
+                return finalResponse;
+              } catch (error) {
+                console.error(`❌ Error executing next function ${nextFunctionData.name}:`, error.message);
+                await sendIntermediateUpdate(`⚠️ Error with next action: ${error.message}`);
+                return { text: cleanContent };
+              }
             } catch (parseErr) {
               console.warn("Failed to parse next function data:", parseErr.message);
+              return { text: message?.content || "Task completed successfully." };
             }
           }
+          
           return { text: message?.content || "Task completed successfully." };
         }
       } catch (error) {
@@ -889,7 +1007,99 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         }
       }
     }
+    
+    // No successful attempts, return error message
+    return { 
+      text: "I've processed your request, but encountered some difficulties generating a complete response. The core task completed, but I couldn't summarize it properly."
+    };
   }  
+
+  /**
+   * New function to execute follow-up functions with updates to the user
+   */
+  async executeFollowUpFunction(functionName, functionArgs, messages, userId, options = {}) {
+    const { chatId, sendUpdate } = options;
+    
+    try {
+      // Validate function parameters
+      const parsedArguments = await this.validateFollowUpParameters(functionName, functionArgs, userId, { chat: { id: chatId } });
+      
+      // Send update about execution starting
+      if (sendUpdate) {
+        await sendUpdate(`🔄 Executing ${functionName}...`);
+      }
+      
+      // Execute the function with retry
+      const result = await this.executeFunctionWithLimitedRetry(
+        functionName, 
+        parsedArguments, 
+        userId, 
+        chatId, 
+        2
+      );
+      
+      // Format the result
+      const formattedResult = this.formatResults([typeof result.text === 'string' ? result.text : JSON.stringify(result.text)]);
+      const cleanResult = this.cleanJSONText(formattedResult, functionName, JSON.stringify(parsedArguments));
+      
+      // Send update about successful execution
+      if (sendUpdate) {
+        const userCleanResult = this.cleanTextForTelegram(formattedResult)
+          .replace(/[*_~#{}\[\]]/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200);
+        
+        await sendUpdate(`✅ Completed ${functionName}: ${userCleanResult}...`);
+      }
+      
+      return {
+        success: true,
+        name: functionName,
+        args: parsedArguments,
+        text: cleanResult
+      };
+    } catch (error) {
+      console.error(`❌ Error in executeFollowUpFunction (${functionName}):`, error.message);
+      
+      // Try fallback functions if available
+      try {
+        if (sendUpdate) {
+          await sendUpdate(`⚠️ Trying alternative method for ${functionName}...`);
+        }
+        
+        const fallbackResult = await this.tryFallbackFunctions(
+          functionName,
+          functionArgs,
+          userId,
+          chatId,
+          error
+        );
+        
+        // Format the fallback result
+        const formattedResult = this.formatResults([typeof fallbackResult.text === 'string' ? fallbackResult.text : JSON.stringify(fallbackResult.text)]);
+        const cleanResult = this.cleanJSONText(formattedResult, functionName, JSON.stringify(functionArgs));
+        
+        if (sendUpdate) {
+          await sendUpdate(`✅ Completed alternative method for ${functionName}`);
+        }
+        
+        return {
+          success: true,
+          name: functionName,
+          args: functionArgs,
+          text: cleanResult,
+          fallback: true
+        };
+      } catch (fallbackError) {
+        if (sendUpdate) {
+          await sendUpdate(`❌ Failed to complete ${functionName}: ${error.message}`);
+        }
+        
+        throw new Error(`Failed to execute ${functionName}: ${error.message}`);
+      }
+    }
+  }
 
   /**
    * Helper method to estimate token count for a message array
@@ -1576,7 +1786,7 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
         delete_price_alert: () => this.intentProcessor.deletePriceAlert(args.alertId),
         get_portfolio: () => this.intentProcessor.getPortfolio(userId, args.network),
         get_wallet_balances: () => this.intentProcessor.getBalances(chatId, userId, args),
-        get_wallet_token_transactions: () => this.intentProcessor.getWalletTransactions(chatId, args),
+        get_wallet_token_transactions: () => this.intentProcessor.retrieveWalletTransactions(chatId, userId, args),
         fetch_flipper_mode_metrics: () => this.intentProcessor.fetchMetrics(),
         setup_flipper_mode: () => this.intentProcessor.setupFlipperMode(userId),
         start_flipper_mode: () => this.intentProcessor.startFlipperMode(userId, chatId, args),

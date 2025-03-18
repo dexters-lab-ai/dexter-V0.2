@@ -10,7 +10,7 @@ import { normalizeNetwork, NETWORKS, NETWORK_DISPLAY_NAMES } from '../../../core
 
 // Service imports
 import { Wallet } from "ethers";
-import { Avalanche } from 'avalanche';
+import { Avalanche, BinTools } from 'avalanche';
 import { addressBookService } from '../../addressBook/AddressBookService.js';
 import { tradeService } from '../../trading/TradeService.js';
 import { dextools } from '../../dextools/index.js';
@@ -237,6 +237,53 @@ const chainAliasMapping = {
   "pulsechain mainnet": "0x171"
 };
 
+const chainIdToName = {
+  "0x1": "ethereum",
+  "0xaa36a7": "sepolia",           // Ethereum Sepolia
+  "0x4268": "holesky",             // Ethereum Holesky
+  "0x89": "polygon",
+  "0x13882": "polygon_amoy",
+  "0x38": "bsc",
+  "0x61": "bsc_testnet",
+  "0xa4b1": "arbitrum",
+  "0x66eee": "arbitrum_sepolia",
+  "0x2105": "base",
+  "0x14a34": "base_sepolia",
+  "0xa": "optimism",
+  "0xaa37dc": "optimism_sepolia",
+  "0xe708": "linea",
+  "0xe705": "linea_sepolia",
+  "0xa86a": "avalanche",
+  "0xfa": "fantom",
+  "0xfa2": "fantom_testnet",
+  "0x19": "cronos",
+  "0x64": "gnosis",
+  "0x27d8": "gnosis_testnet",
+  "0x15b38": "chiliz",
+  "0x15b32": "chiliz_testnet",
+  "0x504": "moonbeam",
+  "0x505": "moonriver",
+  "0x507": "moonbase",
+  "0x13e31": "blast",
+  "0xa0c71fd": "blast_sepolia",
+  "0x144": "zksync",
+  "0x12c": "zksync_sepolia",
+  "0x1388": "mantle",
+  "0x138b": "mantle_sepolia",
+  "0xcc": "opbnb",
+  "0x44d": "polygon_zkevm",
+  "0x98a": "polygon_zkevm_cardona",
+  "0x1b58": "zetachain",
+  "0x1b59": "zetachain_testnet",
+  "0x2eb": "flow",
+  "0x221": "flow_testnet",
+  "0x7e4": "ronin",
+  "0x7e5": "ronin_testnet",
+  "0x46f": "lisk",
+  "0x106a": "lisk_testnet",
+  "0x171": "pulsechain"
+};
+
 // Helper: Convert user input to canonical chain ID.
 function normalizeChain(inputChain) {
   const lower = inputChain.trim().toLowerCase();
@@ -329,30 +376,31 @@ export class IntentProcessor extends EventEmitter {
   
   async getBalances(chatId, userId, parameters) {
     let { network, tokenList = [] } = parameters;
-  
-    // 1. Normalize network name if provided
-    if (network) {
-      try {
-        const normalizedChainId = normalizeChain(network);
-        network = normalizedChainId || network;
-      } catch (error) {
-        console.error("Normalization failed, falling back to original network input:", network, error);
-      }
-    }
+    
+    console.log("Received network processing", network);
   
     // 2. Retrieve and validate user wallet data
     const user = await User.findOne({ telegramId: userId });
     if (!user || !user.wallets) {
       throw new Error("User wallet data not found.");
     }
-  
+    
+    // If the network is provided as a chain ID, convert it to the network name.
+    let networkName;
+    if (network) {
+      networkName = network.startsWith("0x")
+        ? chainIdToName[network.toLowerCase()] || network
+        : network.toLowerCase();
+    }
+
     // 3. Determine which networks to query
-    const networksToQuery = network ? [network] : Object.keys(user.wallets);
+    const networksToQuery = networkName ? [networkName] : Object.keys(user.wallets);
     const results = [];
+    console.log(`🌐 🌐networksToQuery🌐🌐networksToQuery🌐🌐🌐: ${JSON.stringify(networksToQuery, null, 2)}`);
   
     // 4. Process each network
     for (const net of networksToQuery) {
-      // Skip networks that should be excluded (like Avalanche in your example)
+      // Skip networks that should be excluded (like Avalanche coz of P-chain use not C-chain)
       /*
       if (net.toLowerCase() === "avalanche") {
         console.log("Skipping Avalanche wallet processing");
@@ -430,7 +478,7 @@ export class IntentProcessor extends EventEmitter {
   }
 
   // Process a Solana wallet and return its data
-  async processSolanaWallet(encryptedKey, chatId, userId) {
+  async processSolanaWallet(key, chatId, userId) {
     let publicKey = null;
     let wallet = null;
     let formattedBalances = {};
@@ -438,38 +486,33 @@ export class IntentProcessor extends EventEmitter {
     let walletNetWorth = "N/A";
 
     try {
-      // Decrypt the encrypted private key
-      const privateKey = decrypt(encryptedKey);
-      
-      if (!privateKey) {
-        throw new Error("Failed to decrypt Solana private key");
+      // Determine if decryption is needed.
+      let needsDecryption = true;
+      if (
+        (key.length === 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(key)) ||
+        (key.length === 128 && /^[0-9a-fA-F]+$/.test(key))
+      ) {
+        needsDecryption = false;
       }
-      
-      // For Solana, we need to create a Keypair from the private key
-      // The key could be in either hex or base58 format
-      let secretKeyUint8;
-      
-      if (/^[0-9a-fA-F]{128}$/.test(privateKey)) {
-        // It's a hex string
-        secretKeyUint8 = Uint8Array.from(Buffer.from(privateKey, "hex"));
-      } else {
-        // Try to decode as base58
-        try {
-          secretKeyUint8 = bs58.decode(privateKey);
-        } catch (error) {
-          throw new Error(`Invalid Solana private key format: ${error.message}`);
-        }
+      const processedKey = needsDecryption ? decrypt(key) : key;
+      if (!processedKey) {
+        throw new Error("Failed to decrypt private key.");
       }
-      
-      // Create the wallet from the secret key
+      // Decode the processed key.
+      const secretKeyUint8 = /^[0-9a-fA-F]{128}$/.test(processedKey)
+        ? Uint8Array.from(Buffer.from(processedKey, "hex"))
+        : bs58.decode(processedKey);
+
+      // Wallet & Key
       wallet = Keypair.fromSecretKey(secretKeyUint8);
       publicKey = wallet.publicKey.toBase58();
       
       // Send message to user if reconstruction was successful
+      console.log("✅ Solana Wallet Reconstructed:", publicKey);
       await this.safeSendMessage(
         this.bot,
         userId,
-        `✅ **Solana Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${publicKey}\n\`\`\``,
+        `✅ **Wallet Reconstructed!**\n\n🔹 Public Key:\n\`\`\`\n${publicKey}\n\`\`\``,
         { parse_mode: "Markdown" }
       );
       
@@ -541,6 +584,10 @@ export class IntentProcessor extends EventEmitter {
       );
 
       // Fetch portfolio data
+      // Convert from P-Chain to C-Chain first
+      walletAddress = walletAddress.startsWith("P-")
+      ? this.convertPChainToCChainAddress(walletAddress)
+      : walletAddress;
       try {
         formattedBalances = await getPortfolioData("avalanche", walletAddress);
       } catch (error) {
@@ -559,6 +606,28 @@ export class IntentProcessor extends EventEmitter {
     return this.createNetworkResult("avalanche", walletAddress, formattedBalances, walletPNL, walletNetWorth);
   }
 
+  async convertPChainToCChainAddress(pAddress) {
+    if (!pAddress.startsWith("P-")) return pAddress;
+    
+    try {
+      // Get BinTools instance
+      const bintools = BinTools.getInstance();
+      
+      // Parse the P-chain address (keeping the P- prefix)
+      const addressBuffer = bintools.parseAddress(pAddress, 'P');
+      
+      // Convert to C-chain Ethereum-compatible address
+      // Ethereum addresses are 20 bytes
+      const cChainAddress = '0x' + Buffer.from(addressBuffer).toString('hex').substring(0, 40);
+      console.log("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC-Chain Address: ", cChainAddress);
+      
+      return cChainAddress;
+    } catch (error) {
+      console.error("Error converting P-chain address:", error);
+      throw new Error("Failed to convert P-chain address to C-chain format.");
+    }
+  }
+
   // Process an EVM wallet and return its data
   async processEvmWallet(network, encryptedKey, chatId, userId) {
     let walletAddress = null;
@@ -567,26 +636,22 @@ export class IntentProcessor extends EventEmitter {
     let walletNetWorth = "N/A";
 
     try {
-      let privateKey = decrypt(encryptedKey);
-      
-      if (!privateKey) {
-        throw new Error("Failed to decrypt private key.");
+      let privateKey;
+      let key = encryptedKey;
+      if (key.startsWith("0x") && key.length === 66) {
+        privateKey = key;
+      } else {
+        privateKey = decrypt(key);
+        if (!privateKey) throw new Error("Failed to decrypt private key.");
+        if (!privateKey.startsWith("0x")) {
+          privateKey = "0x" + privateKey;
+        }
+        console.log(`🔓 Private Key Decrypted Successfully for ${network}`);
       }
-      
-      // Ensure the private key has the correct format
-      if (!privateKey.startsWith("0x")) {
-        privateKey = "0x" + privateKey;
-      }
-      
-      console.log(
-        `🔓 Private Key Decrypted Successfully for ${network}`
-      );
-
       const providerForNetwork = providers[network.toLowerCase()];
-      if (!providerForNetwork) {
-        throw new Error(`Provider for network "${network}" is not configured.`);
-      }
-
+      if (!providerForNetwork)
+        throw new Error(`Provider for network "${net}" is not configured.`);
+      
       const wallet = new Wallet(privateKey, providerForNetwork);
       walletAddress = wallet.address;
       
@@ -643,65 +708,259 @@ export class IntentProcessor extends EventEmitter {
    * @returns {Promise<Array|Object>} - If a chain is provided, returns an array of transactions.
    *                                    If no chain is provided, returns an object with keys: { base, eth, avax, solana }.
    */    
-  async getWalletTransactions(chatId, parameters) {
-    const network = parameters.network;
-    const wallet = parameters.walletAddress;
-    const options = parameters.tokenList ?? [];
+  async retrieveWalletTransactions(chatId, userId, parameters) {
+    const { network, walletAddress, tokenList = [] } = parameters;
+   
+    // If walletAddress is directly provided, try to use it but don't fail the entire function
+    if (walletAddress) {
+      try {
+        console.log(`---atemping---- ${walletAddress}, `);
+        const result = await this.fetchTransactionsForAddress(network, walletAddress, tokenList);
+        if (result && result.success !== false) {
+          return result;
+        }
+        // If we reach here, either the result was null or had success: false
+        console.log(`Direct wallet address approach failed for ${walletAddress}, falling back to stored wallets`);
+        // Continue to fallback logic below instead of returning
+      } catch (error) {
+        console.error(`Error fetching transactions for direct address ${walletAddress}: ${error.message}`);
+        // Continue to fallback logic below instead of returning
+      }
+    }
+   
+    // Fallback: try to get the wallet from the user's stored wallets
+    try {
+      // Retrieve and validate user wallet data
+      const user = await User.findOne({ telegramId: userId });
+      if (!user || !user.wallets) {
+        throw new Error("User wallet data not found.");
+      }
+   
+      // If network is specified, use that specific wallet
+      if (network) {
+        const normalizedNetwork = network.toLowerCase();
+       
+        // Check if user has a wallet for this network
+        if (!user.wallets[normalizedNetwork] || !user.wallets[normalizedNetwork][0]?.encryptedPrivateKey) {
+          // If direct address failed and we also don't have a stored wallet, return error
+          return { success: false, message: `Wallet for network "${network}" not found.` };
+        }
+        console.log("=============wallet found");
+   
+        // Reconstruct the wallet and get its address
+        const { address } = await this.reconstructWalletFromEncryptedKey(normalizedNetwork, user.wallets[normalizedNetwork][0].encryptedPrivateKey);
+       
+        // Fetch transactions for this address
+        return await this.fetchTransactionsForAddress(normalizedNetwork, address, tokenList);
+      }
+      // If no network specified, get transactions for all user's wallets
+      else {
+        const allNetworks = Object.keys(user.wallets);
+        const results = {};
+   
+        for (const net of allNetworks) {
+          if (!user.wallets[net] || !user.wallets[net][0]?.encryptedPrivateKey) {
+            results[net] = { success: false, message: `Wallet for network "${net}" not found.` };
+            continue;
+          }
+   
+          try {
+            // Reconstruct the wallet and get its address
+            const { address } = await this.reconstructWalletFromEncryptedKey(net, user.wallets[net][0].encryptedPrivateKey);
+           
+            // Fetch transactions for this address
+            results[net] = await this.fetchTransactionsForAddress(net, address, tokenList);
+          } catch (error) {
+            console.error(`Error processing ${net} wallet: ${error.message}`);
+            results[net] = { success: false, message: `Error processing ${net} wallet: ${error.message}` };
+          }
+        }
+   
+        return { success: true, message: "Transactions retrieved", data: results };
+      }
+    } catch (error) {
+      console.error("Error retrieving wallet transactions:", error);
+      return { success: false, message: `Error retrieving transactions: ${error.message}` };
+    }
+  }
   
-    if (!wallet) {
+  // Helper method to reconstruct wallet from encrypted key
+  async reconstructWalletFromEncryptedKey(network, encryptedKey) {
+    const normalizedNetwork = network.toLowerCase();
+    
+    // Solana wallet reconstruction
+    if (normalizedNetwork === "solana") {
+      // Determine if decryption is needed.
+      let needsDecryption = true;
+      let key = encryptedKey;
+      if (
+        (key.length === 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(key)) ||
+        (key.length === 128 && /^[0-9a-fA-F]+$/.test(key))
+      ) {
+        needsDecryption = false;
+      }
+      const processedKey = needsDecryption ? decrypt(key) : key;
+      if (!processedKey) {
+        throw new Error("Failed to decrypt private key.");
+      }
+      // Decode the processed key.
+      const secretKeyUint8 = /^[0-9a-fA-F]{128}$/.test(processedKey)
+        ? Uint8Array.from(Buffer.from(processedKey, "hex"))
+        : bs58.decode(processedKey);
+      const wallet = Keypair.fromSecretKey(secretKeyUint8);
+      const publicKey = wallet.publicKey.toBase58();
+      return { address: publicKey, wallet };      
+    } 
+    // Avalanche wallet reconstruction
+    else if (normalizedNetwork === "avalanche") {
+      const privateKey = decrypt(encryptedKey);
+      if (!privateKey) {
+        throw new Error("Failed to decrypt Avalanche private key");
+      }
+      
+      const avalanche = new Avalanche(
+        config.networks.avalanche.host,
+        config.networks.avalanche.port,
+        config.networks.avalanche.protocol
+      );
+      
+      const pchain = avalanche.PChain();
+      const keyChain = pchain.keyChain();
+      const keyPair = keyChain.importKey(privateKey);
+      
+      return { address: keyPair.getAddressString(), wallet: { keyPair } };
+    } 
+    // Generic EVM wallet reconstruction
+    else {
+      let privateKey;
+      let key = encryptedKey;
+      if (key.startsWith("0x") && key.length === 66) {
+        privateKey = key;
+      } else {
+        privateKey = decrypt(key);
+        if (!privateKey) throw new Error("Failed to decrypt private key.");
+        if (!privateKey.startsWith("0x")) {
+          privateKey = "0x" + privateKey;
+        }
+        console.log(`🔓 Private Key Decrypted Successfully for ${network}`);
+      }
+      const providerForNetwork = providers[network.toLowerCase()];
+      if (!providerForNetwork)
+        throw new Error(`Provider for network "${network}" is not configured.`);
+      
+      const wallet = new Wallet(privateKey, providerForNetwork);
+      console.log(`✅ ${network.toUpperCase()} Wallet Reconstructed:`, wallet.address);      
+      return { address: wallet.address, wallet };
+    }
+  }
+  
+  // Helper method to fetch transactions for a specific address using the appropriate API
+  async fetchTransactionsForAddress(network, walletAddress) {
+    if (!walletAddress) {
       return { success: false, message: "Wallet address is required." };
     }
-  
-    let result;
-  
-    // Solana Transactions Handling
-    if (network.toLowerCase() === "solana") {
+
+    console.log("+++++++++++++++++++++++++++++++++++++++++++++++ Fetching transactions...");
+    const normalizedNetwork = network.toLowerCase();
+    let result = await getWalletTransactions(normalizedNetwork, walletAddress);
+
+    // If the primary fetch didn't succeed, trigger fallback logic.
+    if (!result.success) {
+      console.error(`Primary fetch for ${normalizedNetwork} failed: ${result.error}`);
       try {
-        result = await getWalletTransactions("solana", wallet);
-      } catch (error) {
-        console.error("Solana primary fetch failed, using fallback.", error);
-        try {
-          result = await getAllSPLTokenTransactions(wallet, options);
-        } catch (fallbackError) {
-          console.error("Solana fallback fetch failed.", fallbackError);
-          return { success: false, message: "Failed to fetch Solana transactions." };
+        if (normalizedNetwork === "solana") {
+          console.log("+++++++++++++++++++++++++++++++++++++++++++++++ Solana fallback transactions...");
+          result = await getAllSPLTokenTransactions(walletAddress);
+        } else if (normalizedNetwork === "avalanche") {
+          // Fetch portfolio data
+          // Convert from P-Chain to C-Chain first
+          walletAddress = walletAddress.startsWith("P-")
+          ? this.convertPChainToCChainAddress(walletAddress)
+          : walletAddress;
+          result = await getAllERC20TokenTransactionsAVAX(walletAddress);
+        } else {
+          // For other EVM networks, retrieve provider and use the appropriate fallback method.
+          const provider = providers[network.toLowerCase()];
+          if (!provider) {
+            return { success: false, message: `No provider configured for network: ${network}` };
+          }
+          if (normalizedNetwork === "ethereum") {
+            result = await getAllERC20TokenTransactionsETH(walletAddress);
+          } else {
+            result = await this.getAllERC20TokenTransactionsForEVM(walletAddress, provider);
+          }
         }
-      }
-      return result;
-    }
-  
-    // EVM Transactions Handling
-    const evmChainId = evmChainMapping[network.toLowerCase()];
-    if (!evmChainId) {
-      return { success: false, message: `Unsupported EVM network: ${network}` };
-    }
-  
-    try {
-      result = await getWalletTransactions(network, wallet);
-    } catch (error) {
-      console.error(`Primary fetch for ${network} failed, using fallback.`, error);
-      try {
-        switch (network.toLowerCase()) {
-          case "base":
-            result = await getAllERC20TokenTransactionsBASE(wallet, options);
-            break;
-          case "ethereum":
-            result = await getAllERC20TokenTransactionsETH(wallet, options);
-            break;
-          case "avalanche":
-            result = await getAllERC20TokenTransactionsAVAX(wallet, options);
-            break;
-          default:
-            return { success: false, message: `No fallback method available for ${network}` };
-        }
+        return result;
       } catch (fallbackError) {
-        console.error("Fallback fetch failed:", fallbackError);
-        return { success: false, message: `Failed to fetch transactions for ${network}.` };
+        console.error(`Fallback fetch for ${normalizedNetwork} failed:`, fallbackError);
+        return { 
+          success: false, 
+          message: `Failed to fetch transactions for ${normalizedNetwork}.`,
+          error: fallbackError.message
+        };
       }
     }
-  
     return result;
-  }  
+  }
+  
+  // Generic EVM transaction fetching function
+  async getAllERC20TokenTransactionsForEVM(walletAddress, provider, options = {}) {
+    // If a tokenList is not provided in options, get it using fetchERC20TokenList
+    let tokenList = options.tokenList;
+    if (!tokenList || tokenList.length === 0) {
+      tokenList = await fetchERC20TokenList({ address: walletAddress }, provider);
+    }
+    
+    const aggregatedTransfers = [];
+    const transferEventSignature = ethers.id("Transfer(address,address,uint256)");
+    const fromBlock = options.fromBlock || "0x0";
+    const toBlock = options.toBlock || "latest";
+    const erc20Interface = new ethers.utils.Interface(ERC20_ABI);
+    
+    for (const tokenAddress of tokenList) {
+      try {
+        const paddedAddress = ethers.utils.hexZeroPad(walletAddress, 32);
+        
+        const filterFrom = {
+          address: tokenAddress,
+          topics: [transferEventSignature, paddedAddress],
+          fromBlock: fromBlock,
+          toBlock: toBlock
+        };
+        
+        const logsFrom = await provider.getLogs(filterFrom);
+        
+        const filterTo = {
+          address: tokenAddress,
+          topics: [transferEventSignature, null, paddedAddress],
+          fromBlock: fromBlock,
+          toBlock: toBlock
+        };
+        
+        const logsTo = await provider.getLogs(filterTo);
+        const allLogs = logsFrom.concat(logsTo);
+        
+        const transfers = allLogs.map(log => {
+          const decoded = erc20Interface.decodeEventLog("Transfer", log.data, log.topics);
+          return {
+            transactionHash: log.transactionHash,
+            blockNumber: log.blockNumber,
+            logIndex: log.logIndex,
+            from: decoded.from,
+            to: decoded.to,
+            value: decoded.value.toString(),
+            token: tokenAddress
+          };
+        });
+        
+        aggregatedTransfers.push(...transfers);
+      } catch (error) {
+        console.error(`Error fetching transactions for token ${tokenAddress}:`, error);
+      }
+    }
+    
+    return aggregatedTransfers;
+  } 
 
   async swapTokensOnJupiter(userId, params) {
     let swapResult;
