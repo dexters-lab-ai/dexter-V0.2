@@ -37,7 +37,7 @@ export class HealthMonitor extends EventEmitter {
     // Register each check with a simple function returning a promise.
     this.services.set('database', async () => this.checkDatabaseHealth());
     this.services.set('aiMetrics', async () => this.checkServiceHealth(aiMetricsService));
-    this.services.set('walletService', async () => walletService.checkHealth());
+    //this.services.set('walletService', async () => walletService.checkHealth());
     this.services.set('pumpFun', async () => pumpFunService.checkHealth());
   }
 

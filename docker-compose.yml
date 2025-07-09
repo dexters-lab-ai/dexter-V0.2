@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development  # Use development stage for dev environment
+    container_name: katzlife-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"    # Main application port (internal)
+      - "3090:3090"    # Admin port
+      - "4000:4000"    # Dashboard port
+      - "4040:4040"    # Ngrok web interface
+      - "80:80"        # Public port (handled by the application)
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - ADMIN_PORT=3090
+      - DASHBOARD_PORT=4000
+      - MONGODB_URI=mongodb://mongodb:27017/katzlife
+      # Redis configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+      # Ngrok configuration (handled by the application)
+      - NGROK_AUTH_TOKEN=${NGROK_AUTH_TOKEN:-}
+      - NGROK_HOSTNAME=${NGROK_HOSTNAME:-dail-agent.ngrok.app}  # Your reserved subdomain
+      - NGROK_REGION=us
+      # Node.js configuration
+      - NODE_OPTIONS=--max_old_space_size=4096
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    # Use nodemon for development with better debugging
+    command: sh -c "npm install && npx nodemon --inspect=0.0.0.0:9229 src/index.js"
+    # Uncomment for production
+    # command: npm start
+
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+      MONGO_INITDB_DATABASE: katzlife
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "'db.runCommand({ ping: 1 })'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-your_secure_password}
+    command: redis-server --requirepass $${REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+
+  # Optional: Add mongo-express for database management
+  mongo-express:
+    image: mongo-express:1.0.0
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: example
+      ME_CONFIG_MONGODB_SERVER: mongodb
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  redis_data:

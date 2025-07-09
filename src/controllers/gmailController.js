@@ -4,8 +4,12 @@ import { User } from '../models/User.js';
 
 export async function manageUserGoogleSettings(req, res) {
   
-  // Determine the base URL dynamically
-  const baseUrl = global.ngrokUrl || process.env.BASE_URL || 'http://localhost:80';
+  // Determine the base URL dynamically with environment-specific configuration
+  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  const port = process.env.PORT || 3000;
+  const baseUrl = process.env.BASE_URL || 
+                 global.ngrokUrl || 
+                 `${protocol}://${process.env.HOST || 'localhost'}:${port}`;
   
   const { telegramId, action } = req.body;
   if (!telegramId) {

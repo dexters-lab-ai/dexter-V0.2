@@ -28,20 +28,37 @@ class QueueService extends EventEmitter {
     this.queueStats = new Map();
     this.degraded = false;
     
-    // Use a static configuration for Bull.
-    // IMPORTANT: Do not include maxRetriesPerRequest or enableReadyCheck here,
-    // because Bull does not permit these for subscriber connections.
-    this.bullConfig = config.bullRedis
-      ? {
-          host: config.bullRedis.host,
-          port: config.bullRedis.port,
-          password: config.bullRedis.password,
+    // Use environment variables with fallback to config or defaults
+    const redisHost = process.env.REDIS_HOST || (config.bullRedis?.host || 'redis');
+    const redisPort = parseInt(process.env.REDIS_PORT || (config.bullRedis?.port || 6379), 10);
+    const redisPassword = process.env.REDIS_PASSWORD || (config.bullRedis?.password || '');
+    const redisDb = parseInt(process.env.REDIS_DB || '0', 10);
+
+    // Bull Redis configuration
+    this.bullConfig = {
+      host: redisHost,
+      port: redisPort,
+      password: redisPassword,
+      db: redisDb,
+      // Add retry strategy for better handling of connection issues
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000); // Exponential backoff, max 2s
+        console.warn(`Redis connection attempt ${times} failed. Retrying in ${delay}ms`);
+        return delay;
+      },
+      // Enable offline queue to handle Redis disconnections
+      enableOfflineQueue: true,
+      // Don't fail on startup if Redis is not available
+      enableReadyCheck: false,
+      // Auto-reconnect when connection is lost
+      reconnectOnError: (err) => {
+        const targetError = 'READONLY';
+        if (err.message.includes(targetError)) {
+          return true; // Reconnect on read-only error
         }
-      : {
-          host: '127.0.0.1',
-          port: 6379,
-          password: '',
-        };
+        return false;
+      }
+    };
   }
 
   async initialize() {

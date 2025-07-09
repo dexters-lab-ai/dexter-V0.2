@@ -20,8 +20,8 @@ import HDKey from 'hdkey';
 import WebSocket from 'ws';
 
 // Keep direct RPC access for redundancy
-const RPC_ENDPOINT = 'https://lingering-red-liquid.solana-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764';
-const WS_ENDPOINT = 'wss://lingering-red-liquid.solana-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764';
+const RPC_ENDPOINT = 'https://dimensional-alpha-energy.solana-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f';
+const WS_ENDPOINT = 'wss://dimensional-alpha-energy.solana-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f';
 
 export class SolanaWallet {
   constructor() {

@@ -23,8 +23,9 @@ const EmailThreadSchema = new mongoose.Schema({
 const WalletSchema = new mongoose.Schema({
   address: {
     type: String,
-    required: true,
-    index: true
+    required: true
+    // Removed index: true to prevent duplicate index warnings
+    // Index is now defined at the UserSchema level for each network
   },
   encryptedPrivateKey: {
     type: String,

@@ -50,10 +50,10 @@ class Config {
     // Node-Redis v4 style: If you need a dedicated client
     this.redisClient = {
       username: 'default',
-      password: process.env.REDIS_PASSWORD || 'xPt5EFIkbV05xcKv98z0Ohgx3xoJ04sb',
+      password: process.env.REDIS_PASSWORD || '47bWEON2casF7oHOXKhHBWIiXinKhS7m',
       socket: {
-        host: process.env.REDIS_HOST || 'redis-19085.c85.us-east-1-2.ec2.redns.redis-cloud.com',
-        port: parseInt(process.env.REDIS_PORT, 10) || 19085
+        host: process.env.REDIS_HOST || 'redis-18078.c244.us-east-1-2.ec2.redns.redis-cloud.com',
+        port: parseInt(process.env.REDIS_PORT, 10) || 18078
       },
       // Optional advanced v4 options...
       retryStrategy: (times) => Math.min(times * 50, 10000),
@@ -63,9 +63,9 @@ class Config {
     // Bull v3 style: host/port/password only
     // We must remove or nullify any node-redis v4 fields like `enableReadyCheck` or `maxRetriesPerRequest`.
     this.bullRedis = {
-      host: process.env.REDIS_HOST || 'redis-19085.c85.us-east-1-2.ec2.redns.redis-cloud.com',
-      port: parseInt(process.env.REDIS_PORT, 10) || 19085,
-      password: process.env.REDIS_PASSWORD || 'xPt5EFIkbV05xcKv98z0Ohgx3xoJ04sb',
+      host: process.env.REDIS_HOST || 'redis-18078.c244.us-east-1-2.ec2.redns.redis-cloud.com',
+      port: parseInt(process.env.REDIS_PORT, 10) || 18078,
+      password: process.env.REDIS_PASSWORD || '47bWEON2casF7oHOXKhHBWIiXinKhS7m',
       // Critical to avoid the "not permitted" error
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
@@ -115,7 +115,7 @@ class Config {
     this.quickNode = {
       apiKey: process.env.QUICKNODE_API_KEY,
       evmEndpoint: process.env.QUICKNODE_EVM_ENDPOINT || 'https://lingering-red-liquid.base-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764',
-      solanaEndpoint: process.env.QUICKNODE_SOLANA_ENDPOINT || 'https://lingering-red-liquid.solana-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764',
+      solanaEndpoint: process.env.QUICKNODE_SOLANA_ENDPOINT || 'https://dimensional-alpha-energy.solana-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f',
       avalancheEndpoint: process.env.QUICKNODE_AVAX_RPC || 'https://lingering-red-liquid.avalanche-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764/ext/bc/C/rpc/',
     };
 
@@ -134,8 +134,8 @@ class Config {
       username: 'default',
       password: process.env.REDIS_PASSWORD,
       socket: {
-        host: 'redis-19085.c85.us-east-1-2.ec2.redns.redis-cloud.com',
-        port: 19085
+        host: 'redis-18078.c244.us-east-1-2.ec2.redns.redis-cloud.com',
+        port: 18078
       },
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);

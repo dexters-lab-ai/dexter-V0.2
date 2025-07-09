@@ -41,25 +41,58 @@ function getNetworkResources(network) {
   return { provider, endpoint, axiosInstance };
 }
 
+/**
+ * Validates a provider with circuit breaker pattern
+ * @param {string} network - Network name
+ * @param {Object} provider - Provider instance
+ * @returns {Promise<{isValid: boolean, error: Error|null}>} Validation result
+ */
 async function validateProvider(network, provider) {
+  // Don't retry if we know the provider is down
+  const health = providerHealth.get(network) || { consecutiveFailures: 0 };
+  
+  // If we've had too many failures, skip validation to avoid hammering a downed service
+  if (health.consecutiveFailures >= 3) {
+    console.warn(`⚠️  ${network} provider marked as unhealthy, skipping validation`);
+    return { 
+      isValid: false, 
+      error: new Error('Provider marked as unhealthy'),
+      skipHealthUpdate: true
+    };
+  }
+
   try {
     if (!provider) {
       throw new Error(`No provider configured for network: ${network}`);
     }
 
-    // Network-specific validation
-    if (network === 'solana') {
-      const version = await provider.connection.getVersion();
-      console.log(`✅ Solana provider validated. Version: ${version['solana-core']}`);
-    } else {
-      const blockNumber = await provider.getBlockNumber();
-      console.log(`✅ ${network} provider validated. Block: ${blockNumber}`);
-    }
+    // Single attempt with timeout
+    const result = await Promise.race([
+      (async () => {
+        if (network === 'solana') {
+          const version = await provider.connection.getVersion();
+          console.log(`✅ ${network} provider validated. Version: ${version['solana-core']}`);
+        } else {
+          const blockNumber = await provider.getBlockNumber();
+          console.log(`✅ ${network} provider validated. Block: ${blockNumber}`);
+        }
+        return { isValid: true, error: null };
+      })(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Provider timeout')), 5000)
+      )
+    ]);
     
-    return true;
+    return result;
+    
   } catch (error) {
     console.error(`❌ Provider validation failed for ${network}:`, error.message);
-    return false;
+    
+    return { 
+      isValid: false, 
+      error: new Error(`Provider validation failed: ${error.message}`),
+      details: error 
+    };
   }
 }
 
@@ -68,37 +101,168 @@ class WalletService extends EventEmitter {
     super();
     this.walletCache = new Map();
     this.providers = providers;
+    this.providerHealth = new Map();
     this.isInitialized = false;
     this.initializationPromise = null;
     this.CACHE_DURATION = 1000 * 60 * 60 * 24; // 24 hours
+    this.MAX_RETRIES = 2;
+    this.INITIAL_RETRY_DELAY = 1000; // 1 second
+    this.HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+  }
+
+  /**
+   * Checks if a provider is healthy
+   * @param {string} network - Network name
+   * @returns {boolean} True if the provider is healthy
+   */
+  isProviderHealthy(network) {
+    const health = this.providerHealth.get(network);
+    if (!health) return false;
+    
+    // Consider a provider unhealthy if it has failed more than 3 times in a row
+    return health.consecutiveFailures < 3;
+  }
+
+  /**
+   * Updates the health status of a provider
+   * @param {string} network - Network name
+   * @param {boolean} success - Whether the last operation was successful
+   */
+  updateProviderHealth(network, success) {
+    const now = Date.now();
+    const health = this.providerHealth.get(network) || {
+      lastChecked: 0,
+      consecutiveFailures: 0,
+      lastError: null,
+      isHealthy: true
+    };
+
+    if (success) {
+      health.consecutiveFailures = 0;
+      health.lastError = null;
+      health.isHealthy = true;
+    } else {
+      health.consecutiveFailures++;
+      health.isHealthy = health.consecutiveFailures < 3;
+    }
+
+    health.lastChecked = now;
+    this.providerHealth.set(network, health);
+  }
+
+  /**
+   * Periodically checks the health of all providers
+   */
+  async startHealthChecks() {
+    // Run initial health check
+    await this.checkAllProviders();
+    
+    // Set up periodic health checks
+    this.healthCheckInterval = setInterval(
+      () => this.checkAllProviders(),
+      this.HEALTH_CHECK_INTERVAL
+    );
+  }
+
+  /**
+   * Checks the health of all providers
+   */
+  async checkAllProviders() {
+    console.log('🔄 Checking health of all providers...');
+    
+    await Promise.all(
+      Object.entries(this.providers).map(async ([network, provider]) => {
+        try {
+          const { isValid, skipHealthUpdate } = await validateProvider(network, provider);
+          
+          // Only update health if this wasn't a skipped validation
+          if (!skipHealthUpdate) {
+            this.updateProviderHealth(network, isValid);
+          }
+          
+          const health = this.providerHealth.get(network) || { consecutiveFailures: 0 };
+          const status = health.consecutiveFailures >= 3 ? 'Unhealthy' : 'Healthy';
+          console.log(`   ${isValid ? '✅' : '❌'} ${network}: ${status} (${health.consecutiveFailures} failures)`);
+        } catch (error) {
+          console.error(`   ❌ Error checking ${network} provider health:`, error.message);
+          this.updateProviderHealth(network, false);
+        }
+      })
+    );
   }
 
   /**
    * Initializes the WalletService by connecting to the database and
-   * setting up necessary collections.
+   * setting up necessary collections and providers.
    */
   async initialize() {
     if (this.initializationPromise) return this.initializationPromise;
+    
     this.initializationPromise = (async () => {
       try {
+        // Initialize database connection
         await db.connect();
         const database = db.getDatabase();
         this.usersCollection = database.collection("users");
         this.metricsCollection = database.collection("walletMetrics");
-        console.log("✅ WalletService initialized successfully.");
 
-        // Validate all providers on startup
-        const validationResults = await Promise.all(
-          Object.entries(this.providers).map(async ([network, provider]) => {
-            const isValid = await validateProvider(network, provider);
-            return { network, isValid };
-          })
+        // Initialize providers with retry logic
+        console.log('🔄 Initializing providers...');
+        
+        // Initialize all providers in parallel with individual error handling
+        const initPromises = Object.entries(this.providers).map(
+          async ([network, provider]) => {
+            try {
+              const { isValid, error, skipHealthUpdate } = await validateProvider(
+                network, 
+                provider
+              );
+              
+              if (!skipHealthUpdate) {
+                this.updateProviderHealth(network, isValid);
+              }
+              
+              if (!isValid) {
+                const health = this.providerHealth.get(network) || { consecutiveFailures: 0 };
+                const status = health.consecutiveFailures >= 3 ? ' (marked as unhealthy)' : '';
+                console.warn(`⚠️  ${network} provider initialization failed${status}:`, error?.message);
+              } else {
+                console.log(`✅ Successfully initialized ${network} provider`);
+              }
+              
+              return { network, success: isValid, error };
+            } catch (error) {
+              console.error(`❌ Error initializing ${network} provider:`, error.message);
+              this.updateProviderHealth(network, false);
+              return { network, success: false, error };
+            }
+          }
         );
 
-        // Log validation results
-        validationResults.forEach(({ network, isValid }) => {
-          console.log(`${isValid ? '✅' : '❌'} ${network} provider: ${isValid ? 'Valid' : 'Invalid'}`);
-        });
+        // Wait for all providers to initialize (or fail)
+        const results = await Promise.all(initPromises);
+        
+        // Log summary
+        const successful = results.filter(r => r.success).length;
+        const failed = results.length - successful;
+        
+        console.log(`\n🔍 Provider Initialization Summary:`);
+        console.log(`   ✅ ${successful} providers initialized successfully`);
+        if (failed > 0) {
+          console.warn(`   ⚠️  ${failed} providers failed to initialize`);
+          results
+            .filter(r => !r.success)
+            .forEach(({ network, error }) => {
+              console.warn(`      - ${network}: ${error?.message || 'Unknown error'}`);
+            });
+        }
+
+        // Start periodic health checks
+        this.startHealthChecks();
+        
+        this.isInitialized = true;
+        console.log("✅ WalletService initialized successfully.");
+        return true;
 
 
         this.isInitialized = true;
