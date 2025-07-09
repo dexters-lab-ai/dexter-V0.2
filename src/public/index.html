@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D.A.I.L – AI Driven Agent Data & Trading Intelligence</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Floating Navigation -->
+    <nav class="glass-nav">
+      <div class="nav-glow-border"></div>
+      <div class="nav-brand">
+        <img src="/images/dail.png" alt="D.A.I.L Logo" class="logo">
+        <h1>D.A.I.L</h1>
+      </div>
+      <div class="nav-links">
+        <a href="https://dail-agent.ngrok.app/dashboard" class="nav-link">Dashboard</a>
+        <a href="/docs" class="nav-link">Documentation</a>
+        <a href="https://t.me/the_ai_lab_announcements" class="nav-link">Telegram</a>
+        <a href="https://x.com/dexters_ai_lab" class="nav-link">Twitter</a>
+      </div>
+      <!-- Mobile Menu Button -->
+      <button class="mobile-menu-toggle" id="mobileMenuToggle">
+        <i class="fas fa-bars"></i>
+      </button>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero hero-container" data-aos="fade-up">
+      <div class="tesseract" id="tesseract">
+          <!-- Grid lines and cubes will be added dynamically -->
+      </div>
+      <div class="hero-content">
+        <h1>API Service</h1>
+        <p>
+        Welcome to the D.A.I.L's Intelligent Data API.<br>
+          Unlock live AI-powered data streams for per token sentiment analytics & fundamental figures.<br>
+          Build intelligent, more informed agents with our robust RESTful API.
+        </p>
+        <div class="status-card">
+          <h2>Service Status</h2>
+          <div class="status-item">
+            <span class="status-label">API Endpoints:</span>
+            <span class="status-value active">Online 🟢</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Uptime:</span>
+            <span class="status-value" id="uptime">Calculating...</span>
+          </div>
+        </div>
+        <div class="hanging-cable" id="cable">
+          <div class="cable-end"></div>
+        </div>
+      </div>
+      <div class="test-tube">
+        <div class="liquid"></div>
+      </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section class="features-grid">
+      <!-- Live Data Streams -->
+      <div class="feature-category" data-aos="fade-up">
+        <h3>📡 AI Served Data Streams</h3>
+        <div class="feature-cards">
+          <div class="feature-card glow-effect">
+            <i class="fas fa-chart-line"></i>
+            <h4>System Metrics</h4>
+            <p>First data stream showcases our Agent's system stats and performance data. All APIs are served from the Agent.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-database"></i>
+            <h4>Cached Data Access</h4>
+            <p>Query historical and live data for cashtags, token addresses, trends, and more with flexible filtering.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-bolt"></i>
+            <h4>Sentiment Analytics</h4>
+            <p>Obtain sentiment scores and market trends from social media and trading data.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trading Signals -->
+      <div class="feature-category" data-aos="fade-up">
+        <h3>💹 API Showcase - Pilot</h3>
+        <div class="feature-cards">
+          <div class="feature-card glow-effect">
+            <i class="fas fa-signal"></i>
+            <h4>Flipper Mode</h4>
+            <p>Automated swap triggers based on real-time sentiment shifts to capture market opportunities.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-user-secret"></i>
+            <h4>KOL Monitoring</h4>
+            <p>Monitor key opinion leaders’ tweets to generate actionable trade signals.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-robot"></i>
+            <h4>Auto Signal Execution</h4>
+            <p>Leverage our autonomous engine to process and execute trading instructions automatically.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- API & Developer Tools -->
+      <div class="feature-category" data-aos="fade-up">
+        <h3>🛠️ API & Developer Tools</h3>
+        <div class="feature-cards">
+          <div class="feature-card glow-effect">
+            <i class="fas fa-code"></i>
+            <h4>Robust REST API</h4>
+            <p>Retrieve live system stats, sentiment analytics, and trade signals through our RESTful API endpoints.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-file-alt"></i>
+            <h4>Comprehensive Documentation</h4>
+            <p>Detailed API documentation with sample queries, filters, and integration guides to get you started.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-plug"></i>
+            <h4>Seamless Integration</h4>
+            <p>Embed our data streams into your own trading platforms, dashboards, or custom applications.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Future Products -->
+      <div class="feature-category" data-aos="fade-up">
+        <h3>🚀 Future Products</h3>
+        <div class="feature-cards">
+          <div class="feature-card glow-effect">
+            <i class="fas fa-mobile-alt"></i>
+            <h4>Huginn Update </h4>
+            <p>Q2a - Hug me D.A.I.L? Expanding the monitoring service: Have a swarm of agents watch real world events for you, like anything, and update you or trigger a task.</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-mobile-alt"></i>
+            <h4>PIED PIPER </h4>
+            <p>Q2b - Who listening? Curl and Unix pipe based 'real world data scraper', in real time. Watch a shipment, ticket, result, stock price or any state based info that appears online, weather?</p>
+          </div>
+          <div class="feature-card glow-effect">
+            <i class="fas fa-desktop"></i>
+            <h4>Q2c - O.P.E.R.A.T.O.R</h4>
+            <p>Coming soon: A native desktop application to execute complex multi-step tasks in natural language.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- API Landing CTA Section -->
+    <section class="cta-section">
+      <div class="lab-scene">
+        <div class="beaker"></div>
+        <div class="flask"></div>
+        <div class="smoke"></div>
+      </div>
+      <div class="cta-content">
+        <h2><span class="no-gradient">🚪</span> Access the API</h2>     
+        <p>
+          Unlock the power of live AI data streams and advanced trading intelligence. Our API provides AI powered data insights you need to build informed AI Companions. Query insightful market sentiment, and curated token metrics in real time.
+        </p>
+        <div class="experiment-stats">
+          <div class="stat">
+            <span class="number">24/7</span>
+            <span class="label">Data Streaming</span>
+          </div>
+          <div class="stat">
+            <span class="number">∞</span>
+            <span class="label">Endpoints</span>
+          </div>
+          <div class="stat">
+            <span class="number">✓</span>
+            <span class="label">Reliability</span>
+          </div>
+        </div>
+        <a href="https://dail-agent.ngrok.app/dashboard" class="cta-button">Test API Preview</a>
+        <br/><br/>
+        <p>
+          API service will open soon. Join our developer community to integrate D.A.I.L’s live data into your applications, build your own AI trading assistant. Our API is the foundation for next‑generation autonomous crypto tasking.
+        </p>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="glass-footer">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h3>Connect</h3>
+          <a href="https://t.me/the_ai_lab_announcements">Telegram</a>
+          <a href="https://x.com/dexters_ai_lab">Twitter</a>
+        </div>
+        <div class="footer-section">
+          <h3>Resources</h3>
+          <a href="https://dail-agent.ngrok.app">Dashboard</a>
+          <a href="/docs">Documentation</a>
+        </div>
+        <div class="footer-section">
+          <p>&copy; 2025 Dexter's AI Lab</p>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+  <script>
+    AOS.init({
+      duration: 800,
+      offset: 100,
+      once: true
+    });
+
+    // Update uptime
+    const BACKEND_URL = "https://dail-agent.ngrok.app";
+    async function updateUptime() {
+        try {
+            const res = await fetch(`${BACKEND_URL}/health`);
+            const data = await res.json();
+            console.log('data from API', data);
+            const uptime = Math.floor(data.uptime);
+            const days = Math.floor(uptime / 86400);
+            const hours = Math.floor((uptime % 86400) / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            document.getElementById("uptime").textContent = `${days}d ${hours}h ${minutes}m`;
+        } catch (err) {
+            console.error("Error fetching uptime:", err);
+        }
+    }
+
+    updateUptime();
+    setInterval(updateUptime, 60000);
+
+    // Particle Effects for Product Suite
+    function initParticleNetwork() {
+      const canvas = document.createElement('canvas');
+      canvas.classList.add('particle-network');
+      document.querySelector('.features-grid').prepend(canvas);
+      const ctx = canvas.getContext('2d');
+
+      let particles = [];
+      const particleCount = 100;
+
+      function resize() {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+      }
+
+      function createParticles() {
+        for (let i = 0; i < particleCount; i++) {
+          particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            vx: Math.random() * 2 - 1,
+            vy: Math.random() * 2 - 1,
+            radius: Math.random() * 2 + 1
+          });
+        }
+      }
+
+      function drawParticles() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(particle => {
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.fill();
+          particle.x += particle.vx;
+          particle.y += particle.vy;
+          if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
+          if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
+        });
+        requestAnimationFrame(drawParticles);
+      }
+
+      resize();
+      createParticles();
+      drawParticles();
+      window.addEventListener('resize', resize);
+    }
+
+    function createDNABackground() {
+      const container = document.createElement('div');
+      container.className = 'dna-background';
+      document.querySelector('.features-list').prepend(container);
+      for (let i = 0; i < 50; i++) {
+        const strand = document.createElement('div');
+        strand.className = 'dna-strand';
+        strand.style.left = `${Math.random() * 100}%`;
+        strand.style.top = `${Math.random() * 100}%`;
+        strand.style.animationDelay = `${Math.random() * 8}s`;
+        container.appendChild(strand);
+      }
+    }
+
+    function createLabEffects() {
+      const container = document.createElement('div');
+      container.className = 'lab-container';
+      document.body.appendChild(container);
+      function createBubble() {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.style.left = Math.random() * 100 + 'vw';
+        bubble.style.bottom = '-20px';
+        bubble.style.width = Math.random() * 30 + 10 + 'px';
+        bubble.style.height = bubble.style.width;
+        container.appendChild(bubble);
+        setTimeout(() => bubble.remove(), 4000);
+      }
+      function createChemical() {
+        const chemical = document.createElement('div');
+        chemical.className = 'chemical';
+        chemical.style.left = Math.random() * 100 + 'vw';
+        chemical.style.top = Math.random() * 100 + 'vh';
+        container.appendChild(chemical);
+        setTimeout(() => chemical.remove(), 2000);
+      }
+      function createFlask() {
+        const flask = document.createElement('div');
+        flask.className = 'flask';
+        flask.style.left = Math.random() * 100 + 'vw';
+        flask.style.top = Math.random() * 100 + 'vh';
+        container.appendChild(flask);
+        setTimeout(() => flask.remove(), 3000);
+      }
+      setInterval(createChemical, 3000);
+      setInterval(createFlask, 4000);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initParticleNetwork();
+      //createDNABackground();
+      createLabEffects();
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const mobileMenuToggle = document.getElementById("mobileMenuToggle");
+        const navLinks = document.querySelector(".nav-links");
+
+        mobileMenuToggle.addEventListener("click", () => {
+            navLinks.classList.toggle("active"); // Show/hide menu on click
+        });
+    });
+
+    //////////////////////////////////////////////////////////////////////////////
+    /////////////////////////
+    // Tesseract
+    // Colors configuration
+    const colorSchemes = [
+        { primary: '#4fd754', secondary: '#249cff', brightness: 0.8 },
+        { primary: '#33ff66', secondary: '#ff6633', brightness: 0.9 },
+        { primary: '#cc33ff', secondary: '#4fd754', brightness: 0.7 },
+        { primary: '#3366ff', secondary: '#4fd754', brightness: 1.0 },
+        { primary: '#ff3399', secondary: '#99ff33', brightness: 0.85 }
+    ];
+    
+    let currentScheme = 0;
+    
+    // Initialize tesseract grid
+    function initTesseract() {
+        const tesseract = document.getElementById('tesseract');
+        
+        // Create grid lines
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+        tesseract.appendChild(grid);
+        
+        // Create horizontal lines
+        for (let i = 0; i < 10; i++) {
+            const line = document.createElement('div');
+            line.className = 'grid-line horizontal-line';
+            line.style.top = `${i * 10}%`;
+            grid.appendChild(line);
+        }
+        
+        // Create vertical lines
+        for (let i = 0; i < 10; i++) {
+            const line = document.createElement('div');
+            line.className = 'grid-line vertical-line';
+            line.style.left = `${i * 10}%`;
+            grid.appendChild(line);
+        }
+        
+        // Create floating cubes
+        for (let i = 0; i < 15; i++) {
+            createCube(tesseract);
+        }
+        
+        // Initial color scheme
+        applyColorScheme(colorSchemes[currentScheme]);
+    }
+    
+    // Create a single cube
+    function createCube(parent) {
+      const cube = document.createElement('div');
+      cube.className = 'cube';
+      
+      // Random position
+      const x = Math.random() * 100 - 50;
+      const y = Math.random() * 100 - 50;
+      const z = Math.random() * 1000 - 500;
+      
+      cube.style.left = `calc(50% + ${x}vw)`;
+      cube.style.top = `calc(50% + ${y}vh)`;
+      
+      // Set the depth as a custom property and also set the initial transform for depth
+      cube.style.setProperty('--cube-depth', `${z}px`);
+      
+      // Set random initial rotations as custom properties
+      const rotX = Math.random() * 360;
+      const rotY = Math.random() * 360;
+      cube.style.setProperty('--cube-rot-x', `${rotX}deg`);
+      cube.style.setProperty('--cube-rot-y', `${rotY}deg`);
+      
+      // Set the initial transform (this will be overridden by the animation, but is used as a fallback)
+      cube.style.transform = `translateZ(${z}px)`;
+      
+      // Delay animation to stagger cubes
+      cube.style.animationDelay = `${Math.random() * 5}s`;
+      
+      // Create cube faces
+      const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+      faces.forEach(face => {
+          const facElem = document.createElement('div');
+          facElem.className = `cube-face ${face}`;
+          cube.appendChild(facElem);
+      });
+      
+      parent.appendChild(cube);
+    }
+    
+    // Apply color scheme
+    function applyColorScheme(scheme) {
+        //document.documentElement.style.setProperty('--cable-color', scheme.primary);
+        document.documentElement.style.setProperty('--primary-color', scheme.primary);
+        document.documentElement.style.setProperty('--secondary-color', scheme.secondary);
+        
+        const gridLines = document.querySelectorAll('.grid-line');
+        gridLines.forEach(line => {
+            line.style.background = `rgba(${hexToRgb(scheme.secondary)}, 0.2)`;
+            line.style.boxShadow = `0 0 ${10 * scheme.brightness}px rgba(${hexToRgb(scheme.secondary)}, ${0.8 * scheme.brightness})`;
+        });
+        
+        const cubeFaces = document.querySelectorAll('.cube-face');
+        cubeFaces.forEach(face => {
+            //const useSecondary = Math.random() > 0.5;
+            //const color = useSecondary ? scheme.secondary : scheme.primary;
+            const color = scheme.primary;
+            face.style.borderColor = color;
+            face.style.boxShadow = `0 0 ${10 * scheme.brightness}px ${color}`;
+            face.style.opacity = 0.5 * scheme.brightness;
+        });
+    }
+    
+    // Hex to RGB converter
+    function hexToRgb(hex) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `${r}, ${g}, ${b}`;
+    }
+    
+    // Cable interaction
+    function setupCable() {
+        const cable = document.getElementById('cable');
+        
+        cable.addEventListener('click', () => {
+            currentScheme = (currentScheme + 1) % colorSchemes.length;
+            applyColorScheme(colorSchemes[currentScheme]);
+            
+            // Add visual feedback
+            cable.style.animation = 'none';
+            setTimeout(() => {
+                cable.style.animation = 'swing 4s infinite ease-in-out';
+            }, 10);
+        });
+    }
+    
+    // Initialize on load
+    window.addEventListener('load', () => {
+        initTesseract();
+        setupCable();
+    });
+  </script>
+</body>
+</html>
