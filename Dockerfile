@@ -23,7 +23,7 @@ FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
-# Install system dependencies including Ngrok and canvas deps
+# Install system dependencies for canvas and other native modules
 RUN apk add --no-cache --virtual .gyp \
     python3 \
     make \
@@ -39,28 +39,9 @@ RUN apk add --no-cache --virtual .gyp \
     cairo-dev \
     giflib-dev \
     librsvg \
-    curl \
-    unzip \
-    # Required for Ngrok
-    libgcc \
-    libstdc++ \
-    && apk add --no-cache --repository https://dl-cdn.alpinelinux.org/alpine/edge/community/ --virtual .build-deps \
-    build-base \
-    cairo-dev \
-    jpeg-dev \
-    pango-dev \
-    giflib-dev \
-    librsvg \
-    udev \
-    # Fix library symlinks
+    # Fix library symlinks for canvas compatibility
     && ln -s /usr/lib/libgif.so.7 /usr/lib/libgif.so.6 \
-    && ln -s /usr/lib/libjpeg.so.8 /usr/lib/libjpeg.so.6 \
-    # Install Ngrok
-    && curl -s https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o ngrok.zip \
-    && unzip ngrok.zip \
-    && chmod +x ngrok \
-    && mv ngrok /usr/local/bin/ \
-    && rm ngrok.zip
+    && ln -s /usr/lib/libjpeg.so.8 /usr/lib/libjpeg.so.6
 
 # Copy package files
 COPY package*.json ./
@@ -83,13 +64,11 @@ RUN chown -R appuser:appgroup /usr/src/app
 USER appuser
 
 # Expose ports
-EXPOSE 3000 4040
+EXPOSE 3000
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV NGROK_PORT=80
-ENV NGROK_ENABLED=true
 ENV NODE_OPTIONS=--max_old_space_size=4096
 
 # Health check
