@@ -50,10 +50,10 @@ class Config {
     // Node-Redis v4 style: If you need a dedicated client
     this.redisClient = {
       username: 'default',
-      password: process.env.REDIS_PASSWORD || 'mCi2vxdEZXsGYcMr4WW7wnvQyQSuxCBZ',
+      password: process.env.REDIS_PASSWORD || 'xPt5EFIkbV05xcKv98z0Ohgx3xoJ04sb',
       socket: {
-        host: process.env.REDIS_HOST || 'redis-19992.c341.af-south-1-1.ec2.redns.redis-cloud.com',
-        port: parseInt(process.env.REDIS_PORT, 10) || 19992
+        host: process.env.REDIS_HOST || 'redis-19085.c85.us-east-1-2.ec2.redns.redis-cloud.com',
+        port: parseInt(process.env.REDIS_PORT, 10) || 19085
       },
       // Optional advanced v4 options...
       retryStrategy: (times) => Math.min(times * 50, 10000),
@@ -63,9 +63,9 @@ class Config {
     // Bull v3 style: host/port/password only
     // We must remove or nullify any node-redis v4 fields like `enableReadyCheck` or `maxRetriesPerRequest`.
     this.bullRedis = {
-      host: process.env.REDIS_HOST || 'redis-19992.c341.af-south-1-1.ec2.redns.redis-cloud.com',
-      port: parseInt(process.env.REDIS_PORT, 10) || 19992,
-      password: process.env.REDIS_PASSWORD || 'mCi2vxdEZXsGYcMr4WW7wnvQyQSuxCBZ',
+      host: process.env.REDIS_HOST || 'redis-19085.c85.us-east-1-2.ec2.redns.redis-cloud.com',
+      port: parseInt(process.env.REDIS_PORT, 10) || 19085,
+      password: process.env.REDIS_PASSWORD || 'xPt5EFIkbV05xcKv98z0Ohgx3xoJ04sb',
       // Critical to avoid the "not permitted" error
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
@@ -134,8 +134,8 @@ class Config {
       username: 'default',
       password: process.env.REDIS_PASSWORD,
       socket: {
-        host: 'redis-19992.c341.af-south-1-1.ec2.redns.redis-cloud.com',
-        port: 19992
+        host: 'redis-19085.c85.us-east-1-2.ec2.redns.redis-cloud.com',
+        port: 19085
       },
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);

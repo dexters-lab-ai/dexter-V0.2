@@ -9,6 +9,7 @@ dist/
 
 # Logs
 logs/
+admin_logs/
 *.log
 npm-debug.log*
 

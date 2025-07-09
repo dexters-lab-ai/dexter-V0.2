@@ -10,7 +10,7 @@ import { normalizeNetwork, NETWORKS, NETWORK_DISPLAY_NAMES } from '../../../core
 
 // Service imports
 import { Wallet } from "ethers";
-import { Avalanche, BinTools } from 'avalanche';
+import { Avalanche } from 'avalanche';
 import { addressBookService } from '../../addressBook/AddressBookService.js';
 import { tradeService } from '../../trading/TradeService.js';
 import { dextools } from '../../dextools/index.js';
@@ -237,53 +237,6 @@ const chainAliasMapping = {
   "pulsechain mainnet": "0x171"
 };
 
-const chainIdToName = {
-  "0x1": "ethereum",
-  "0xaa36a7": "sepolia",           // Ethereum Sepolia
-  "0x4268": "holesky",             // Ethereum Holesky
-  "0x89": "polygon",
-  "0x13882": "polygon_amoy",
-  "0x38": "bsc",
-  "0x61": "bsc_testnet",
-  "0xa4b1": "arbitrum",
-  "0x66eee": "arbitrum_sepolia",
-  "0x2105": "base",
-  "0x14a34": "base_sepolia",
-  "0xa": "optimism",
-  "0xaa37dc": "optimism_sepolia",
-  "0xe708": "linea",
-  "0xe705": "linea_sepolia",
-  "0xa86a": "avalanche",
-  "0xfa": "fantom",
-  "0xfa2": "fantom_testnet",
-  "0x19": "cronos",
-  "0x64": "gnosis",
-  "0x27d8": "gnosis_testnet",
-  "0x15b38": "chiliz",
-  "0x15b32": "chiliz_testnet",
-  "0x504": "moonbeam",
-  "0x505": "moonriver",
-  "0x507": "moonbase",
-  "0x13e31": "blast",
-  "0xa0c71fd": "blast_sepolia",
-  "0x144": "zksync",
-  "0x12c": "zksync_sepolia",
-  "0x1388": "mantle",
-  "0x138b": "mantle_sepolia",
-  "0xcc": "opbnb",
-  "0x44d": "polygon_zkevm",
-  "0x98a": "polygon_zkevm_cardona",
-  "0x1b58": "zetachain",
-  "0x1b59": "zetachain_testnet",
-  "0x2eb": "flow",
-  "0x221": "flow_testnet",
-  "0x7e4": "ronin",
-  "0x7e5": "ronin_testnet",
-  "0x46f": "lisk",
-  "0x106a": "lisk_testnet",
-  "0x171": "pulsechain"
-};
-
 // Helper: Convert user input to canonical chain ID.
 function normalizeChain(inputChain) {
   const lower = inputChain.trim().toLowerCase();
@@ -384,23 +337,15 @@ export class IntentProcessor extends EventEmitter {
     if (!user || !user.wallets) {
       throw new Error("User wallet data not found.");
     }
-    
-    // If the network is provided as a chain ID, convert it to the network name.
-    let networkName;
-    if (network) {
-      networkName = network.startsWith("0x")
-        ? chainIdToName[network.toLowerCase()] || network
-        : network.toLowerCase();
-    }
-
+  
     // 3. Determine which networks to query
-    const networksToQuery = networkName ? [networkName] : Object.keys(user.wallets);
+    const networksToQuery = network ? [network] : Object.keys(user.wallets);
     const results = [];
     console.log(`🌐 🌐networksToQuery🌐🌐networksToQuery🌐🌐🌐: ${JSON.stringify(networksToQuery, null, 2)}`);
   
     // 4. Process each network
     for (const net of networksToQuery) {
-      // Skip networks that should be excluded (like Avalanche coz of P-chain use not C-chain)
+      // Skip networks that should be excluded (like Avalanche in your example)
       /*
       if (net.toLowerCase() === "avalanche") {
         console.log("Skipping Avalanche wallet processing");
@@ -505,8 +450,6 @@ export class IntentProcessor extends EventEmitter {
 
       // Wallet & Key
       wallet = Keypair.fromSecretKey(secretKeyUint8);
-      
-      console.log("✅ Solana Wallet KeyPair:", secretKeyUint8);
       publicKey = wallet.publicKey.toBase58();
       
       // Send message to user if reconstruction was successful
@@ -586,10 +529,6 @@ export class IntentProcessor extends EventEmitter {
       );
 
       // Fetch portfolio data
-      // Convert from P-Chain to C-Chain first
-      walletAddress = walletAddress.startsWith("P-")
-      ? this.convertPChainToCChainAddress(walletAddress)
-      : walletAddress;
       try {
         formattedBalances = await getPortfolioData("avalanche", walletAddress);
       } catch (error) {
@@ -606,28 +545,6 @@ export class IntentProcessor extends EventEmitter {
     }
 
     return this.createNetworkResult("avalanche", walletAddress, formattedBalances, walletPNL, walletNetWorth);
-  }
-
-  async convertPChainToCChainAddress(pAddress) {
-    if (!pAddress.startsWith("P-")) return pAddress;
-    
-    try {
-      // Get BinTools instance
-      const bintools = BinTools.getInstance();
-      
-      // Parse the P-chain address (keeping the P- prefix)
-      const addressBuffer = bintools.parseAddress(pAddress, 'P');
-      
-      // Convert to C-chain Ethereum-compatible address
-      // Ethereum addresses are 20 bytes
-      const cChainAddress = '0x' + Buffer.from(addressBuffer).toString('hex').substring(0, 40);
-      console.log("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC-Chain Address: ", cChainAddress);
-      
-      return cChainAddress;
-    } catch (error) {
-      console.error("Error converting P-chain address:", error);
-      throw new Error("Failed to convert P-chain address to C-chain format.");
-    }
   }
 
   // Process an EVM wallet and return its data
@@ -874,11 +791,6 @@ export class IntentProcessor extends EventEmitter {
           console.log("+++++++++++++++++++++++++++++++++++++++++++++++ Solana fallback transactions...");
           result = await getAllSPLTokenTransactions(walletAddress);
         } else if (normalizedNetwork === "avalanche") {
-          // Fetch portfolio data
-          // Convert from P-Chain to C-Chain first
-          walletAddress = walletAddress.startsWith("P-")
-          ? this.convertPChainToCChainAddress(walletAddress)
-          : walletAddress;
           result = await getAllERC20TokenTransactionsAVAX(walletAddress);
         } else {
           // For other EVM networks, retrieve provider and use the appropriate fallback method.
