@@ -1,5 +1,7 @@
-# Stage 1: Build stage
-FROM node:22-alpine AS builder
+# Stage 1: Dependencies
+FROM node:22-alpine AS deps
+
+WORKDIR /usr/src/app
 
 # Install build dependencies including canvas system deps
 RUN apk add --no-cache \
@@ -14,13 +16,19 @@ RUN apk add --no-cache \
     jpeg-dev \
     giflib-dev
 
-WORKDIR /usr/src/app
-
-# Copy package files
+# Copy package files first for better caching
 COPY package*.json ./
 
 # Install all dependencies including devDependencies
 RUN npm install --legacy-peer-deps
+
+# Stage 2: Builder
+FROM node:22-alpine AS builder
+
+WORKDIR /usr/src/app
+
+# Copy dependencies from deps stage
+COPY --from=deps /usr/src/app/node_modules ./node_modules
 
 # Copy source code
 COPY . .
@@ -45,8 +53,9 @@ RUN apk add --no-cache \
     jpeg-dev \
     giflib-dev
 
-# Copy package files
+# Copy package files and lock file
 COPY package*.json ./
+COPY --from=deps /usr/src/app/package-lock.json ./
 
 # Install production dependencies only
 RUN npm ci --only=production
