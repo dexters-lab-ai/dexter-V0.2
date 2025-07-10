@@ -1,8 +1,18 @@
 # Stage 1: Build stage
 FROM node:22-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++ git
+# Install build dependencies including canvas system deps
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git \
+    pkgconfig \
+    pixman-dev \
+    cairo-dev \
+    pango-dev \
+    jpeg-dev \
+    giflib-dev
 
 WORKDIR /usr/src/app
 
@@ -10,8 +20,7 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Install all dependencies including devDependencies
-# First try npm ci, fall back to npm install if it fails
-RUN npm ci || (rm -rf node_modules && npm install)
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -19,46 +28,32 @@ COPY . .
 # Build the application if needed
 # RUN npm run build
 
-# Stage 2: Production image with Ngrok
+# Stage 2: Production image
 FROM node:22-alpine
 
 WORKDIR /usr/src/app
 
-# Install system dependencies for canvas and other native modules
-RUN apk add --no-cache --virtual .gyp \
-    python3 \
-    make \
-    g++ \
-    gcc \
-    giflib-dev \
-    libjpeg-turbo-dev \
-    libpng-dev \
-    libtool \
-    pkgconfig \
+# Install runtime dependencies for canvas
+RUN apk add --no-cache \
+    cairo \
+    pango \
+    jpeg \
+    giflib \
+    pixman \
+    cairo-dev \
     pango-dev \
     jpeg-dev \
-    cairo-dev \
-    giflib-dev \
-    librsvg \
-    # Fix library symlinks for canvas compatibility
-    && ln -s /usr/lib/libgif.so.7 /usr/lib/libgif.so.6 \
-    && ln -s /usr/lib/libjpeg.so.8 /usr/lib/libjpeg.so.6
+    giflib-dev
 
 # Copy package files
 COPY package*.json ./
 
 # Install production dependencies only
-# First try npm ci, fall back to npm install if it fails
-RUN npm ci --only=production || (rm -rf node_modules && npm install --only=production)
-
-# Remove build dependencies
-RUN apk del .gyp
+RUN npm ci --only=production
 
 # Copy built application from builder
 COPY --from=builder /usr/src/app/dist ./dist
-# Copy other necessary files (adjust as needed)
-COPY --from=builder /usr/src/app/src ./src
-COPY --from=builder /usr/src/app/public ./public
+COPY --from=builder /usr/src/app/node_modules ./node_modules
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
@@ -86,13 +81,23 @@ FROM node:22-alpine AS development
 WORKDIR /usr/src/app
 
 # Install build dependencies
-RUN apk add --no-cache python3 make g++ git
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git \
+    pkgconfig \
+    pixman-dev \
+    cairo-dev \
+    pango-dev \
+    jpeg-dev \
+    giflib-dev
 
 # Copy package files
 COPY package*.json ./
 
 # Install all dependencies
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Copy application code
 COPY . .
