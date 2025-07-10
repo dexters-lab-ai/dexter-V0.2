@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { getAuthorizedClient } from '../services/google/googleAPIservice.js';
+import { getAuthorizedClient } from '../services/google/googleApiService.js';
 
 /**
  * Manage a calendar event (create, update, delete).
