@@ -105,22 +105,6 @@ export const AIFunctions = [
         }
       },
       
-      // Solana Pay Functions
-      {
-          name: "create_solana_payment",
-          description: "Create a Solana Pay payment request",
-          parameters: {
-          type: "object",
-          properties: {
-              amount: { type: "number", description: "Payment amount" },
-              recipient: { type: "string", description: "Recipient address" },
-              reference: { type: "string", description: "Payment reference" },
-              label: { type: "string", description: "Payment label" }
-          },
-          required: ["amount", "recipient"]
-          }
-      },
-      
       // Market Analysis Functions
       {
           name: "get_market_conditions",

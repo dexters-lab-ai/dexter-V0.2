@@ -348,63 +348,6 @@ class DexScreenerService {
 
   async getBoostedPairs() {
     try {
-      // Fetch the latest boosted pairs data with caching
-      const rawResponse = await this.fetchWithCache(
-        '/token-boosts/latest/v1',
-        {},
-        'dexscreener:boosted'
-      );
-  
-      //console.log('Boosted token data:', JSON.stringify(rawResponse, null, 2));
-  
-      // Ensure rawResponse is an array
-      if (!Array.isArray(rawResponse)) {
-        console.warn("'Boosted token data' is not an array.");
-        return [];
-      }
-  
-      // Format each boosted pair using the updated formatBoostedData function
-      const formattedPairs = rawResponse.map((item) => {
-        try {
-          const formatted = this.formatBoostedData(item);
-          //console.log("Formatted pair:", formatted);
-          return formatted;
-        } catch (error) {
-          console.error("Error formatting pair:", item, error);
-          return null; // Skip this pair if formatting fails
-        }
-      }).filter(Boolean); // Remove any null entries
-      
-      // Check if there are any valid formatted pairs
-      if (formattedPairs.length === 0) {
-        console.warn("No valid formatted pairs found after processing.");
-        return [];
-      }
-  
-      // Deduplicate based on tokenAddress
-      const uniquePairsMap = new Map();
-      formattedPairs.forEach(pair => {
-        if (!uniquePairsMap.has(pair.tokenAddress)) {
-          uniquePairsMap.set(pair.tokenAddress, pair);
-        }
-      });
-      const uniquePairs = Array.from(uniquePairsMap.values());
-  
-      if (uniquePairs.length === 0) {
-        console.warn("No unique formatted pairs found after deduplication.");
-        return [];
-      }
-  
-      // Return all unique formatted pairs
-      return uniquePairs;
-    } catch (error) {
-      console.error("Error in getBoostedPairs:", error);
-      return [];
-    }
-  }   
-  
-  async getBoostedPairs() {
-    try {
         // Fetch the latest boosted pairs data with caching
         const rawResponse = await this.fetchWithCache(
             '/token-boosts/latest/v1',

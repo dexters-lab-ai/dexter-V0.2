@@ -1514,15 +1514,6 @@ export class IntentProcessor extends EventEmitter {
     });
   }
 
-  async createSolanaPayment(params) {
-    return await solanaPayService.createPayment({
-      amount: params.amount,
-      recipient: params.recipient,
-      reference: params.reference,
-      label: params.label
-    });
-  }
-
   /* Archived stable version
   async handleAddressPaste(userId, address) {
     try {

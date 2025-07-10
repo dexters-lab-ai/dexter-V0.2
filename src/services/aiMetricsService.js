@@ -311,11 +311,6 @@ class AIMetricsService extends EventEmitter {
     this.emit('functionMetricsUpdated', { name, stats });
   }
   
-  // Expose current metrics snapshot.
-  fetchLiveMetrics() {
-    return Promise.resolve(this.metrics);
-  }
-
   // Update service statuses
   updateWalletHealth(walletStatus) {
     this.metrics.wallets = walletStatus;
