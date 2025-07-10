@@ -1,5 +1,5 @@
 # Stage 1: Build stage
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache python3 make g++ git
@@ -20,7 +20,7 @@ COPY . .
 # RUN npm run build
 
 # Stage 2: Production image with Ngrok
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /usr/src/app
 
@@ -81,7 +81,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 CMD ["node", "src/index.js"]
 
 # Stage 3: Development image
-FROM node:20-alpine AS development
+FROM node:22-alpine AS development
 
 WORKDIR /usr/src/app
 
