@@ -25,8 +25,8 @@ RUN npm install --legacy-peer-deps
 # Copy source code
 COPY . .
 
-# Build the application if needed
-# RUN npm run build
+# Build the application
+RUN npm run build
 
 # Stage 2: Production image
 FROM node:22-alpine
@@ -51,8 +51,9 @@ COPY package*.json ./
 # Install production dependencies only
 RUN npm ci --only=production
 
-# Copy built application from builder
-COPY --from=builder /usr/src/app/dist ./dist
+# Ensure dist directory exists and copy built application from builder
+RUN mkdir -p /usr/src/app/dist
+COPY --from=builder /usr/src/app/dist/ ./dist/
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 
 # Create non-root user
