@@ -73,18 +73,7 @@ export class FlowManager extends EventEmitter {
     }
   }
 
-  async initialize() {
-    if (this.initialized) return;
-    try {
-      await db.connect();
-      this.flowCollection = db.getDatabase().collection('flows');
-      await this.setupIndexes();
-      this.initialized = true;
-    } catch (error) {
-      await ErrorHandler.handle(error);
-      throw error;
-    }
-  }
+
 
   async setupIndexes() {
     await this.flowCollection.createIndex({ userId: 1 });
