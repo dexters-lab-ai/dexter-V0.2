@@ -76,9 +76,7 @@ export const fallbackMap = {
       "fetch_tweets_for_symbol",
     ],
 
-    fetch_trending_tokens_twitter: [
-      "search_twitter_by_address",
-    ],
+    // fetch_trending_tokens_twitter is defined later with more comprehensive fallbacks
   
     /**
      * Market Categories & Metrics

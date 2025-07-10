@@ -27,7 +27,7 @@ export class FlowManager extends EventEmitter {
       await db.connect();
       this.flowCollection = db.getDatabase().collection('flows');
       await this.setupIndexes();
-      this.registerFlows(); // Add this line
+      await this.registerFlows(); // Wait for flows to be registered
       this.initialized = true;
     } catch (error) {
       await ErrorHandler.handle(error);
