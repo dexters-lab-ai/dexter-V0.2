@@ -263,18 +263,5 @@ export class SettingsHandler extends Command{
     }
   }
 
-  async showEmptyWalletMessage(ctx) {
-    await ctx.reply(
-      `No wallets found. Create one first!`,
-      {
-        reply_markup: Markup.inlineKeyboard([
-          [Markup.button.callback('➕ Create Wallet', 'create_wallet')],
-          [Markup.button.callback('🌐 Switch Network', 'switch_network')],
-          [Markup.button.callback('↩️ Back', 'back_to_wallets')],
-        ]),
-      }
-    );
 
-    return true;
-  }
 }
