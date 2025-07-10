@@ -1750,7 +1750,6 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
       const functionMap = {
         approve_token: () => this.intentProcessor.handleTokenApproval(args),
         revoke_token_approval: () => this.intentProcessor.handleTokenRevocation(args),
-        create_solana_payment: () => this.intentProcessor.createSolanaPayment(args),
         get_market_conditions: () => this.intentProcessor.getMarketConditions(),
         fetch_market_categories: () => this.intentProcessor.getMarketCategories(),
         fetch_market_category_metrics: () => this.intentProcessor.getMarketCategoryMetrics(),

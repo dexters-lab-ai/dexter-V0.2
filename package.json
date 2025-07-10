@@ -2,6 +2,9 @@
   "name": "dexters_ai_lab",
   "private": true,
   "type": "module",
+  "resolutions": {
+    "googleapis": "^126.0.2"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",

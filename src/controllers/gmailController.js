@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { getAuthorizedClient } from '../services/google/googleAPIservice.js';
+import { getAuthorizedClient } from '../services/google/googleApiService.js';
 import { User } from '../models/User.js';
 
 export async function manageUserGoogleSettings(req, res) {
