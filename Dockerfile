@@ -10,7 +10,8 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Install all dependencies including devDependencies
-RUN npm ci
+# First try npm ci, fall back to npm install if it fails
+RUN npm ci || (rm -rf node_modules && npm install)
 
 # Copy source code
 COPY . .
@@ -47,7 +48,8 @@ RUN apk add --no-cache --virtual .gyp \
 COPY package*.json ./
 
 # Install production dependencies only
-RUN npm ci --only=production
+# First try npm ci, fall back to npm install if it fails
+RUN npm ci --only=production || (rm -rf node_modules && npm install --only=production)
 
 # Remove build dependencies
 RUN apk del .gyp

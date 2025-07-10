@@ -1,32 +1,73 @@
 # Dependency directories
 node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
 
-# Environment variables
-# .env is now included for Docker Compose
-.env.*
-!.env
-!.env.example
-
-# Build output
-dist/
-build/
-
-# Debug logs
+# Logs
+logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Local development
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Build output
+/dist
+/build
+
+# Coverage directory used by testing tools
+/coverage
+
+# IDE specific files
 .idea/
 .vscode/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Test related
+/test
+/coverage
+
+# Docker specific
+Dockerfile.ngrok
+docker-compose.override.yml
+
+# Git
+.git
+.gitignore
+
+# Local development
+.cache/
+.temp/
+.tmp/
+
+# Ngrok
+ngrok*
+!ngrok.yml
+
+# Misc
+*.pem
+*.p12
+*.key
+*.crt
+*.csr
+*.cer
+*.pfx
 
 # OS generated files
 .DS_Store

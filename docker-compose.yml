@@ -9,31 +9,33 @@ services:
     container_name: katzlife-app
     restart: unless-stopped
     ports:
-      - "3000:3000"    # Main application port (internal)
+      - "3000:3000"    # Main application port
       - "3090:3090"    # Admin port
       - "4000:4000"    # Dashboard port
-      - "4040:4040"    # Ngrok web interface
-      - "80:80"        # Public port (handled by the application)
+      - "80:80"        # Public port (for production)
     environment:
+      # Application settings
       - NODE_ENV=development
       - PORT=3000
       - ADMIN_PORT=3090
       - DASHBOARD_PORT=4000
+      # Database configuration
       - MONGODB_URI=mongodb://mongodb:27017/katzlife
-      # Redis configuration
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_DB=0
-      # Ngrok configuration (handled by the application)
+      # Ngrok configuration (managed by application)
       - NGROK_AUTH_TOKEN=${NGROK_AUTH_TOKEN:-}
-      - NGROK_HOSTNAME=${NGROK_HOSTNAME:-dail-agent.ngrok.app}  # Your reserved subdomain
+      - NGROK_HOSTNAME=${NGROK_HOSTNAME:-dail-agent.ngrok.app}
       - NGROK_REGION=us
-      # Node.js configuration
+      # Performance
       - NODE_OPTIONS=--max_old_space_size=4096
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
+    working_dir: /usr/src/app
+    tty: true  # Keeps container running for debugging
     depends_on:
       mongodb:
         condition: service_healthy
