@@ -1,5 +1,5 @@
-# Stage 1: Dependencies
-FROM node:22-alpine AS deps
+# Stage 1: Builder
+FROM node:22-alpine AS builder
 
 WORKDIR /usr/src/app
 
@@ -21,14 +21,6 @@ COPY package*.json ./
 
 # Install all dependencies including devDependencies
 RUN npm install --legacy-peer-deps
-
-# Stage 2: Builder
-FROM node:22-alpine AS builder
-
-WORKDIR /usr/src/app
-
-# Copy dependencies from deps stage
-COPY --from=deps /usr/src/app/node_modules ./node_modules
 
 # Copy source code
 COPY . .
@@ -53,17 +45,14 @@ RUN apk add --no-cache \
     jpeg-dev \
     giflib-dev
 
-# Copy package files and lock file
+# Copy package files
 COPY package*.json ./
-COPY --from=deps /usr/src/app/package-lock.json ./
 
-# Install production dependencies only
-RUN npm ci --only=production
+# Install production dependencies only without using the lockfile
+RUN npm install --only=production --no-package-lock
 
-# Ensure dist directory exists and copy built application from builder
-RUN mkdir -p /usr/src/app/dist
+# Copy built application from builder
 COPY --from=builder /usr/src/app/dist/ ./dist/
-COPY --from=builder /usr/src/app/node_modules ./node_modules
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
