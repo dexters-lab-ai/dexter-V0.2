@@ -45,11 +45,11 @@ RUN apk add --no-cache \
     jpeg-dev \
     giflib-dev
 
-# Copy package files
-COPY package*.json ./
+# Copy only package.json for production
+COPY package.json ./
 
-# Install production dependencies only without using the lockfile
-RUN npm install --only=production --no-package-lock
+# Install production dependencies without using the lockfile
+RUN npm install --omit=dev --no-package-lock
 
 # Copy built application from builder
 COPY --from=builder /usr/src/app/dist/ ./dist/
