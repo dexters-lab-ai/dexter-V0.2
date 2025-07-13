@@ -15,7 +15,7 @@ RUN apk add --no-cache \
     pango-dev \
     jpeg-dev \
     giflib-dev \
-    vips-dev \  # Added for sharp (libvips dependency)
+    vips-dev
 
 # Copy package files first for better caching
 COPY package*.json ./
