@@ -3,7 +3,7 @@ FROM node:22-alpine AS builder
 
 WORKDIR /usr/src/app
 
-# Install build dependencies including canvas and sharp system deps
+# Install build dependencies for canvas and sharp
 RUN apk add --no-cache \
     python3 \
     make \
@@ -17,12 +17,12 @@ RUN apk add --no-cache \
     giflib-dev \
     vips-dev
 
-# Copy package files first for better caching
+# Copy package files for caching
 COPY package*.json ./
 
-# Install all dependencies including devDependencies for building
-# Force sharp to build for linuxmusl-x64
-RUN npm install --legacy-peer-deps --build-from-source --sharp-libvips-binary-host="https://github.com/lovell/sharp-libvips/releases/download"
+# Install sharp explicitly for linuxmusl-x64, then other dependencies
+RUN npm install --platform=linuxmusl --arch=x64 --legacy-peer-deps sharp@0.33.5 \
+    && npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -30,11 +30,12 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Install only production dependencies in a separate directory
+# Install production dependencies in a separate directory
 RUN mkdir /prod_deps && \
     cp package*.json /prod_deps/ && \
     cd /prod_deps && \
-    npm install --omit=dev --no-package-lock --build-from-source --sharp-libvips-binary-host="https://github.com/lovell/sharp-libvips/releases/download"
+    npm install --platform=linuxmusl --arch=x64 --omit=dev --no-package-lock sharp@0.33.5 && \
+    npm install --omit=dev --no-package-lock
 
 # Stage 2: Production image
 FROM node:22-alpine
@@ -48,12 +49,10 @@ RUN apk add --no-cache \
     jpeg \
     giflib \
     pixman \
-    vips  # Added for sharp runtime (libvips)
+    vips
 
-# Copy built application from builder
+# Copy built application and production node_modules
 COPY --from=builder /usr/src/app/dist/ ./dist/
-
-# Copy production node_modules from builder
 COPY --from=builder /prod_deps/node_modules/ ./node_modules/
 
 # Create non-root user
@@ -93,13 +92,14 @@ RUN apk add --no-cache \
     pango-dev \
     jpeg-dev \
     giflib-dev \
-    vips-dev  # Added for sharp
+    vips-dev
 
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies
-RUN npm install --legacy-peer-deps
+# Install sharp explicitly for linuxmusl-x64, then other dependencies
+RUN npm install --platform=linuxmusl --arch=x64 --legacy-peer-deps sharp@0.33.5 \
+    && npm install --legacy-peer-deps
 
 # Copy application code
 COPY . .
