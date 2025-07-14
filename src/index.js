@@ -261,20 +261,10 @@ class ServerManager {
     try {
       // If ngrok is already connected, disconnect it first
       if (this.ngrokUrl) {
-        await ngrok.disconnect(this.ngrokUrl);
-        this.ngrokUrl = null;
-      }
-      
-      this.ngrokUrl = await ngrok.connect({
-        addr: port,
-        authtoken: config.ngrokAuthToken,
-        hostname: config.ngrokHostname,
       });
-      
-      console.log(`🌍 Ngrok tunnel established at: ${this.ngrokUrl}`);      
-      console.log(`🔗 OAuth callback URL: ${this.ngrokUrl}/api/google/callback`);
-      
-      // Make the ngrok URL available globally
+    });
+  } catch (error) {
+    console.error('Failed to start HTTP server:', error);
       global.ngrokUrl = this.ngrokUrl;
       
       // Start health check for ngrok
@@ -327,11 +317,15 @@ class ServerManager {
         this.httpServer = null;
       }
       
-      if (this.ngrokUrl) {
-        await ngrok.disconnect(this.ngrokUrl);
-        await ngrok.kill();
-        this.ngrokUrl = null;
-      }
+      this.ngrokUrl = await ngrok.connect({
+        addr: port,
+        authtoken: config.ngrokAuthToken,
+        hostname: config.ngrokHostname,
+        region: config.ngrokRegion || 'us',
+        protocol: 'http',
+        bind_tls: false,
+        authtoken_from_env: true
+      });
       
       console.log('✅ Servers shut down successfully');
     } catch (error) {

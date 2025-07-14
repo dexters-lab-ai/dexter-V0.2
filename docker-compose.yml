@@ -25,7 +25,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_DB=0
-      # Ngrok configuration (managed by application)
+      # Ngrok configuration (using cloud-based ngrok)
       - NGROK_AUTH_TOKEN=${NGROK_AUTH_TOKEN:-}
       - NGROK_HOSTNAME=${NGROK_HOSTNAME:-dail-agent.ngrok.app}
       - NGROK_REGION=us

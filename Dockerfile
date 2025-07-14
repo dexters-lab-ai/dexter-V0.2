@@ -15,7 +15,8 @@ RUN apk add --no-cache \
     pango-dev \
     jpeg-dev \
     giflib-dev \
-    vips-dev
+    vips-dev \
+    curl
 
 # Copy package files for caching
 COPY package*.json ./
@@ -49,7 +50,8 @@ RUN apk add --no-cache \
     jpeg \
     giflib \
     pixman \
-    vips
+    vips \
+    curl
 
 # Copy built application and production node_modules
 COPY --from=builder /usr/src/app/dist/ ./dist/
