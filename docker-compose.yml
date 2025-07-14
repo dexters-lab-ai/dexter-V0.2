@@ -25,10 +25,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_DB=0
-      # Ngrok configuration (using cloud-based ngrok)
-      - NGROK_AUTH_TOKEN=${NGROK_AUTH_TOKEN:-}
-      - NGROK_HOSTNAME=${NGROK_HOSTNAME:-dail-agent.ngrok.app}
-      - NGROK_REGION=us
+
       # Performance
       - NODE_OPTIONS=--max_old_space_size=4096
     volumes:

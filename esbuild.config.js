@@ -1,6 +1,7 @@
 import * as esbuild from 'esbuild';
 
 // Plugin to filter out specific warnings
+// Plugin to filter out specific warnings
 const filterWarningsPlugin = {
   name: 'filter-warnings',
   setup(build) {
@@ -37,7 +38,8 @@ await esbuild.build({
     'canvas',
     'node-telegram-bot-api',
     '@solana/web3.js',
-    'mongodb'
+    'mongodb',
+    'googleapis'
   ],
   plugins: [filterWarningsPlugin]
 });

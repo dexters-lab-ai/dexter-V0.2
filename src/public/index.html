@@ -217,10 +217,9 @@
     });
 
     // Update uptime
-    const BACKEND_URL = "https://dail-agent.ngrok.app";
     async function updateUptime() {
         try {
-            const res = await fetch(`${BACKEND_URL}/health`);
+            const res = await fetch('/health');
             const data = await res.json();
             console.log('data from API', data);
             const uptime = Math.floor(data.uptime);
