@@ -1135,7 +1135,7 @@ class TwitterService extends EventEmitter {
         startTime: this._getDefaultFromDate(),
       };
   
-      const run = await this.apifyClient.actor('fastcrawler/tweet-fast-scraper').call(input);
+      const run = await this.apifyClient.actor('fastcrawler/Tweet-Fast-Scraper').call(input);
       const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
       console.log(`✅ Fetched ${items.length} tweets for ${account}`);
       return items;
@@ -1177,8 +1177,8 @@ class TwitterService extends EventEmitter {
   async checkTwitterHealth() {
     const uniqueTwitterActors = [
       "apidojo/tweet-scraper",
-      "fastcrawler/twitter-cashtag-scraper-stock-crypto-sentiment-analysis",
-      "fastcrawler/tweet-fast-scraper",
+      "fastcrawler/monitor-stock-crypto-market-sentiment-on-twitter-x",
+      "fastcrawler/Tweet-Fast-Scraper",
     ];
 
     const statuses = await Promise.all(
@@ -1224,7 +1224,7 @@ async checkActorHealth(actorName) {
     switch (actorName) {
       // For a cashtag scraper; even though it normally expects a cashtag,
       // we use "elon_musk" for functions that require a handle.
-      case "fastcrawler/twitter-cashtag-scraper-stock-crypto-sentiment-analysis":
+      case "fastcrawler/monitor-stock-crypto-market-sentiment-on-twitter-x":
         input = {
           cashtag: "BTC",
           cookies: [config.apifyCookieToken],
@@ -1238,7 +1238,7 @@ async checkActorHealth(actorName) {
           minReplies: 0,
         };
         break;
-      case "fastcrawler/tweet-fast-scraper":
+      case "fastcrawler/Tweet-Fast-Scraper":
         input = {          
           cookies: [config.apifyCookieToken],
           endTime: this._getDefaultToDate(),
