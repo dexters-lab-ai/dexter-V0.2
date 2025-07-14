@@ -272,7 +272,11 @@ class ServerManager {
         region: config.ngrokRegion || 'us',
         protocol: 'http',
         bind_tls: false,
-        authtoken_from_env: true
+        authtoken_from_env: true,
+        config: {
+          region: 'us',
+          authtoken: config.ngrokAuthToken
+        }
       });
       
       console.log(`🌍 Ngrok tunnel established at: ${this.ngrokUrl}`);      
