@@ -771,7 +771,7 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
           - Fantom: https://ftmscan.com/token/{address}
           - Arbitrum: https://arbiscan.io/token/{address}
           - Berachain: https://berascan.com/token/{address}
-          - Nova (Optimism Nova): https://nova-explorer.optimism.io/token/{address}
+          - Unichain: https://uniscan.xyz/token/{address}
           - Optimism: https://optimistic.etherscan.io/token/{address}
           - ZKEVM: https://zkevm.polygonscan.com/token/{address}
           - Scroll: https://blockscout.scroll.io/token/{address}
@@ -793,7 +793,7 @@ export class UnifiedAutonomousProcessor extends EventEmitter {
           - Fantom: https://ftmscan.com/address/{wallet}
           - Arbitrum: https://arbiscan.io/address/{wallet}
           - Berachain: https://berascan.com/address/{wallet}
-          - Nova: https://nova-explorer.optimism.io/address/{wallet}
+          - Unichain: https://uniscan.xyz/address/{wallet}
           - Optimism: https://optimistic.etherscan.io/address/{wallet}
           - ZKEVM: https://zkevm.polygonscan.com/address/{wallet}
           - Scroll: https://blockscout.scroll.io/address/{wallet}

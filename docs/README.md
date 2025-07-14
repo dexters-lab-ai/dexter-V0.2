@@ -65,7 +65,7 @@ D.A.I.L is more powerful and functional than traditional AI agents because it:
 
 ### Secondary Networks
 - Linea
-- Nova
+- Unichain
 - zkEVM
 - Scroll
 - Celo

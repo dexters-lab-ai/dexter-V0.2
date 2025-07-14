@@ -1126,7 +1126,7 @@ function renderApiSection() {
                   <label>
                     Network
                     <span class="tooltip" title="Supported networks for now:
-                      sonic, solana, base, ethereum, avalanche, linear, cyber, fantom, arbitrum, berachain, nova, optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
+                      sonic, solana, base, ethereum, avalanche, linear, cyber, fantom, arbitrum, berachain, unichain, optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
                       sepolia, holesky, polygon_amoy, bsc_testnet, base_sepolia, linea_sepolia, gnosis, gnosis_chiado, chiliz, chiliz_testnet, moonbeam, moonriver, moonbase, flow, flow_testnet, ronin, ronin_saigon, lisk, lisk_sepolia, pulsechain">
                       <i class="fas fa-info-circle"></i>
                     </span>
@@ -1142,7 +1142,7 @@ function renderApiSection() {
                     <option value="fantom">Fantom</option>
                     <option value="arbitrum">Arbitrum</option>
                     <option value="berachain">Berachain</option>
-                    <option value="nova">Nova</option>
+                    <option value="unichain">Unichain</option>
                     <option value="optimism">Optimism</option>
                     <option value="zkevm">ZKEVM</option>
                     <option value="scroll">Scroll</option>
@@ -1262,7 +1262,7 @@ function renderApiSection() {
                   <label>
                     Network
                     <span class="tooltip" title="Supported networks for now:
-                      sonic, solana, base, ethereum, avalanche, linear, cyber, fantom, arbitrum, berachain, nova, optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
+                      sonic, solana, base, ethereum, avalanche, linear, cyber, fantom, arbitrum, berachain, unichain, optimism, zkevm, scroll, polygon, bsc, celo, worldchain, mantle, zksync, omni,
                       sepolia, holesky, polygon_amoy, bsc_testnet, base_sepolia, linea_sepolia, gnosis, gnosis_chiado, chiliz, chiliz_testnet, moonbeam, moonriver, moonbase, flow, flow_testnet, ronin, ronin_saigon, lisk, lisk_sepolia, pulsechain">
                       <i class="fas fa-info-circle"></i>
                     </span>
@@ -1278,7 +1278,7 @@ function renderApiSection() {
                     <option value="fantom">Fantom</option>
                     <option value="arbitrum">Arbitrum</option>
                     <option value="berachain">Berachain</option>
-                    <option value="nova">Nova</option>
+                    <option value="unichain">Unichain</option>
                     <option value="optimism">Optimism</option>
                     <option value="zkevm">ZKEVM</option>
                     <option value="scroll">Scroll</option>

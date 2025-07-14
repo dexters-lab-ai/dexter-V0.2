@@ -52,7 +52,7 @@ function buildExplorerUrl(network, txId) {
     fantom: "https://ftmscan.com/tx/",
     arbitrum: "https://arbiscan.io/tx/",
     berachain: "https://berascan.com/tx/",       // Berachain explorer
-    nova: "https://nova-explorer.optimism.io/tx/", // Optimism Nova explorer
+    unichain: "https://uniscan.xyz/tx/", // Unichain explorer
     optimism: "https://optimistic.etherscan.io/tx/",
     zkevm: "https://zkevm.polygonscan.com/tx/",
     scroll: "https://blockscout.scroll.io/tx/",  // Scroll explorer (using Blockscout)
@@ -314,16 +314,18 @@ export class EvmQuickNode {
       fantom: 250,          // Fantom Opera
       arbitrum: 42161,      // Arbitrum One
       berachain: 32520,     // Berachain (example value; verify with official docs)
-      nova: 42170,          // Optimism Nova
       optimism: 10,         // Optimism
       zkevm: 1101,          // Polygon zkEVM (chain ID as per Polygon docs)
       scroll: 534353,       // Scroll Mainnet (or testnet, as applicable)
       polygon: 137,         // Polygon (Matic) Mainnet
       bsc: 56,              // Binance Smart Chain
+      gnosis: 100,          // Gnosis Chain
       celo: 42220,          // Celo Mainnet
       worldchain: 480,        // Worldchain
       mantle: 5000,         // Mantle Mainnet (verify with official docs)
       zksync: 324,          // ZkSync Era Mainnet
+      sonic: 146,           // Sonic
+      unichain: 130,         // UniChain
       omni: 166               // Omni
     };    
     const networkID = networkIds[network.toLowerCase()] || 1;

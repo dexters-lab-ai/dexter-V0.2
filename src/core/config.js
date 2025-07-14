@@ -25,7 +25,7 @@ class Config {
     this.googleClientSecret= process.env.GOOGLE_CLIENT_SECRET;
     this.googleClientRedirect= process.env.GOOGLE_CLIENT_REDIRECT || process.env.BASE_URL || `http://${process.env.HOST || 'localhost'}:${process.env.PORT || 3000}`;
     this.port= process.env.PORT || 3000;
-    this.dashboardPort= process.env.DASHBOARD_PORT || 4000;
+    this.dashboardPort= process.env.DASHBOARD_PORT || 8080;
     this.deepseekApiKey = process.env.DEEP_SEEK_API_KEY;
     this.openaiApiKey = process.env.OPENAI_API_KEY;
     this.smartContractAddress = process.env.SMART_CONTRACT_ADDRESS;
@@ -79,7 +79,7 @@ class Config {
     this.fantomEndpoint = process.env.QUICKNODE_FANTOM_ENDPOINT;
     this.arbitrumEndpoint = process.env.QUICKNODE_ARBITRUM_ENDPOINT;
     this.berachainEndpoint = process.env.QUICKNODE_BERACHAIN_ENDPOINT;
-    this.novaEndpoint = process.env.QUICKNODE_NOVA_ENDPOINT;
+    this.unichainEndpoint = process.env.QUICKNODE_UNICHAIN_ENDPOINT;
     this.optimismEndpoint = process.env.QUICKNODE_OPTIMISM_ENDPOINT;
     this.zkevmEndpoint = process.env.QUICKNODE_ZKEVM_ENDPOINT;
     this.scrollEndpoint = process.env.QUICKNODE_SCROLL_ENDPOINT;
@@ -111,9 +111,9 @@ class Config {
     // QuickNode Configuration (if needed)
     this.quickNode = {
       apiKey: process.env.QUICKNODE_API_KEY,
-      evmEndpoint: process.env.QUICKNODE_EVM_ENDPOINT || 'https://lingering-red-liquid.base-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764',
+      evmEndpoint: process.env.QUICKNODE_EVM_ENDPOINT || 'https://dimensional-alpha-energy.base-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f',
       solanaEndpoint: process.env.QUICKNODE_SOLANA_ENDPOINT || 'https://dimensional-alpha-energy.solana-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f',
-      avalancheEndpoint: process.env.QUICKNODE_AVAX_RPC || 'https://lingering-red-liquid.avalanche-mainnet.quiknode.pro/a2a21741d8c9370d63a0789ab9eb93f926e11764/ext/bc/C/rpc/',
+      avalancheEndpoint: process.env.QUICKNODE_AVAX_RPC || 'https://dimensional-alpha-energy.avalanche-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f/ext/bc/C/rpc/',
     };
 
     // Jupiter v6 API & Solana    
@@ -227,10 +227,10 @@ class Config {
         rpcUrl: process.env.BERACHAIN_RPC_URL || process.env.QUICKNODE_BERACHAIN_ENDPOINT,
         chainId: process.env.BERACHAIN_CHAIN_ID ? Number(process.env.BERACHAIN_CHAIN_ID) : 32520,
       },
-      nova: {
-        name: 'Nova',
-        rpcUrl: process.env.NOVA_RPC_URL || process.env.QUICKNODE_NOVA_ENDPOINT,
-        chainId: process.env.NOVA_CHAIN_ID ? Number(process.env.NOVA_CHAIN_ID) : 42170,
+      unichain: {
+        name: 'Unichain',
+        rpcUrl: process.env.UNICHAIN_RPC_URL || process.env.QUICKNODE_UNICHAIN_ENDPOINT,
+        chainId: process.env.UNICHAIN_CHAIN_ID ? Number(process.env.UNICHAIN_CHAIN_ID) : 42170,
       },
       zkevm: {
         name: 'ZK-EVM',

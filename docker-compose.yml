@@ -11,14 +11,14 @@ services:
     ports:
       - "3000:3000"    # Main application port
       - "3090:3090"    # Admin port
-      - "4000:4000"    # Dashboard port
+      - "8080:8080"    # Dashboard port
       - "80:80"        # Public port (for production)
     environment:
       # Application settings
       - NODE_ENV=development
       - PORT=3000
       - ADMIN_PORT=3090
-      - DASHBOARD_PORT=4000
+      - DASHBOARD_PORT=8080
       # Database configuration
       - MONGODB_URI=mongodb://mongodb:27017/katzlife
       - REDIS_HOST=redis

@@ -117,7 +117,7 @@ const UserSchema = new mongoose.Schema(
       fantom: [WalletSchema],
       arbitrum: [WalletSchema],
       berachain: [WalletSchema],
-      nova: [WalletSchema],
+      unichain: [WalletSchema],
       optimism: [WalletSchema],
       zkevm: [WalletSchema],
       scroll: [WalletSchema],

@@ -13,7 +13,7 @@ export const NETWORKS = {
   LINEAR: 'linear',
   CYBER: 'cyber',
   BERACHAIN: 'berachain',
-  NOVA: 'nova',
+  UNICHAIN: 'unichain',
   ZKEVM: 'zkevm',
   SCROLL: 'scroll',
   CELO: 'celo',
@@ -37,7 +37,7 @@ export const NETWORK_DISPLAY_NAMES = {
   [NETWORKS.LINEAR]: 'Linea',
   [NETWORKS.CYBER]: 'Cyber',
   [NETWORKS.BERACHAIN]: 'Berachain',
-  [NETWORKS.NOVA]: 'Nova',
+  [NETWORKS.UNICHAIN]: 'Unichain',
   [NETWORKS.ZKEVM]: 'ZK-EVM',
   [NETWORKS.SCROLL]: 'Scroll',
   [NETWORKS.CELO]: 'Celo',
@@ -111,9 +111,9 @@ export const NETWORK_ALIASES = {
   "bera": "berachain",
   "bera chain": "berachain",
 
-  // Nova
-  "nova": "nova",
-  "solana nova": "nova",
+  // Unichain
+  "unichain": "unichain",
+  "unichain network": "unichain",
 
   // ZK-EVM
   "zkevm": "zkevm",

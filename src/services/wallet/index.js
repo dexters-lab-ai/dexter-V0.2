@@ -41,6 +41,22 @@ function getNetworkResources(network) {
   return { provider, endpoint, axiosInstance };
 }
 
+const providerHealth = new Map();
+
+/**
+ * Initializes provider health tracking
+ */
+function initializeProviderHealth() {
+  Object.keys(providers).forEach(network => {
+    providerHealth.set(network, {
+      consecutiveFailures: 0,
+      lastChecked: 0,
+      lastError: null,
+      isHealthy: true
+    });
+  });
+}
+
 /**
  * Validates a provider with circuit breaker pattern
  * @param {string} network - Network name
@@ -48,8 +64,13 @@ function getNetworkResources(network) {
  * @returns {Promise<{isValid: boolean, error: Error|null}>} Validation result
  */
 async function validateProvider(network, provider) {
+  // Initialize health tracking if not done already
+  if (!providerHealth.has(network)) {
+    initializeProviderHealth();
+  }
+  
   // Don't retry if we know the provider is down
-  const health = providerHealth.get(network) || { consecutiveFailures: 0 };
+  const health = providerHealth.get(network);
   
   // If we've had too many failures, skip validation to avoid hammering a downed service
   if (health.consecutiveFailures >= 3) {
@@ -101,13 +122,16 @@ class WalletService extends EventEmitter {
     super();
     this.walletCache = new Map();
     this.providers = providers;
-    this.providerHealth = new Map();
+    this.providerHealth = providerHealth; // Use the static providerHealth Map
     this.isInitialized = false;
     this.initializationPromise = null;
     this.CACHE_DURATION = 1000 * 60 * 60 * 24; // 24 hours
     this.MAX_RETRIES = 2;
     this.INITIAL_RETRY_DELAY = 1000; // 1 second
     this.HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+    
+    // Initialize provider health tracking
+    initializeProviderHealth();
   }
 
   /**

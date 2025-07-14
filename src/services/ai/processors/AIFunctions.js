@@ -285,7 +285,7 @@ export const AIFunctions = [
           properties: {
             network: {
               type: "string",
-              enum: ["sonic","avalanche","base","linear","cyber","ethereum","arbitrum","berachain","nova","optimism","zkevm","scroll","polygon","bsc","celo","worldchain","mantle","zksync","omni"],
+              enum: ["sonic","avalanche","base","linear","cyber","ethereum","arbitrum","berachain","unichain","optimism","zkevm","scroll","polygon","bsc","celo","worldchain","mantle","zksync","omni"],
               description: "The blockchain network to use."
             },
             action: {
@@ -618,7 +618,7 @@ export const AIFunctions = [
         - **linear**
         - **cyber**
         - **berachain**
-        - **nova**
+        - **unichain**
         - **zkevm**
         - **scroll**
         - **celo**

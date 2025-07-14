@@ -43,7 +43,7 @@ const providers = {
     berachain: getDefaultProvider(config.berachainEndpoint),
     
     // Nova (Optimism Nova)
-    nova: getDefaultProvider(config.novaEndpoint),
+    unichain: getDefaultProvider(config.unichainEndpoint),
     
     // Optimism
     optimism: getDefaultProvider(config.optimismEndpoint),
