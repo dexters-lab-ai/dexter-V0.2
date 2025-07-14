@@ -19,7 +19,7 @@
         <h1>D.A.I.L</h1>
       </div>
       <div class="nav-links">
-        <a href="https://dail-agent.ngrok.app/dashboard" class="nav-link">Dashboard</a>
+        <a href="${process.env.BASE_URL || process.env.GOOGLE_CLIENT_REDIRECT || `http://${process.env.HOST || 'localhost'}:${process.env.PORT || 3000}`}/dashboard" class="nav-link">Dashboard</a>
         <a href="/docs" class="nav-link">Documentation</a>
         <a href="https://t.me/the_ai_lab_announcements" class="nav-link">Telegram</a>
         <a href="https://x.com/dexters_ai_lab" class="nav-link">Twitter</a>

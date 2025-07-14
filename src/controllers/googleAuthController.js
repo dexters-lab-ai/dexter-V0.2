@@ -21,9 +21,9 @@ const SCOPES = [
  * Uses global.ngrokUrl if available, or falls back to config.googleClientRedirect.
  */
 function createOAuth2Client() {
-  // Determine the base URL dynamically.
-  // Ensure that your config.googleClientRedirect is a valid fallback URL (e.g. "https://dail-agent.ngrok.app")
-  const baseUrl = global.ngrokUrl || config.googleClientRedirect;
+  // Use environment variables for URLs
+  const baseUrl = process.env.BASE_URL || process.env.GOOGLE_CLIENT_REDIRECT || 
+                  `${process.env.NODE_ENV === 'production' ? 'https' : 'http'}://${process.env.HOST || 'localhost'}:${process.env.PORT || 3000}`;
   // Append the callback path.
   const redirectUri = baseUrl + CALLBACK_PATH;
   return new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, redirectUri);

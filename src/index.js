@@ -7,7 +7,6 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import ngrok from 'ngrok';
 import bodyParser from 'body-parser';
 
 import { config } from './core/config.js';
@@ -40,17 +39,13 @@ class ServerManager {
   constructor() {
     this.app = express();
     this.httpServer = null;
-    this.ngrokUrl = null;
     this.__dirname = path.dirname(fileURLToPath(import.meta.url));
     this.wss = null;
     this.isShuttingDown = false;
-    this.ngrokRetryCount = 0;
     this.httpRetryCount = 0;
     this.MAX_RETRIES = 10;
     this.RETRY_DELAY = 5000; // 5 seconds
-    this.NGROK_HEALTHCHECK_INTERVAL = 600000; // 1 minute
     this.METRICS_UPDATE_INTERVAL = 600000; // 1 minute
-    this.ngrokHealthcheckTimer = null;
     this.metricsUpdateTimer = null;
   }
 
@@ -81,8 +76,6 @@ class ServerManager {
       res.json({ 
         status: 'healthy', 
         uptime: process.uptime(),
-        ngrokConnected: !!this.ngrokUrl,
-        ngrokUrl: this.ngrokUrl,
         serverPort: 80
       });
     });      
@@ -206,123 +199,12 @@ class ServerManager {
     }, this.METRICS_UPDATE_INTERVAL);
   }
 
-  async verifyNgrokConnection() {
-    try {
-      // Check if the ngrok URL is still valid by making a request to it
-      const response = await fetch(`${this.ngrokUrl}/health`, {
-        method: 'GET',
-        timeout: 5000
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Ngrok health check failed with status: ${response.status}`);
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Ngrok connection error:', error);
-      return false;
-    }
-  }
 
-  async startNgrokHealthcheck() {
-    // Clear existing timer if it exists
-    if (this.ngrokHealthcheckTimer) {
-      clearInterval(this.ngrokHealthcheckTimer);
-    }
-    
-    // Set up periodic check of ngrok connection
-    this.ngrokHealthcheckTimer = setInterval(async () => {
-      if (this.isShuttingDown) return;
-      
-      const isConnected = await this.verifyNgrokConnection();
-      
-      if (!isConnected) {
-        console.log('🔄 Ngrok connection lost, restarting...');
-        try {
-          // Disconnect and kill ngrok
-          if (this.ngrokUrl) {
-            await ngrok.disconnect(this.ngrokUrl);
-            await ngrok.kill();
-          }
-          
-          // Restart ngrok
-          await this.startNgrok(80);
-        } catch (error) {
-          console.error('Failed to restart Ngrok:', error.body.msg);
-        }
-      }
-    }, this.NGROK_HEALTHCHECK_INTERVAL);
-  }
-
-  async startNgrok(port) {
-    if (this.isShuttingDown) return null;
-    
-    try {
-      // If ngrok is already connected, disconnect it first
-      if (this.ngrokUrl) {
-        await ngrok.disconnect(this.ngrokUrl);
-        this.ngrokUrl = null;
-      }
-      
-      this.ngrokUrl = await ngrok.connect({
-        addr: port,
-        authtoken: config.ngrokAuthToken,
-        hostname: config.ngrokHostname,
-        region: config.ngrokRegion || 'us',
-        protocol: 'http',
-        bind_tls: false,
-        authtoken_from_env: true,
-        config: {
-          region: 'us',
-          authtoken: config.ngrokAuthToken
-        }
-      });
-      
-      console.log(`🌍 Ngrok tunnel established at: ${this.ngrokUrl}`);      
-      console.log(`🔗 OAuth callback URL: ${this.ngrokUrl}/api/google/callback`);
-      
-      // Make the ngrok URL available globally
-      global.ngrokUrl = this.ngrokUrl;
-      
-      // Start health check for ngrok
-      this.startNgrokHealthcheck();
-      
-      // Reset retry count on success
-      this.ngrokRetryCount = 0;
-      
-      return this.ngrokUrl;
-    } catch (error) {
-      console.error('Failed to start Ngrok:', error);
-      
-      if (this.isShuttingDown) throw error;
-      
-      if (this.ngrokRetryCount < this.MAX_RETRIES) {
-        this.ngrokRetryCount++;
-        console.log(`🔄 Retrying Ngrok start (${this.ngrokRetryCount}/${this.MAX_RETRIES})...`);
-        
-        return new Promise((resolve, reject) => {
-          setTimeout(() => {
-            this.startNgrok(port)
-              .then(resolve)
-              .catch(reject);
-          }, this.RETRY_DELAY);
-        });
-      } else {
-        console.error(`❌ Failed to start Ngrok after ${this.MAX_RETRIES} attempts`);
-        throw error;
-      }
-    }
-  }  
 
   async shutdown() {
     this.isShuttingDown = true;
     
-    // Clear all timers
-    if (this.ngrokHealthcheckTimer) {
-      clearInterval(this.ngrokHealthcheckTimer);
-      this.ngrokHealthcheckTimer = null;
-    }
+
     
     if (this.metricsUpdateTimer) {
       clearInterval(this.metricsUpdateTimer);
@@ -334,16 +216,6 @@ class ServerManager {
         await new Promise(resolve => this.httpServer.close(resolve));
         this.httpServer = null;
       }
-      
-      this.ngrokUrl = await ngrok.connect({
-        addr: port,
-        authtoken: config.ngrokAuthToken,
-        hostname: config.ngrokHostname,
-        region: config.ngrokRegion || 'us',
-        protocol: 'http',
-        bind_tls: false,
-        authtoken_from_env: true
-      });
       
       console.log('✅ Servers shut down successfully');
     } catch (error) {
@@ -436,12 +308,11 @@ class Application {
 
   async startServers() {
     try {
-      await this.serverManager.startHttpServer(80); 
-      await this.serverManager.startNgrok(80);  
+      await this.serverManager.startHttpServer(process.env.PORT || 80); 
       
       // Start the monitoring dashboard
       await startMonitoringDashboard();
-      console.log(`📊 Monitoring Dashboard running on port 80`);
+      console.log(`📊 Monitoring Dashboard running on port ${process.env.PORT || 80}`);
       
       await bot.startPolling();
       

@@ -21,13 +21,10 @@ class Config {
     this.ADMIN_PORT = process.env.ADMIN_PORT || 3090;
     // Basic Application Settings
     this.botToken = process.env.BOT_TOKEN;
-    this.ngrokAuthToken= process.env.NGROK_AUTH_TOKEN;
-    this.ngrokHostname= process.env.NGROK_HOSTNAME;
     this.googleClientID= process.env.GOOGLE_CLIENT_ID;
     this.googleClientSecret= process.env.GOOGLE_CLIENT_SECRET;
-    this.googleClientRedirect= process.env.GOOGLE_CLIENT_REDIRECT;
+    this.googleClientRedirect= process.env.GOOGLE_CLIENT_REDIRECT || process.env.BASE_URL || `http://${process.env.HOST || 'localhost'}:${process.env.PORT || 3000}`;
     this.port= process.env.PORT || 3000;
-    this.ngrokPort= process.env.NGROK_PORT || 3001;
     this.dashboardPort= process.env.DASHBOARD_PORT || 4000;
     this.deepseekApiKey = process.env.DEEP_SEEK_API_KEY;
     this.openaiApiKey = process.env.OPENAI_API_KEY;

@@ -314,11 +314,11 @@ dashboardRouter.get('/downloadPumpFunTokens', async (req, res) => {
 // 4) RENDER FUNCTIONS (SYSTEM METRICS, ETC.) - UNCHANGED
 // ----------------------------------------------------------
 function renderHeader() {
-  const baseUrl = global.ngrokUrl || 'http://localhost';
+  const baseUrl = process.env.BASE_URL || 'http://' + (process.env.HOST || 'localhost') + ':' + (process.env.PORT || '3000');
   return `
     <nav class="glass-nav">
       <div class="nav-brand">
-        <img src="${baseUrl}/images/dail.png" alt="D.A.I.L" class="logo" />
+        <img src="/images/dail.png" alt="D.A.I.L" class="logo" />
         <h1>D.A.I.L</h1>
       </div>
       
@@ -328,7 +328,7 @@ function renderHeader() {
       </button>
 
       <div class="nav-links" id="navLinks">
-        <a href="${baseUrl}" class="nav-link">API Service</a>
+        <a href="/" class="nav-link">API Service</a>
         <a href="https://t.me/the_ai_lab_announcements" class="nav-link">Telegram</a>
         <a href="https://x.com/dexters_ai_lab" class="nav-link">Twitter</a>
       </div>
