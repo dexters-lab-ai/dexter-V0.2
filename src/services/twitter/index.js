@@ -931,8 +931,8 @@ class TwitterService extends EventEmitter {
   }  
   
   _getDefaultFromDate() {
-    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-    const dateObj = new Date(Date.now() - SEVEN_DAYS);
+    const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+    const dateObj = new Date(Date.now() - THREE_DAYS);
     return dateObj.toISOString().split('T')[0];
   }
   

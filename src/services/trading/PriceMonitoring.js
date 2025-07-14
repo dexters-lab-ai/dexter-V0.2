@@ -37,8 +37,14 @@ export class PriceMonitoringService {
     // priceAlertService is passed so we can call its `executeAlert` method
     this.priceAlertService = priceAlertService;
 
-    // How often to poll, in milliseconds (currently set to 5 minutes; adjust if needed)
-    this.alertCheckInterval = 300000;
+    // How often to poll, in milliseconds (15 minutes)
+    this.alertCheckInterval = 900000; // 15 minutes in milliseconds
+
+    // DexScreener rate limiting configuration
+    this.dexscreenerRateLimit = {
+      windowMs: 900000, // 15 minutes
+      maxRequests: 100  // Maximum requests per 15 minutes
+    };
 
     // Holds the setInterval() ID so we can stop monitoring later
     this.monitoringIntervalId = null;

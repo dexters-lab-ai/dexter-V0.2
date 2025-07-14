@@ -125,13 +125,26 @@ export class RateLimiter extends EventEmitter {
         }
       }
 
-      // Get or create document
+      // Get or create document with proper structure
+      // First check if the document exists
+      const existing = await this.collection.findOne({ key });
+      
+      if (!existing) {
+        // If it doesn't exist, create with proper initial structure
+        const result = await this.collection.insertOne({
+          key,
+          requests: [{ timestamp: new Date(now) }]
+        });
+        return result;
+      }
+      
+      // If it exists, just push the new request
       const result = await this.collection.findOneAndUpdate(
         { key },
         {
           $push: {
             requests: {
-              $each: [{ timestamp: now }],
+              $each: [{ timestamp: new Date(now) }],
               $position: 0
             }
           }
@@ -144,38 +157,25 @@ export class RateLimiter extends EventEmitter {
       );
 
       if (!result.value || !result.value.requests) {
-        // Initialize if no requests array
-        await this.collection.updateOne(
-          { key },
-          { $set: { requests: [{ timestamp: now }] } },
-          { upsert: true }
-        );
         return false;
       }
 
-      // Filter valid requests
+      // Get valid requests within window
       const validRequests = result.value.requests.filter(
         req => now - req.timestamp < this.windowMs
       );
 
       // Update cache
       this.requestCache.set(key, {
-        requests: validRequests.map(req => req.timestamp),
-        timestamp: now
+        key,
+        requests: validRequests
       });
 
-      // Update DB with filtered requests
-      await this.collection.updateOne(
-        { key },
-        { $set: { requests: validRequests } }
-      );
-
-      // Log request
+      // Log the request
       await this.logsCollection.insertOne({
-        userId,
-        action,
+        key,
         timestamp: now,
-        limited: validRequests.length >= this.max
+        action: validRequests.length < this.max ? 'allow' : 'deny'
       });
 
       const isLimited = validRequests.length >= this.max;
@@ -185,8 +185,7 @@ export class RateLimiter extends EventEmitter {
 
       return isLimited;
     } catch (error) {
-      console.error('Rate limit check error:', error);
-      // Fail open on errors
+      console.error('❌ Rate limit check failed:', error);
       return false;
     }
   }
@@ -197,15 +196,25 @@ export class RateLimiter extends EventEmitter {
 
       // Cleanup cache
       for (const [key, data] of this.requestCache.entries()) {
-        if (now - data.timestamp > this.windowMs) {
+        const validRequests = data.requests.filter(time => now - time < this.windowMs);
+        if (validRequests.length === 0) {
           this.requestCache.delete(key);
+        } else {
+          this.requestCache.set(key, {
+            key,
+            requests: validRequests
+          });
         }
       }
 
       // Cleanup DB
       if (this.collection) {
-        await this.collection.deleteMany({
-          'requests.timestamp': { $lt: now - this.windowMs }
+        await this.collection.updateMany({}, {
+          $pull: {
+            requests: {
+              timestamp: { $lt: now - this.windowMs }
+            }
+          }
         });
       }
 
@@ -220,4 +229,4 @@ export class RateLimiter extends EventEmitter {
 export const rateLimiter = new RateLimiter();
 
 // Run cleanup every 5 minutes
-setInterval(() => rateLimiter.cleanup(), 3600000);
+setInterval(() => rateLimiter.cleanup(), 300000);

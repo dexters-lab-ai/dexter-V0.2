@@ -178,7 +178,7 @@ export class UnifiedMessageHandler extends EventEmitter {
                   // ^ Telegram's API options (the "options" object)
                 },
                 {
-                  filename: "dexter.mp3",
+                  filename: "KATZ!.mp3",
                   contentType: "audio/mpeg"
                   // ^ "fileOptions" object for metadata
                 }

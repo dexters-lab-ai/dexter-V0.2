@@ -7,8 +7,8 @@ import { rateLimiter } from '../../core/rate-limiting/RateLimiter.js';
 const BASE_URL = 'https://api.dexscreener.com';
 const CACHE_DURATION = 600000; // 1 hour
 const RATE_LIMIT = {
-  windowMs: 60000,
-  maxRequests: 60
+  windowMs: 900000, // 15 minutes
+  maxRequests: 100  // Maximum requests per 15 minutes
 };
 
 class DexScreenerService {
