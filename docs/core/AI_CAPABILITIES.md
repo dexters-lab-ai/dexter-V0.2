@@ -1,8 +1,8 @@
-# KATZ AI Capabilities 🧠
+# KATZ! [O.P.E.R.A.T.O.R-TG] AI Capabilities 🧠
 
 ## Overview
 
-KATZ combines advanced AI capabilities with practical trading features to create a unique autonomous agent that can:
+KATZ! [O.P.E.R.A.T.O.R-TG] combines advanced AI capabilities with practical trading features to create a unique autonomous agent that can:
 
 1. Process natural language and voice commands
 2. Manage addresses and references across chains

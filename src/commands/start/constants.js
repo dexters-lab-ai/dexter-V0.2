@@ -28,7 +28,7 @@ export const FONTS = {
 };
 
 export const WELCOME_MESSAGES = {
-  NEW_USER: `*Say "Hey to KATZ!" to bother him* 🐈‍⬛\n\n` +
+  NEW_USER: `*Say "Hey to KATZ! [O.P.E.R.A.T.O.R-TG]" to bother him* 🐈‍⬛\n\n` +
            `*{username}*, ready for the trenches? 🌳🌍🕳️\n\n` +
            `_Intelligent & autonomous meme trading..._ 🤖💎\n\n` +
            `Need help? Type /help or /start over.`,
@@ -41,7 +41,7 @@ export const WELCOME_MESSAGES = {
 
 export const REGISTRATION_PROMPT = {
   title: '*🆕 First Time?...*',
-  message: `_Let's get you set up with your own secure wallets and access to all KATZ features!_\n\n` +
+  message: `_Let's get you set up with your own secure wallets and access to all KATZ! [O.P.E.R.A.T.O.R-TG] features!_\n\n` +
           `• Secure wallet creation\n` +
           `• Multi-chain trenching\n` +
           `• AI-powered trading\n` +

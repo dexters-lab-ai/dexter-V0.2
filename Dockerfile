@@ -51,7 +51,8 @@ RUN apk add --no-cache \
     giflib \
     pixman \
     vips \
-    curl
+    curl \
+    && chmod +x /usr/src/app/docker/restart.sh
 
 # Copy built application and production node_modules
 COPY --from=builder /usr/src/app/dist/ ./dist/
@@ -77,7 +78,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if(r.statusCode !== 200) throw new Error()}).on('error', (e) => {process.exit(1)})"
 
 # Command to run the application
-CMD ["node", "dist/index.js"]
+CMD ["/usr/src/app/docker/restart.sh"]
 
 # Stage 3: Development image
 FROM node:22-alpine AS development

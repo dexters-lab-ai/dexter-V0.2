@@ -2,7 +2,7 @@
 
 ## Overview
 
-KATZ maintains self-awareness through a comprehensive system that tracks its capabilities, learns from interactions, and can demonstrate its features on demand.
+KATZ! [O.P.E.R.A.T.O.R-TG] maintains self-awareness through a comprehensive system that tracks its capabilities, learns from interactions, and can demonstrate its features on demand.
 
 ## Core Features
 

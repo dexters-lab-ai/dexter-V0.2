@@ -2,7 +2,7 @@
 
 ## Current Capabilities
 
-KATZ currently supports the following limited cross-chain functionality:
+KATZ! [O.P.E.R.A.T.O.R-TG] currently supports the following limited cross-chain functionality:
 
 ### Price Monitoring
 - Real-time price tracking across Ethereum, Base and Solana

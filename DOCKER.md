@@ -1,6 +1,6 @@
-# Docker Setup for KATZ!life
+# Docker Setup for KATZ! [O.P.E.R.A.T.O.R-TG]life
 
-This document provides instructions for setting up and running the KATZ!life application using Docker.
+This document provides instructions for setting up and running the KATZ! [O.P.E.R.A.T.O.R-TG]life application using Docker.
 
 ## Prerequisites
 

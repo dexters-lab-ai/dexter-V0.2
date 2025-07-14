@@ -1,8 +1,8 @@
-# KATZ Architecture Documentation
+# KATZ! [O.P.E.R.A.T.O.R-TG] Architecture Documentation
 
 ## System Overview
 
-KATZ employs a modular, event-driven architecture designed for real-time trading operations across multiple blockchains.
+KATZ! [O.P.E.R.A.T.O.R-TG] employs a modular, event-driven architecture designed for real-time trading operations across multiple blockchains.
 
 ```mermaid
 graph TD
@@ -76,7 +76,7 @@ class IntentAnalyzer {
 
 ### 3. Learning Systems
 
-KATZ employs multiple learning systems for continuous improvement:
+KATZ! [O.P.E.R.A.T.O.R-TG] employs multiple learning systems for continuous improvement:
 
 ```mermaid
 graph TD
@@ -132,7 +132,7 @@ class TradeFlow extends BaseFlow {
 
 ```mermaid
 graph TD
-    A[KATZ Core] --> B{Network Layer}
+    A[KATZ! [O.P.E.R.A.T.O.R-TG] Core] --> B{Network Layer}
     B --> C[Ethereum]
     B --> D[Base]
     B --> E[Solana]
@@ -145,7 +145,7 @@ graph TD
 
 ```mermaid
 graph LR
-    A[KATZ Core] --> B[DexTools]
+    A[KATZ! [O.P.E.R.A.T.O.R-TG] Core] --> B[DexTools]
     A --> C[Twitter]
     A --> D[Shopify]
     A --> E[QuickNode]

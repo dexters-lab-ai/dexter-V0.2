@@ -73,7 +73,7 @@ class Database extends EventEmitter {
         await this.client.connect();
 
         // Get database reference
-        this.database = this.client.db(config.mongoDatabase || 'KATZdatabase1');
+        this.database = this.client.db(config.mongoDatabase || 'katzlife');
 
         // Test connections for both Mongoose and MongoClient
         await this._testConnections();

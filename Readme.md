@@ -52,7 +52,7 @@
 Dexter AI is the next-generation autonomous AI agent engineered to transform natural language commands into precise, multi-step actions. Built as part of our CookieDAO hackathon journey, Dexter AI is designed not only to perform complex crypto trading and financial operations but also to serve as a versatile assistant for a wide range of tasks—from market analysis and trading execution to e-commerce and personal productivity. 🎯💡
 
 Dexter AI is being developed as the core engine for a family of intelligent assistants, with plans for multiple specialized versions:
-- **KATZ (Pioneering Version):** A multi-sector agent covering crypto, shopping, payments, and more. 🛒💰
+- **KATZ! [O.P.E.R.A.T.O.R-TG] (Pioneering Version):** A multi-sector agent covering crypto, shopping, payments, and more. 🛒💰
 - **DeFi Trading Version:** Focused on executing and managing complex DeFi strategies across multiple platforms. 📊📉
 - **Autonomous Crypto Trading Version:** A self-evolving trading agent with dynamic strategy adaptation that will push toward early AGI capabilities. 🤖📈
 
@@ -202,7 +202,7 @@ Dexter AI is more than just an assistant—it’s your intelligent, versatile pa
 ### **🕒 Timed Orders**
 - **Schedule Trades**: Execute buy/sell orders at specific times.  
 - **Custom Strategies**: Build recurring or one-time schedules.  
-- **Perfect Timing**: Let KATZ handle late-night or early-morning trades.
+- **Perfect Timing**: Let KATZ! [O.P.E.R.A.T.O.R-TG] handle late-night or early-morning trades.
 
 ### **📈 Custom Alerts**
 - **Price Alerts**: Get notified when a token hits your target price.  
@@ -217,7 +217,7 @@ Dexter AI is more than just an assistant—it’s your intelligent, versatile pa
 
 ### **🗣️ Voice Commands**
 - **Hands-Free Control**: Issue voice commands for for pretty much anything you need done.  
-- **Natural Language Processing (NLP)**: Speak like a human; KATZ understands.  
+- **Natural Language Processing (NLP)**: Speak like a human; KATZ! [O.P.E.R.A.T.O.R-TG] understands.  
 - **Multilingual**: Supports voice commands in multiple languages.
 
 ### **⚡ Custom Orders**

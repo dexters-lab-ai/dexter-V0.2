@@ -89,7 +89,7 @@ export class HelpCommand extends Command {
       ],
     };
 
-    const message = `*D.A.I.L - KATZ! *
+    const message = `*KATZ! [O.P.E.R.A.T.O.R-TG] *
 
 • 💭The most capable AI assistant, companion, and agent for Web2 and Web3 tasks.
 • 💭The AI that does things for you - all you have to do is tell it!
@@ -106,7 +106,7 @@ export class HelpCommand extends Command {
 • Advanced architecture for reliability and speed.
 • Flip Mode for tracking trends and auto-swaps.
 • Internet-linked searches and opinions on every ticker, symbol, and cashtag.
-• Copy a KOL? KATZ will buy when your delegated KOL tweets.
+• Copy a KOL? KATZ! [O.P.E.R.A.T.O.R-TG] will buy when your delegated KOL tweets.
 • Multi-LLM MCP Architecture: scalable integration of new LLM features.
 • Use Solana Pay for crypto payments online, including on Shopify!
 • Try the demo store on Shopify—look for "Snowboards" or "Gift Card". Amazon and Shopify merchants are coming!

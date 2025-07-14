@@ -86,7 +86,7 @@ export class StartCommand extends Command {
     const user = await User.findOne({ telegramId: userInfo.id.toString() }).lean();
 
     const startMessage = `
-# 🧠 D.A.I.L - Your AI Companion for Crypto and Daily Tasks Automation 
+# 🧠 KATZ![O.P.E.R.A.T.O.R-TG] - Your AI Companion for Crypto and Daily Tasks Automation 
 
 
 **Task smarter. Trade faster. Liver better**

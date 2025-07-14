@@ -215,7 +215,7 @@ function renderDashboard(metrics) {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>D.A.I.L Dashboard</title>
+        <title>Dashboard - O.P.E.R.A.T.O.R-TG | SENTINEL </title>
         <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -319,7 +319,7 @@ function renderHeader() {
     <nav class="glass-nav">
       <div class="nav-brand">
         <img src="/images/dail.png" alt="D.A.I.L" class="logo" />
-        <h1>D.A.I.L</h1>
+        <h1>O.P.E.R.A.T.O.R API Dashboard</h1>
       </div>
       
       <!-- Mobile Menu Button -->
@@ -1011,7 +1011,7 @@ function renderApiSection() {
       <div class="section-header">
         <h2><i class="fas fa-code"></i> API Access</h2>
         <p class="intro-text">
-          Access D.A.I.L's cutting-edge AI-driven data streams through our modern, RESTful API.
+          Access SENTINEL, D.A.I.L's cutting-edge AI-driven data streams through our modern, RESTful API.
         </p>
       </div>
 

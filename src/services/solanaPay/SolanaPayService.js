@@ -99,7 +99,7 @@ class SolanaPayService extends EventEmitter {
     });
   }
 
-  async createPayment(amount, recipientEmail, label = 'KATZ Payment', message = 'Thanks for your payment!') {
+  async createPayment(amount, recipientEmail, label = 'KATZ! [O.P.E.R.A.T.O.R-TG] Payment', message = 'Thanks for your payment!') {
     try {
       // Fetch merchant details
       const merchant = await merchantService.getMerchantByEmail(recipientEmail);

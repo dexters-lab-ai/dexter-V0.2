@@ -9,7 +9,7 @@ export class WelcomeHandler {
   /** Show Welcome Message */
   async showWelcome(chatId) {
     const startMessage = `
-# 🧠 D.A.I.L - Your AI Companion for Crypto and Daily Tasks Automation
+# 🧠 O.P.E.R.A.T.O.R-TG - Your AI Companion for Crypto and Daily Tasks Automation
 
 **Task smarter. Trade faster. Live better**
 
@@ -27,7 +27,7 @@ export class WelcomeHandler {
 ---
 
 ### 🧬 Origins:
-**KATZ! from CTCD, D.A.I.L's Pilot Agent in Node.js **
+**D.A.I.L's Pilot Agent in Node.js participated in 2 Hackathons**
 
 `.trim();
 

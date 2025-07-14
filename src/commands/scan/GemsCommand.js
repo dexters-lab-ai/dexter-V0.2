@@ -178,7 +178,7 @@ export class GemsCommand extends Command {
     ctx.font = "italic 14px Arial";
     ctx.fillStyle = "#58a6ff";
     ctx.textAlign = "center";
-    ctx.fillText(`D.A.I.L Report generated on: ${timestamp}`, 400, 1180);
+    ctx.fillText(`KATZ! [O.P.E.R.A.T.O.R-TG] Report generated on: ${timestamp}`, 400, 1180);
   }
 
   drawTokenContainer(ctx, x, y, width, height) {

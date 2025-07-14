@@ -310,8 +310,8 @@ class ShopifyService extends EventEmitter {
 
       const recipient = new PublicKey(process.env.MERCHANT_WALLET);
       const reference = new PublicKey(sessionId);
-      const label = 'KATZ Store Payment';
-      const message = 'Thanks for shopping with KATZ!';
+      const label = 'KATZ! [O.P.E.R.A.T.O.R-TG] Store Payment';
+      const message = 'Thanks for shopping with KATZ! [O.P.E.R.A.T.O.R-TG]';
 
       // Create Solana Pay URL
       const url = encodeURL({

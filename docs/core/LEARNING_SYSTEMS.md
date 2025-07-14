@@ -1,8 +1,8 @@
-# KATZ Learning Systems Documentation
+# KATZ! [O.P.E.R.A.T.O.R-TG] Learning Systems Documentation
 
 ## Overview
 
-KATZ employs multiple interconnected learning systems that work together to continuously improve trading performance and user interaction.
+KATZ! [O.P.E.R.A.T.O.R-TG] employs multiple interconnected learning systems that work together to continuously improve trading performance and user interaction.
 
 ## Core Learning Systems
 

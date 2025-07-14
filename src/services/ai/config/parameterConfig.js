@@ -190,7 +190,7 @@ export const parameterConfig = new Map([
 
 // Helper functions
 function buildSystemPrompt() {
-return `You are KATZ, an AI assistant analyzing user messages for:
+return `You are KATZ! [O.P.E.R.A.T.O.R-TG], an AI assistant analyzing user messages for:
             1. Intent classification
             2. Parameter extraction based on intent requirements
             3. Context awareness

@@ -120,14 +120,14 @@ export class CertificateGenerator {
     textGradient.addColorStop(1, '#00b8d4'); // Cyan from your UI
     
     this.ctx.fillStyle = textGradient;
-    this.ctx.fillText('D.A.I.L', textX, textY);
+    this.ctx.fillText('KATZ! [O.P.E.R.A.T.O.R-TG]', textX, textY);
     
     // Add text shadow
     this.ctx.shadowColor = 'rgba(0, 184, 212, 0.5)';
     this.ctx.shadowBlur = 10;
     this.ctx.shadowOffsetX = 0;
     this.ctx.shadowOffsetY = 0;
-    this.ctx.fillText('D.A.I.L', textX, textY);
+    this.ctx.fillText('KATZ! [O.P.E.R.A.T.O.R-TG]', textX, textY);
     this.ctx.restore();
     
     // Add subtitle - moved lower as requested

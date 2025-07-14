@@ -496,10 +496,10 @@ function drawCatRobotSilhouette(ctx) {
     ctx.lineTo(x + 170 * scale, y + 50 * scale); // Right whisker 2
     ctx.stroke();
 
-    // Draw "KATZ!" text on chest
+    // Draw "KATZ! [O.P.E.R.A.T.O.R-TG]" text on chest
     ctx.font = '15px "SF Toontime"';
     ctx.fillStyle = 'red';
-    ctx.fillText('KATZ!', x + 35 * scale, y + 90 * scale);
+    ctx.fillText('KATZ! [O.P.E.R.A.T.O.R-TG]', x + 35 * scale, y + 90 * scale);
 }
 function  drawBackground(ctx, canvas) {
     const canvasGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
@@ -533,8 +533,8 @@ async function  drawLogoAndTitle(ctx, logoBuffer) {
         ctx.fillText(text, x, y);
         ctx.restore();
     }
-    // "KATZ!" in Toontime Bold
-    drawTiltedText(ctx, 'D.A.I.L', 500, 180, 'bold 42px "SF Toontime"', 'azure', 'center', 0.05, 0);
+    // "KATZ! [O.P.E.R.A.T.O.R-TG]" in Toontime Bold
+    drawTiltedText(ctx, 'KATZ! [O.P.E.R.A.T.O.R-TG]', 500, 180, 'bold 42px "SF Toontime"', 'azure', 'center', 0.05, 0);
 
     // "memes" in italic Toontime Bold
     drawTiltedText(ctx, 'memes', 280, 210, 'italic 20px "SF Toontime"', 'rgba(212, 212, 212, 0.7)', 'center', -0.03, 0);
@@ -542,8 +542,8 @@ async function  drawLogoAndTitle(ctx, logoBuffer) {
     // "Your AI Companion for Crypto and Daily Tasks..." slogan in italic Toontime Bold
     drawTiltedText(ctx, 'Your AI Companion for Crypto and Daily Tasks Automation', 405, 300, 'italic 17px "SF Toontime"', '#666', 'center', 0.02, 0);
 
-    // Cartoon Skew Effect for "KATZ!"
-    drawTiltedText(ctx, 'D.A.I.L', 490, 200, 'bold 45px "SF Toontime"', 'azure', 'center', -0.3, 0);
+    // Cartoon Skew Effect for "KATZ! [O.P.E.R.A.T.O.R-TG]"
+    drawTiltedText(ctx, 'KATZ! [O.P.E.R.A.T.O.R-TG]', 490, 200, 'bold 45px "SF Toontime"', 'azure', 'center', -0.3, 0);
 
     // Cartoon Skew Effect for "memes"
     drawTiltedText(ctx, 'memes', 280, 210, 'italic 18px "SF Toontime"', '#b09a9a', 'center', 0.1, 0.2);

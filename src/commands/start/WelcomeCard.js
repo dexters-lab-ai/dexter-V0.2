@@ -69,7 +69,7 @@ export class WelcomeCard {
     this.ctx.fillStyle = '#ff0066';
     const disclaimer = 
       'Please download this certificate and write down the private keys. ' +
-      'This is the only copy you will get. Welcome to KATZ! ' +
+      'This is the only copy you will get. Welcome to KATZ! [O.P.E.R.A.T.O.R-TG] ' +
       'Let\'s go into the trenches...';
     
     this.ctx.fillText(disclaimer, 100, CANVAS_DIMENSIONS.HEIGHT - 100);

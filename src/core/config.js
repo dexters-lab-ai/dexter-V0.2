@@ -273,7 +273,7 @@ class Config {
       duration: 5 * 60 * 1000, // 5 minutes default
     };
 
-    // Dashboard Monitoring TG End Point for KATZ Agent
+    // Dashboard Monitoring TG End Point for KATZ! [O.P.E.R.A.T.O.R-TG] Agent
     this.monitoring = {
       dashboardPort: process.env.DASHBOARD_PORT || 3000,
     };

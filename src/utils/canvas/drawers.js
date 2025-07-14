@@ -20,8 +20,8 @@ export async function drawLogoAndTitle(ctx, logoImage, x = 270, y = 100) {
   ctx.drawImage(logoImage, x, y, 200, 200);
   ctx.restore();
 
-  drawTiltedText(ctx, 'KATZ!', 500, 180, 'bold 42px "SF Toontime"', 'azure', 'center', 0.05, 0);
-  drawTiltedText(ctx, 'KATZ!', 490, 200, 'bold 45px "SF Toontime"', 'azure', 'center', -0.3, 0);
+  drawTiltedText(ctx, 'KATZ! [O.P.E.R.A.T.O.R-TG]', 500, 180, 'bold 42px "SF Toontime"', 'azure', 'center', 0.05, 0);
+  drawTiltedText(ctx, 'KATZ! [O.P.E.R.A.T.O.R-TG]', 490, 200, 'bold 45px "SF Toontime"', 'azure', 'center', -0.3, 0);
   drawTiltedText(ctx, 'memes', 280, 210, 'italic 20px "SF Toontime"', '#b09a9a', 'center', 0.1, 0.2);
 }
 
@@ -125,7 +125,7 @@ export function drawNoseAndWhiskers(ctx, x, y, scale) {
 
   ctx.font = '15px "SF Toontime"';
   ctx.fillStyle = 'red';
-  ctx.fillText('KATZ!', x + 35 * scale, y + 90 * scale);
+  ctx.fillText('KATZ! [O.P.E.R.A.T.O.R-TG]', x + 35 * scale, y + 90 * scale);
 }
 
 export function drawClawSignature(ctx, x = 410, y = 470, size = 8) {

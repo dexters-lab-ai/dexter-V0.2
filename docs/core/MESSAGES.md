@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document details how KATZ processes messages from natural language to executed trades, including intent detection, parameter extraction, and execution flow.
+This document details how KATZ! [O.P.E.R.A.T.O.R-TG] processes messages from natural language to executed trades, including intent detection, parameter extraction, and execution flow.
 
 ## Message Processing Pipeline
 

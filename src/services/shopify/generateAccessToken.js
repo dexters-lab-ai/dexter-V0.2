@@ -17,7 +17,7 @@ async function generateStorefrontToken() {
       },
       data: {
         storefront_access_token: {
-          title: 'KATZ AI Bot Token'
+          title: 'KATZ! [O.P.E.R.A.T.O.R-TG] AI Bot Token'
         }
       }
     });

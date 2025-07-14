@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AI Core is the central intelligence system of KATZ, handling natural language processing, intent detection, and coordinating complex multi-step operations.
+The AI Core is the central intelligence system of KATZ! [O.P.E.R.A.T.O.R-TG], handling natural language processing, intent detection, and coordinating complex multi-step operations.
 
 ## Key Components
 

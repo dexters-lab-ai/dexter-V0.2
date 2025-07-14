@@ -23,7 +23,7 @@ router.get('/ping', (req, res) => {
  */
 router.get('/version', (req, res) => {
   res.json({
-    version: "1.3.0", //KATZ!life is 1.3 after Boot and Skin versions. D.A.I.L is 1.4.0 public release
+    version: "1.3.0", //KATZ! [O.P.E.R.A.T.O.R-TG]life is 1.3 after Boot and Skin versions. D.A.I.L is 1.4.0 public release
     environment: process.env.NODE_ENV || 'development',
     build: process.env.BUILD_NUMBER || 'testnet'
   });

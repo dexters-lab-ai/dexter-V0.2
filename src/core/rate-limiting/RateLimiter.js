@@ -19,6 +19,55 @@ export class RateLimiter extends EventEmitter {
       await db.connect();
       const database = db.getDatabase();
   
+      // Create collections with validation schemas
+      await database.createCollection('rateLimits', {
+        validator: {
+          $jsonSchema: {
+            bsonType: "object",
+            required: ["key", "requests"],
+            properties: {
+              key: {
+                bsonType: "string",
+                description: "Identifier for rate limiting"
+              },
+              requests: {
+                bsonType: "array",
+                items: {
+                  bsonType: "object",
+                  required: ["timestamp"],
+                  properties: {
+                    timestamp: { bsonType: "date" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      await database.createCollection('rateLimitLogs', {
+        validator: {
+          $jsonSchema: {
+            bsonType: "object",
+            required: ["key", "timestamp", "action"],
+            properties: {
+              key: {
+                bsonType: "string",
+                description: "Identifier for the rate limit"
+              },
+              timestamp: {
+                bsonType: "date",
+                description: "When the action occurred"
+              },
+              action: {
+                bsonType: "string",
+                description: "Action taken (allow/deny)"
+              }
+            }
+          }
+        }
+      });
+
       // Initialize collections
       this.collection = database.collection('rateLimits');
       this.logsCollection = database.collection('rateLimitLogs');

@@ -29,7 +29,7 @@ export function formatAsciiArt(type = 'trending') {
 const TRENDING_ASCII = `
       ╔════════════════════════════════════════╗
       ║             TRENDING TOKENS            ║
-      ║         Powered by KATZ AI Agent       ║
+      ║         Powered by KATZ! [O.P.E.R.A.T.O.R-TG] AI Agent       ║
       ╚════════════════════════════════════════╝ `;
 
 const BOOSTED_ASCII = `

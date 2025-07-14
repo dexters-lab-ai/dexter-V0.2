@@ -43,7 +43,7 @@ export class MenuHandler {
       : `*Welcome Back ${username.toUpperCase()}!* 🐈‍⬛\n\n` +
         `Ready for the trenches? 🌳🕳️\n\n` +
         `_Let's find gems..._ 💎\n\n` +
-        `Need help? Ask KATZ anything, use voicenotes to operate in lazy mode.`;
+        `Need help? Ask KATZ! [O.P.E.R.A.T.O.R-TG] anything, use voicenotes to operate in lazy mode.`;
 
     const keyboard = {
       inline_keyboard: [

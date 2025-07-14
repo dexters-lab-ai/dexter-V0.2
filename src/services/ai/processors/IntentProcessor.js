@@ -2763,7 +2763,7 @@ export class IntentProcessor extends EventEmitter {
     });
 
     return {
-      text: `*KATZ Store Products* 🛍️\n\n${formattedProducts.join('\n\n')}`,
+      text: `*KATZ! [O.P.E.R.A.T.O.R-TG] Store Products* 🛍️\n\n${formattedProducts.join('\n\n')}`,
       type: 'product_list',
       parse_mode: 'Markdown',
       products: products.map(product => ({

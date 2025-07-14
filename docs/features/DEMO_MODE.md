@@ -2,7 +2,7 @@
 
 ## Overview
 
-KATZ includes a comprehensive demo system that can showcase its capabilities through interactive demonstrations.
+KATZ! [O.P.E.R.A.T.O.R-TG] includes a comprehensive demo system that can showcase its capabilities through interactive demonstrations.
 
 ## Features
 

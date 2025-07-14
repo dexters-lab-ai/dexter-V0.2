@@ -577,7 +577,7 @@ export class IntentProcessHandler {
         }));
     
         const message = [
-        '*KATZ Store Products* 🛍️\n',
+        '*KATZ! [O.P.E.R.A.T.O.R-TG] Store Products* 🛍️\n',
         ...formattedProducts.map((product, i) => [
             `${i + 1}. *${product.title}*`,
             `💰 ${product.currency} ${parseFloat(product.price).toFixed(2)}`,
