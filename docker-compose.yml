@@ -41,7 +41,7 @@ services:
     networks:
       - app-network
     # Use nodemon for development with better debugging
-    command: sh -c "npm install && npx nodemon --inspect=0.0.0.0:9229 src/index.js"
+    command: npx nodemon --inspect=0.0.0.0:9229 src/index.js
     # Uncomment for production
     # command: npm start
 
