@@ -53,8 +53,9 @@ RUN apk add --no-cache \
     vips \
     curl 
 
-# Copy built application and production node_modules
+# Copy built application, config directory, and production node_modules
 COPY --from=builder /usr/src/app/dist/ ./dist/
+COPY --from=builder /usr/src/app/config/ ./config/
 COPY --from=builder /prod_deps/node_modules/ ./node_modules/
 
 # Create non-root user
