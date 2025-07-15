@@ -40,10 +40,9 @@ services:
         condition: service_healthy
     networks:
       - app-network
-    # Use nodemon for development with better debugging
-    command: npx nodemon --inspect=0.0.0.0:9229 src/index.js
-    # Uncomment for production
-    # command: npm start
+    # Command is now handled by the Dockerfile's CMD for the development stage
+    # Remove the command override to prevent multiple instances
+    # command: npm run dev  # This is now handled by the Dockerfile's CMD
 
   mongodb:
     image: mongo:6.0

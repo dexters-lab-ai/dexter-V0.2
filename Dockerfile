@@ -117,5 +117,5 @@ ENV NODE_ENV=development
 ENV PORT=3000
 ENV NODE_OPTIONS=--max_old_space_size=4096
 
-# Command to run the development server
-CMD ["npm", "run", "dev"]
+# Command to run the development server with debugging
+CMD ["npx", "nodemon", "--inspect=0.0.0.0:9229", "src/index.js"]
