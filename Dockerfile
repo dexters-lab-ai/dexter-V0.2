@@ -39,7 +39,7 @@ RUN mkdir /prod_deps && \
     npm install --omit=dev --no-package-lock
 
 # Stage 2: Production image
-FROM node:22-alpine
+FROM node:22-alpine AS production
 
 WORKDIR /usr/src/app
 
@@ -75,6 +75,9 @@ ENV GOOGLE_CLIENT_REDIRECT=http://localhost:3000
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if(r.statusCode !== 200) throw new Error()}).on('error', (e) => {process.exit(1)})"
+
+# Start the server only once
+CMD ["node", "dist/main.js"]
 
 # Stage 3: Development image
 FROM node:22-alpine AS development
