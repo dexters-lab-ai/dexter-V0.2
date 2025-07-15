@@ -101,7 +101,7 @@ export class RegistrationHandler {
       // Send welcome message
       await this.bot.sendMessage(
         userId,
-        `# 🧠 D.A.I.L - Youre in! 
+        `# 🧠 O.P.E.R.A.T.O.R-TG - Youre in! 
 
 **Task smarter. Trade faster. Live better**
 
