@@ -51,8 +51,7 @@ RUN apk add --no-cache \
     giflib \
     pixman \
     vips \
-    curl \
-    && chmod +x /usr/src/app/docker/restart.sh
+    curl 
 
 # Copy built application and production node_modules
 COPY --from=builder /usr/src/app/dist/ ./dist/
