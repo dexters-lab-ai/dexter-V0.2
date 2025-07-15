@@ -77,9 +77,6 @@ ENV GOOGLE_CLIENT_REDIRECT=http://localhost:3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if(r.statusCode !== 200) throw new Error()}).on('error', (e) => {process.exit(1)})"
 
-# Command to run the application
-CMD ["/usr/src/app/docker/restart.sh"]
-
 # Stage 3: Development image
 FROM node:22-alpine AS development
 
