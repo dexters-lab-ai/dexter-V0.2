@@ -44,29 +44,12 @@ class Config {
     this.wormholeKey = process.env.WORMHOLE_KEY;
     this.firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
 
-    // Node-Redis v4 style: If you need a dedicated client
-    this.redisClient = {
-      username: 'default',
-      password: process.env.REDIS_PASSWORD || '47bWEON2casF7oHOXKhHBWIiXinKhS7m',
-      socket: {
-        host: process.env.REDIS_HOST || 'redis-18078.c244.us-east-1-2.ec2.redns.redis-cloud.com',
-        port: parseInt(process.env.REDIS_PORT, 10) || 18078
-      },
-      // Optional advanced v4 options...
-      retryStrategy: (times) => Math.min(times * 50, 10000),
-      // etc.
-    };
-
-    // Bull v3 style: host/port/password only
-    // We must remove or nullify any node-redis v4 fields like `enableReadyCheck` or `maxRetriesPerRequest`.
-    this.bullRedis = {
-      host: process.env.REDIS_HOST || 'redis-18078.c244.us-east-1-2.ec2.redns.redis-cloud.com',
-      port: parseInt(process.env.REDIS_PORT, 10) || 18078,
-      password: process.env.REDIS_PASSWORD || '47bWEON2casF7oHOXKhHBWIiXinKhS7m',
-      // Critical to avoid the "not permitted" error
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: true,
-    };
+    // Redis configuration is now managed by redisClient.js
+    // Environment variables are used directly by redisClient.js:
+    // - REDIS_HOST
+    // - REDIS_PORT
+    // - REDIS_PASSWORD
+    // - REDIS_DB
 
     // Blockchains Endpoints for direct usage (if needed)
     this.sonicEndpoint = process.env.SONIC_ENDPOINT;
@@ -126,29 +109,7 @@ class Config {
     this.dextoolsBaseUrl = process.env.DEXTOOLS_BASE_URL;
     this.dextoolsApiKey = process.env.DEXTOOLS_API_KEY;
 
-    // Redis Cloud Configuration
-    this.redis = {
-      username: 'default',
-      password: process.env.REDIS_PASSWORD,
-      socket: {
-        host: 'redis-18078.c244.us-east-1-2.ec2.redns.redis-cloud.com',
-        port: 18078
-      },
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: true,
-      maxReconnectAttempts: 10,
-      reconnectOnError: (err) => {
-        const targetError = 'READONLY';
-        if (err.message.includes(targetError)) {
-          return true;
-        }
-        return false;
-      }
-    };
+    // Redis configuration is now handled by redisClient.js
 
     // -------------------------------------------------------------------------
     // Network Configurations – Extended to Cover All Supported Networks

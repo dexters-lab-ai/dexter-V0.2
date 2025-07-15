@@ -2,7 +2,7 @@ import Bull from 'bull';
 import { EventEmitter } from 'events';
 import { config } from '../../core/config.js';
 import { ErrorHandler } from '../../core/errors/index.js';
-import { redisPool } from '../../core/redisPool.js';
+import { redisClient } from '../../core/redisClient.js';
 
 class QueueService extends EventEmitter {
   constructor() {
@@ -27,38 +27,6 @@ class QueueService extends EventEmitter {
     this.cleanupInterval = null;
     this.queueStats = new Map();
     this.degraded = false;
-    
-    // Use environment variables with fallback to config or defaults
-    const redisHost = process.env.REDIS_HOST || (config.bullRedis?.host || 'redis');
-    const redisPort = parseInt(process.env.REDIS_PORT || (config.bullRedis?.port || 6379), 10);
-    const redisPassword = process.env.REDIS_PASSWORD || (config.bullRedis?.password || '');
-    const redisDb = parseInt(process.env.REDIS_DB || '0', 10);
-
-    // Bull Redis configuration
-    this.bullConfig = {
-      host: redisHost,
-      port: redisPort,
-      password: redisPassword,
-      db: redisDb,
-      // Add retry strategy for better handling of connection issues
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000); // Exponential backoff, max 2s
-        console.warn(`Redis connection attempt ${times} failed. Retrying in ${delay}ms`);
-        return delay;
-      },
-      // Enable offline queue to handle Redis disconnections
-      enableOfflineQueue: true,
-      // Don't fail on startup if Redis is not available
-      enableReadyCheck: false,
-      // Auto-reconnect when connection is lost
-      reconnectOnError: (err) => {
-        const targetError = 'READONLY';
-        if (err.message.includes(targetError)) {
-          return true; // Reconnect on read-only error
-        }
-        return false;
-      }
-    };
   }
 
   async initialize() {
@@ -78,76 +46,21 @@ class QueueService extends EventEmitter {
       }
       this.initialized = true;
       console.log('✅ QueueService initialized');
-    } catch (error) {
-      console.error('❌ Error initializing QueueService:', error.message);
+    } catch (err) {
+      console.error('❌ Error initializing QueueService:', err.message);
       this.degraded = true;
       // Continue in degraded mode.
     }
   }
 
   async initializeRedis() {
-    // If we already hold a ready client from the pool, no need to reacquire.
-    if (this.redisClient && this.redisClient.isReady) return;
-  
     try {
-      if (this.connectPromise) return this.connectPromise;
-  
-      this.connectPromise = new Promise(async (resolve, reject) => {
-        try {
-          // If an existing client exists, release it back to the pool.
-          if (this.redisClient) {
-            try {
-              this.redisClient.removeAllListeners();
-              await redisPool.release(this.redisClient);
-            } catch (e) {
-              console.error('Error releasing previous Redis client:', e.message);
-            }
-          }
-          // Acquire a new Redis client from the pool.
-          this.redisClient = await redisPool.acquire();
-  
-          // Set up event handlers on the pooled client.
-          this.redisClient.on('error', (error) => {
-            if (error.code === 'ECONNRESET' || error.code === 'ENOTFOUND') {
-              if (!this._lastRedisErrorTime || (Date.now() - this._lastRedisErrorTime) > 60000) {
-                console.error('❌ Redis connection error (pool):', error.message);
-                this._lastRedisErrorTime = Date.now();
-              }
-              this.degraded = true;
-              // Schedule a reconnection attempt using exponential backoff.
-              setTimeout(() => {
-                this.initializeRedis().catch(err => {
-                  console.error('❌ Redis reconnection attempt failed (pool):', err.message);
-                });
-              }, Math.min(30000, Math.pow(2, (this.reconnectAttempts || 1)) * 1000));
-            } else {
-              console.error('❌ Redis error (pool):', error.message);
-            }
-          });
-  
-          this.redisClient.on('connect', () => {
-            console.log('✅ Redis client acquired from pool and connected.');
-            this.degraded = false;
-          });
-  
-          this.redisClient.on('ready', () => {
-            console.log('✅ Redis client ready (pool).');
-            this.degraded = false;
-          });
-  
-          resolve();
-        } catch (err) {
-          console.error('❌ Redis connection failed (pool):', err.message);
-          this.degraded = true;
-          reject(err);
-        } finally {
-          this.connectPromise = null;
-        }
-      });
-  
-      return this.connectPromise;
+      // Get the shared Redis client for non-Bull operations
+      this.redisClient = await redisClient.getSharedClient();
+      console.log('✅ Redis client initialized in QueueService');
+      return this.redisClient;
     } catch (error) {
-      console.error('❌ Redis initialization error (pool):', error.message);
+      console.error('❌ Redis initialization error:', error.message);
       this.degraded = true;
       // Continue in degraded mode.
     }
@@ -167,10 +80,23 @@ class QueueService extends EventEmitter {
 
   async createQueue(name, options = {}) {
     if (this.queues.has(name)) return this.queues.get(name);
+    
     try {
+      console.log(`🔄 Initializing queue: ${name}`);
+      
       const queue = new Bull(name, {
-        // Use the static bull configuration.
-        redis: this.bullConfig,
+        // Let Bull handle its own Redis connections
+        createClient: (type) => {
+          console.log(`🔌 Creating new Redis client for ${name} (${type})`);
+          const client = redisClient.getBullClient();
+          
+          // Add error handling for the client
+          client.on('error', (err) => {
+            console.error(`Redis client error in queue ${name} (${type}):`, err);
+          });
+          
+          return client;
+        },
         settings: {
           lockDuration: 300000,
           stalledInterval: 300000,
@@ -623,32 +549,25 @@ class QueueService extends EventEmitter {
     return results;
   }
 
-  async cleanup() {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
-    }
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
-      this.monitoringInterval = null;
-    }
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
-    const closePromises = Array.from(this.queues.values()).map(async (queue) => {
-      try {
-        await queue.pause(true).catch(() => {});
-        await queue.close().catch(() => {});
-        return true;
-      } catch (error) {
-        console.error(`Error closing queue:`, error.message);
-        return false;
-      }
+  async close() {
+    if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
+    if (this.monitoringInterval) clearInterval(this.monitoringInterval);
+    if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+
+    // Close all queues
+    const closePromises = Array.from(this.queues.values()).map(queue => {
+      return queue.close(true); // true to remove the queue from the monitor
     });
+
     await Promise.allSettled(closePromises);
-    // For static configuration, there's no need to release a shared client.
     this.queues.clear();
+    
+    // Note: We don't close the Redis client here as it's managed by the singleton
+    // The singleton will handle cleanup on process exit
+  }
+
+  async cleanup() {
+    await this.close();
     this.queueStats.clear();
     this.removeAllListeners();
     this.initialized = false;
