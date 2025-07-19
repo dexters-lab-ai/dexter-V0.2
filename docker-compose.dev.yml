@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production  # Use production stage for prod environment
+      target: development  # Use development stage for dev environment
     container_name: katzlife-app
     restart: unless-stopped
     ports:
@@ -15,7 +15,7 @@ services:
       - "80:80"        # Public port (for production)
     environment:
       # Application settings
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3000
       - ADMIN_PORT=3090
       - DASHBOARD_PORT=8080
@@ -28,6 +28,9 @@ services:
 
       # Performance
       - NODE_OPTIONS=--max_old_space_size=4096
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
     working_dir: /usr/src/app
     tty: true  # Keeps container running for debugging
     depends_on:
@@ -37,6 +40,9 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    # Command is now handled by the Dockerfile's CMD for the development stage
+    # Remove the command override to prevent multiple instances
+    # command: npm run dev  # This is now handled by the Dockerfile's CMD
 
   mongodb:
     image: mongo:6.0
