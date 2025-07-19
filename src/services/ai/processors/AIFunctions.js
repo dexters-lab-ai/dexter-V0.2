@@ -737,7 +737,7 @@ export const AIFunctions = [
       // Brave Search Integration
       {
         name: "search_internet",
-        description: "Search the internet for the latest info, news, market updates, blogs, events, announcements. reports, and research using the Brave Search API.  Both 'query' and 'queries' cannot be present for 'search_internet'. Use one: choose query for single string search, use queries for batch/multi strings searches.",
+        description: "Search the internet for the latest info, news, market updates etc using Brave Search API.  Use one of the parameters: 'query' or 'queries' never both same time. Query for single string search, Queries parameter for batch/multi strings searches.",
         parameters: {
           type: "object",
           properties: {

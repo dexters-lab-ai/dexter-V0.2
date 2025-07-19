@@ -40,11 +40,9 @@ export class HelperFunctions {
       throw new Error(`'queries' must contain at least one element for '${functionName}'.`);
     }
   
-    // Ensure batch and single aren't both present
+    // If both 'query' and 'queries' are present, prioritize 'queries' by deleting 'query'.
     if ("query" in args && "queries" in args) {
-      throw new Error(
-        `Both 'query' and 'queries' cannot be present for '${functionName}'. Use one.`
-      );
+      delete args.query;
     }
   }  
 
