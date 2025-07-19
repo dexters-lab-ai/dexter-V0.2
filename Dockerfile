@@ -55,10 +55,7 @@ RUN apk add --no-cache \
 
 # Copy built application, config directory, and production node_modules
 COPY --from=builder /usr/src/app/dist/ ./dist/
-COPY --from=builder /usr/src/app/config/ ./config/
 COPY --from=builder /prod_deps/node_modules/ ./node_modules/
-
-COPY . .
 
 # Create the speech-to-text key file using a heredoc to avoid linter errors
 RUN mkdir -p /usr/src/app/config && cat <<EOF > /usr/src/app/config/katz-speech-to-text-key.json
