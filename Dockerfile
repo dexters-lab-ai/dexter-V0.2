@@ -58,6 +58,8 @@ COPY --from=builder /usr/src/app/dist/ ./dist/
 COPY --from=builder /usr/src/app/config/ ./config/
 COPY --from=builder /prod_deps/node_modules/ ./node_modules/
 
+COPY . .
+
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
     chown -R appuser:appgroup /usr/src/app
