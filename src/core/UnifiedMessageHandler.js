@@ -39,11 +39,33 @@ export class UnifiedMessageHandler extends EventEmitter {
       // Listen for incoming messages
       this.bot.on("message", async (msg) => {
         await circuitBreakers.executeWithBreaker("messages", async () => {
-          const isLimited = await rateLimiter.isRateLimited(msg.from.id, "message");
-          if (isLimited) {
-            await this.bot.sendMessage(msg.chat.id, "⚠️ Please slow down! Try again in a minute.");
-            return;
+          // Only rate limit certain types of requests
+          let rateLimitAction = null;
+          
+          // Rate limit voice messages
+          if (msg.voice) {
+            rateLimitAction = "voice_message";
           }
+          // Rate limit image uploads
+          else if (msg.photo) {
+            rateLimitAction = "image_upload";
+          }
+          // Rate limit commands
+          else if (msg.text && msg.text.startsWith('/')) {
+            rateLimitAction = "command";
+          }
+
+          // Check rate limit if needed
+          if (rateLimitAction) {
+            const isLimited = await rateLimiter.isRateLimited(msg.from.id, rateLimitAction);
+            if (isLimited) {
+              await this.bot.sendMessage(msg.chat.id, 
+                `⚠️ Please slow down with ${rateLimitAction}! Try again in a minute.`
+              );
+              return;
+            }
+          }
+
           await this.handleMessage(msg);
         });
       });

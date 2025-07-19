@@ -35,8 +35,9 @@ class Config {
     this.solanaApiKey = process.env.SOLANA_API_KEY || 'ip7ONCr6sDycSojM_PZoWawrVM_2c0RW';
     this.apifyApiKey = process.env.APIFY_API_KEY;
     this.apifyCookieToken = process.env.APIFY_COOKIE_KEY;
-    this.braveApiKey  = process.env.BRAVE_API_KEY;
+    this.braveApiKey = process.env.BRAVE_API_KEY;
     this.bitrefillApiKey = process.env.BITREFILL_API_KEY;
+    this.pumpFunApiKey = process.env.PUMP_FUN_API_KEY;
     this.cookieFunAPIKey = process.env.COOKIEDAO_API_KEY;
     this.avacloudAPIKey = process.env.AVACLOUD_API_KEY;
     this.moralisAPIKey = process.env.MORALIS_API_KEY;

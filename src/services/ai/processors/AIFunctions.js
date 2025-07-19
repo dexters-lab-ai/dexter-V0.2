@@ -193,7 +193,162 @@ export const AIFunctions = [
         }
       },
 
-      // Fetch bridge receipts from wormhole
+      // Pump.fun Token Bonding Status
+      {
+        name: "get_pumpfun_token_bonding_status",
+        description: "Get detailed bonding status and price information for a Pump.fun token",
+        parameters: {
+          type: "object",
+          properties: {
+            tokenAddress: {
+              type: "string",
+              description: "The token mint address (e.g., 'H2p8S7Ssd3mrBft1bcDGnzW8KNRAGtPTtJLv1tnupump')"
+            }
+          },
+          required: ["tokenAddress"]
+        }
+      },
+
+      {
+        name: "create_pumpfun_token",
+        description: "Create a new Pump.fun token with specified metadata and initial SOL amount",
+        parameters: {
+          type: "object",
+          properties: {
+            lightningWalletId: {
+              type: "string",
+              description: "ID of the Lightning wallet to use for token creation"
+            },
+            name: {
+              type: "string",
+              description: "Token name"
+            },
+            symbol: {
+              type: "string",
+              description: "Token symbol"
+            },
+            description: {
+              type: "string",
+              description: "Token description"
+            },
+            twitter: {
+              type: "string",
+              description: "Twitter link"
+            },
+            telegram: {
+              type: "string",
+              description: "Telegram link"
+            },
+            website: {
+              type: "string",
+              description: "Website link"
+            },
+            showName: {
+              type: "boolean",
+              description: "Whether to show name in UI"
+            },
+            amount: {
+              type: "number",
+              description: "Initial SOL amount (default: 1)"
+            },
+            slippage: {
+              type: "number",
+              description: "Slippage percentage (default: 10)"
+            },
+            priorityFee: {
+              type: "number",
+              description: "Priority fee in SOL (default: 0.0005)"
+            }
+          },
+          required: ["lightningWalletId", "name", "symbol", "description", "twitter", "telegram", "website", "showName"]
+        }
+      },
+
+      {
+        name: "create_moonshot_token",
+        description: "Create a new Moonshot token with specified metadata using a Lightning wallet",
+        parameters: {
+          type: "object",
+          properties: {
+            lightningWalletId: {
+              type: "string",
+              description: "ID of the Lightning wallet to use for token creation"
+            },
+            name: {
+              type: "string",
+              description: "Token name"
+            },
+            symbol: {
+              type: "string",
+              description: "Token symbol"
+            },
+            description: {
+              type: "string",
+              description: "Token description"
+            },
+            website: {
+              type: "string",
+              description: "Website link"
+            },
+            amount: {
+              type: "number",
+              description: "Initial USDC amount (default: 1)"
+            },
+            slippage: {
+              type: "number",
+              description: "Slippage percentage (default: 5)"
+            },
+            priorityFee: {
+              type: "number",
+              description: "Priority fee in SOL (default: 0.00005)"
+            }
+          },
+          required: ["lightningWalletId", "name", "symbol", "description", "website"]
+        }
+      },
+
+      {
+        name: "create_bonk_token",
+        description: "Create a new Bonk token with specified metadata using a Lightning wallet",
+        parameters: {
+          type: "object",
+          properties: {
+            lightningWalletId: {
+              type: "string",
+              description: "ID of the Lightning wallet to use for token creation"
+            },
+            name: {
+              type: "string",
+              description: "Token name"
+            },
+            symbol: {
+              type: "string",
+              description: "Token symbol"
+            },
+            description: {
+              type: "string",
+              description: "Token description"
+            },
+            website: {
+              type: "string",
+              description: "Website link"
+            },
+            amount: {
+              type: "number",
+              description: "Initial USDC amount (default: 1)"
+            },
+            slippage: {
+              type: "number",
+              description: "Slippage percentage (default: 5)"
+            },
+            priorityFee: {
+              type: "number",
+              description: "Priority fee in SOL (default: 0.00005)"
+            }
+          },
+          required: ["lightningWalletId", "name", "symbol", "description", "website"]
+        }
+      },
       {
         name: "fetch_bridge_receipts",
         description: "Fetch the user's bridging records from DB, optionally limit the number of results.",
@@ -1630,6 +1785,81 @@ export const AIFunctions = [
 
       // Tasks
       {
+        "name": "get_graduated_pumpfun_tokens",
+        "description": "Retrieve a list of Pump.fun tokens that have graduated from the bonding curve to DEXs. This function fetches tokens that have completed their bonding curve phase and are now available for trading on decentralized exchanges.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "number",
+              "description": "Maximum number of tokens to return (default: 50, max: 100)",
+              "default": 50
+            },
+            "timeframe": {
+              "type": "string",
+              "enum": ["1h", "6h", "24h", "7d", "30d", "all"],
+              "description": "Timeframe to fetch graduated tokens for (default: '24h')",
+              "default": "24h"
+            },
+            "minLiquidity": {
+              "type": "number",
+              "description": "Minimum liquidity in USD for the tokens (default: 1000)",
+              "default": 1000
+            },
+            "sortBy": {
+              "type": "string",
+              "enum": ["graduatedAt", "liquidity", "priceChange24h", "volume24h"],
+              "description": "Field to sort results by (default: 'graduatedAt')",
+              "default": "graduatedAt"
+            },
+            "sortOrder": {
+              "type": "string",
+              "enum": ["asc", "desc"],
+              "description": "Sort order (default: 'desc' for most recent first)",
+              "default": "desc"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "get_bonding_pumpfun_tokens",
+        "description": "Retrieve a list of Pump.fun tokens that are currently in the bonding curve phase and have not yet graduated to DEXs. This function helps track new and upcoming tokens before they hit the open market.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "number",
+              "description": "Maximum number of tokens to return (default: 50, max: 100)",
+              "default": 50
+            },
+            "minRaised": {
+              "type": "number",
+              "description": "Minimum amount raised in USD (default: 1000)",
+              "default": 1000
+            },
+            "maxTimeLeft": {
+              "type": "number",
+              "description": "Maximum hours remaining until graduation (default: 24)",
+              "default": 24
+            },
+            "sortBy": {
+              "type": "string",
+              "enum": ["createdAt", "amountRaised", "timeLeft", "price"],
+              "description": "Field to sort results by (default: 'timeLeft')",
+              "default": "timeLeft"
+            },
+            "sortOrder": {
+              "type": "string",
+              "enum": ["asc", "desc"],
+              "description": "Sort order (default: 'asc' for soonest to graduate first)",
+              "default": "asc"
+            }
+          },
+          "required": []
+        }
+      },
+      {
         "name": "save_task",
         "description": "Create or save a one time or periodic task given by the User. The AI model should pass its conversation context as the content. The task will be saved with a default heading: 'Execute this task now, pull all resources required first, execute now dont reply'. Parameters include telegramId, content, dueTime (ISO string or Date), and an optional recurrence which can be 'none', 'daily', or a custom interval in minutes (minimum 5).",
         "parameters": {
@@ -1726,4 +1956,50 @@ export const AIFunctions = [
       },      
       
       
-];
+      {
+        name: "createLightningWallet",
+        description: "Create a new Lightning wallet and API key",
+        parameters: {
+          type: "object",
+          properties: {
+            userId: {
+              type: "string",
+              description: "The user ID to associate the wallet with"
+            }
+          },
+          required: ["userId"]
+        }
+      },
+      {
+        name: "getLightningWallets",
+        description: "Get all Lightning wallets for a user",
+        parameters: {
+          type: "object",
+          properties: {
+            userId: {
+              type: "string",
+              description: "The user ID to retrieve wallets for"
+            }
+          },
+          required: ["userId"]
+        }
+      },
+      {
+        name: "removeLightningWallet",
+        description: "Remove a Lightning wallet from the user's account",
+        parameters: {
+          type: "object",
+          properties: {
+            walletId: {
+              type: "string",
+              description: "The ID of the wallet to remove"
+            },
+            chatId: {
+              type: "string",
+              description: "The chat ID to send confirmation messages to"
+            }
+          },
+          required: ["walletId", "chatId"]
+        }
+      }
+    ];

@@ -490,7 +490,613 @@ class PumpFunService extends EventEmitter {
     } catch (error) {
       return { status: "unhealthy", error: error.message };
     }
+  }
+
+  /**
+   * Fetches graduated tokens from Pump.fun via Moralis API
+   * @param {Object} options - Query options
+   * @param {number} options.limit - Maximum number of tokens to return (1-100)
+   * @param {string} options.sortBy - Field to sort by (graduatedAt, liquidity, priceChange24h, volume24h)
+   * @param {string} options.sortOrder - Sort order (asc, desc)
+   * @param {string} options.cursor - Pagination cursor
+   * @returns {Promise<Object>} - Returns token data and pagination info
+   */
+  async getGraduatedTokens({
+    limit = 50,
+    cursor = null,
+    sortBy = 'graduatedAt',
+    sortOrder = 'desc',
+    timeframe = '24h',
+    minLiquidity = 0
+  } = {}) {
+    try {
+      // Validate inputs
+      if (limit < 1 || limit > 100) {
+        throw new Error('Limit must be between 1 and 100');
+      }
+  
+      // Validate sort options
+      const validSortFields = ['graduatedAt', 'liquidity', 'priceChange24h', 'volume24h'];
+      if (!validSortFields.includes(sortBy)) {
+        throw new Error(`Invalid sortBy option. Must be one of: ${validSortFields.join(', ')}`);
+      }
+  
+      const validSortOrders = ['asc', 'desc'];
+      if (!validSortOrders.includes(sortOrder)) {
+        throw new Error(`Invalid sortOrder option. Must be one of: ${validSortOrders.join(', ')}`);
+      }
+  
+      // Build URL with query parameters
+      const params = new URLSearchParams({
+        limit,
+        ...(timeframe && { timeframe }),
+        ...(cursor && { cursor })
+      });
+  
+      const url = `https://solana-gateway.moralis.io/token/mainnet/exchange/pumpfun/graduated?${params}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'accept': 'application/json',
+          'X-API-Key': config.moralisAPIKey
+        }
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API request failed with status ${response.status}: ${errorData.message || 'Unknown error'}`);
+      }
+  
+      const data = await response.json();
+      
+      // Process and format the response
+      const tokens = data.result || [];
+      const now = new Date();
+      
+      // Format tokens with additional calculated fields
+      const formattedTokens = tokens.map(token => ({
+        ...token,
+        liquidity: parseFloat(token.liquidity) || 0,
+        priceUsd: parseFloat(token.priceUsd) || 0,
+        priceNative: parseFloat(token.priceNative) || 0,
+        fullyDilutedValuation: parseFloat(token.fullyDilutedValuation) || 0,
+        daysSinceGraduation: Math.floor((now - new Date(token.graduatedAt)) / (1000 * 60 * 60 * 24)) || 0,
+        solscanUrl: `https://solscan.io/token/${token.tokenAddress}`,
+        dexscreenerUrl: `https://dexscreener.com/solana/${token.tokenAddress}`
+      }));
+  
+      // Apply minimum liquidity filter if specified
+      let filteredTokens = minLiquidity > 0 
+        ? formattedTokens.filter(token => token.liquidity >= minLiquidity)
+        : formattedTokens;
+  
+      // Sort tokens 
+      filteredTokens = filteredTokens.sort((a, b) => {
+        let comparison = 0;
+        if (sortBy === 'liquidity') comparison = a.liquidity - b.liquidity;
+        else if (sortBy === 'priceChange24h') comparison = (a.priceChange24h || 0) - (b.priceChange24h || 0);
+        else if (sortBy === 'volume24h') comparison = (a.volume24h || 0) - (b.volume24h || 0);
+        else comparison = new Date(a.graduatedAt) - new Date(b.graduatedAt);
+        
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+  
+      // Generate summary statistics
+      const summary = {
+        totalLiquidity: filteredTokens.reduce((sum, token) => sum + token.liquidity, 0),
+        avgLiquidity: filteredTokens.length > 0 
+          ? filteredTokens.reduce((sum, token) => sum + token.liquidity, 0) / filteredTokens.length 
+          : 0,
+        minLiquidity: filteredTokens.length > 0 
+          ? Math.min(...filteredTokens.map(t => t.liquidity)) 
+          : 0,
+        maxLiquidity: filteredTokens.length > 0 
+          ? Math.max(...filteredTokens.map(t => t.liquidity)) 
+          : 0,
+        tokenCount: filteredTokens.length
+      };
+  
+      return {
+        success: true,
+        tokens: filteredTokens,
+        summary,
+        cursor: data.cursor || null,
+        hasMore: !!data.cursor,
+        timeframe,
+        minLiquidity
+      };
+    } catch (error) {
+      console.error('Error in getGraduatedTokens:', error);
+      return {
+        success: false,
+        error: error.message,
+        tokens: [],
+        summary: {
+          totalLiquidity: 0,
+          avgLiquidity: 0,
+          minLiquidity: 0,
+          maxLiquidity: 0,
+          tokenCount: 0
+        },
+        cursor: null,
+        hasMore: false
+      };
+    }
+  }
+
+  /**
+   * Fetches tokens still in the bonding curve phase
+   * @param {Object} options - Query options
+   * @param {number} options.limit - Maximum number of tokens to return (1-100)
+   * @param {number} options.minLiquidity - Minimum liquidity in USD
+   * @param {number} options.minProgress - Minimum bonding curve progress percentage (0-100)
+   * @param {string} options.sortBy - Field to sort by (liquidity, priceUsd, bondingCurveProgress)
+   * @param {string} options.sortOrder - Sort order (asc, desc)
+   * @param {string} options.cursor - Pagination cursor
+   * @returns {Promise<Object>} - Returns bonding tokens data
+   */
+  async getBondingTokens({
+    limit,
+    minRaised = 0,
+    maxTimeLeft,
+    sortBy = 'timeLeft',
+    sortOrder = 'asc',
+    cursor = null
+  } = {}) {
+    try {
+      // Validate input limit
+      if (limit === undefined) {
+        throw new Error('Limit is required');
+      }
+      if (limit < 1 || limit > 100) {
+        throw new Error('Limit must be between 1 and 100');
+      }
+
+      // Build URL with query parameters
+      const params = new URLSearchParams({
+        limit
+      });
+      
+      // Add optional parameters if they exist
+      if (cursor) params.append('cursor', cursor);
+      if (minRaised > 0) params.append('minRaised', minRaised);
+      if (maxTimeLeft) params.append('maxTimeLeft', maxTimeLeft);
+      if (sortBy) params.append('sortBy', sortBy);
+      if (sortOrder) params.append('sortOrder', sortOrder);
+
+      const url = `https://solana-gateway.moralis.io/token/mainnet/exchange/pumpfun/bonding?${params}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'accept': 'application/json',
+          'X-API-Key': config.moralisAPIKey
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API request failed with status ${response.status}: ${errorData.message || 'Unknown error'}`);
+      }
+
+      const data = await response.json();
+      
+      // Process and format the response
+      const tokens = data.result || [];
+      
+      // Format tokens with additional calculated fields
+      const formattedTokens = tokens.map(token => ({
+        ...token,
+        liquidity: parseFloat(token.liquidity) || 0,
+        priceUsd: parseFloat(token.priceUsd) || 0,
+        priceNative: parseFloat(token.priceNative) || 0,
+        fullyDilutedValuation: parseFloat(token.fullyDilutedValuation) || 0,
+        bondingCurveProgress: parseFloat(token.bondingCurveProgress) || 0,
+        solscanUrl: `https://solscan.io/token/${token.tokenAddress}`,
+        dexscreenerUrl: `https://dexscreener.com/solana/${token.tokenAddress}`,
+        // Calculate estimated time left based on bonding curve progress
+        // This is an approximation since the API doesn't provide exact time
+        estimatedTimeLeft: 24 * (100 - (parseFloat(token.bondingCurveProgress) || 0)) / 100,
+        timeLeftFormatted: this.formatTimeRemaining(24 * (100 - (parseFloat(token.bondingCurveProgress) || 0)) / 100)
+      }));
+
+      // Sort tokens (no filtering since minLiquidity and minProgress are no longer supported)
+      const filteredTokens = formattedTokens
+        .sort((a, b) => {
+          let comparison = 0;
+          if (sortBy === 'liquidity') comparison = a.liquidity - b.liquidity;
+          else if (sortBy === 'priceUsd') comparison = a.priceUsd - b.priceUsd;
+          else comparison = a.bondingCurveProgress - b.bondingCurveProgress;
+          
+          return sortOrder === 'asc' ? comparison : -comparison;
+        });
+      
+      // Generate summary statistics
+      const summary = {
+        totalLiquidity: formattedTokens.reduce((sum, token) => sum + token.liquidity, 0),
+        avgLiquidity: formattedTokens.length > 0 
+          ? formattedTokens.reduce((sum, token) => sum + token.liquidity, 0) / formattedTokens.length 
+          : 0,
+        minProgress: filteredTokens.length > 0 
+          ? Math.min(...filteredTokens.map(t => t.bondingCurveProgress)) 
+          : 0,
+        maxProgress: filteredTokens.length > 0 
+          ? Math.max(...filteredTokens.map(t => t.bondingCurveProgress)) 
+          : 0,
+        tokenCount: filteredTokens.length
+      };
+
+      return {
+        success: true,
+        tokens: filteredTokens,
+        summary,
+        cursor: data.cursor || null,
+        hasMore: !!data.cursor
+      };
+    } catch (error) {
+      console.error('Error in getBondingTokens:', error);
+      return {
+        success: false,
+        error: error.message,
+        tokens: [],
+        summary: {
+          totalLiquidity: 0,
+          avgLiquidity: 0,
+          minProgress: 0,
+          maxProgress: 0,
+          tokenCount: 0
+        },
+        cursor: null,
+        hasMore: false
+      };
+    }
   }    
+
+  /**
+   * Formats time remaining in hours to a human-readable string
+   * @param {number} hours - Time in hours
+   * @returns {string} Formatted time string (e.g., "12h 30m")
+   */
+  formatTimeRemaining(hours) {
+    const h = Math.floor(hours);
+    const m = Math.floor((hours - h) * 60);
+    return `${h}h ${m}m`;
+  }
+
+  /**
+   * Get detailed bonding status and price for a specific token
+   * @param {string} tokenAddress - The token mint address
+   * @returns {Promise<Object>} Token bonding status and price information
+   */
+  /**
+   * Create a new Pump.fun token
+   * @param {Object} params - Token creation parameters
+   * @param {string} params.apiKey - User's Pump.fun API key
+   * @param {string} params.publicKey - Wallet public key
+   * @param {string} params.name - Token name
+   * @param {string} params.symbol - Token symbol
+   * @param {string} params.description - Token description
+   * @param {string} params.twitter - Twitter link
+   * @param {string} params.telegram - Telegram link
+   * @param {string} params.website - Website link
+   * @param {boolean} params.showName - Show name in UI
+   * @param {File} params.image - Token image file
+   * @param {number} [params.amount] - Amount of SOL to use
+   * @param {number} [params.slippage] - Slippage percentage
+   * @param {number} [params.priorityFee] - Priority fee in SOL
+   * @returns {Promise<Object>} Token creation transaction data
+   */
+  async createPumpFunToken(params) {
+    if (!params.apiKey) {
+      throw new Error('API key is required for token creation');
+    }
+    try {
+      const mintKeypair = Keypair.generate();
+      
+      const formData = new FormData();
+      formData.append("file", params.image); // Image file
+      formData.append("name", params.name);
+      formData.append("symbol", params.symbol);
+      formData.append("description", params.description);
+      formData.append("twitter", params.twitter);
+      formData.append("telegram", params.telegram);
+      formData.append("website", params.website);
+      formData.append("showName", params.showName.toString());
+
+      const metadataResponse = await fetch("https://pump.fun/api/ipfs", {
+        method: "POST",
+        body: formData,
+      });
+      const metadataResponseJSON = await metadataResponse.json();
+
+      const response = await fetch(`https://pumpportal.fun/api/trade?api-key=${params.apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          "publicKey": params.publicKey,
+          "action": "create",
+          "tokenMetadata": {
+            name: metadataResponseJSON.metadata.name,
+            symbol: metadataResponseJSON.metadata.symbol,
+            uri: metadataResponseJSON.metadataUri
+          },
+          "mint": mintKeypair.publicKey.toBase58(),
+          "denominatedInSol": "true",
+          "amount": params.amount || 1,
+          "slippage": params.slippage || 10,
+          "priorityFee": params.priorityFee || 0.0005,
+          "pool": "pump"
+        })
+      });
+
+      if(response.status === 200) {
+        const data = await response.arrayBuffer();
+        const tx = VersionedTransaction.deserialize(new Uint8Array(data));
+        return {
+          success: true,
+          transaction: tx,
+          mintAddress: mintKeypair.publicKey.toBase58(),
+          metadata: metadataResponseJSON.metadata
+        };
+      } else {
+        throw new Error(`Failed to create token: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error creating Pump.fun token:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new Bonk token
+   * @param {Object} params - Token creation parameters
+   * @param {string} params.apiKey - User's Pump.fun API key
+   * @param {string} params.name - Token name
+   * @param {string} params.symbol - Token symbol
+   * @param {string} params.description - Token description
+   * @param {string} params.website - Website link
+   * @param {File} params.image - Token image file
+   * @param {number} [params.amount] - Amount of SOL to use
+   * @param {number} [params.slippage] - Slippage percentage
+   * @param {number} [params.priorityFee] - Priority fee in SOL
+   * @returns {Promise<Object>} Token creation transaction data
+   */
+  async createMoonshotToken(params) {
+    if (!params.apiKey) {
+      throw new Error('API key is required for token creation');
+    }
+    try {
+      const mintKeypair = Keypair.generate();
+
+      const formData = new FormData();
+      formData.append("image", params.image);
+
+      const imgResponse = await fetch("https://nft-storage.letsbonk22.workers.dev/upload/img", {
+        method: "POST",
+        body: formData,
+      });
+      const imgUri = await imgResponse.text();
+
+      const metadataResponse = await fetch("https://nft-storage.letsbonk22.workers.dev/upload/meta", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          description: params.description,
+          image: imgUri,
+          name: params.name,
+          symbol: params.symbol,
+          website: params.website
+        }),
+      });
+      const metadataUri = await metadataResponse.text();
+
+      const response = await fetch(
+        `https://pumpportal.fun/api/trade?api-key=${params.apiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "create",
+            tokenMetadata: {
+              name: params.name,
+              symbol: params.symbol,
+              uri: metadataUri,
+            },
+            mint: bs58.encode(mintKeypair.secretKey),
+            denominatedInSol: "true",
+            amount: params.amount || 1,
+            slippage: params.slippage || 5,
+            priorityFee: params.priorityFee || 0.00005,
+            pool: "moonshot"
+          }),
+        }
+      );
+
+      if (response.status === 200) {
+        const data = await response.json();
+        return {
+          success: true,
+          transaction: data,
+          mintAddress: mintKeypair.publicKey.toBase58(),
+          metadataUri
+        };
+      } else {
+        throw new Error(`Failed to create Moonshot token: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error creating Moonshot token:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new Bonk token
+   * @param {Object} params - Token creation parameters
+   * @param {string} params.apiKey - User's Pump.fun API key
+   * @param {string} params.name - Token name
+   * @param {string} params.symbol - Token symbol
+   * @param {string} params.description - Token description
+   * @param {string} params.website - Website link
+   * @param {File} params.image - Token image file
+   * @param {number} [params.amount] - Amount of SOL to use
+   * @param {number} [params.slippage] - Slippage percentage
+   * @param {number} [params.priorityFee] - Priority fee in SOL
+   * @returns {Promise<Object>} Token creation transaction data
+   */
+  async createBonkToken(params) {
+    if (!params.apiKey) {
+      throw new Error('API key is required for token creation');
+    }
+    try {
+      const mintKeypair = Keypair.generate();
+
+      const formData = new FormData();
+      formData.append("image", params.image);
+
+      const imgResponse = await fetch("https://nft-storage.letsbonk22.workers.dev/upload/img", {
+        method: "POST",
+        body: formData,
+      });
+      const imgUri = await imgResponse.text();
+
+      const metadataResponse = await fetch("https://nft-storage.letsbonk22.workers.dev/upload/meta", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          createdOn: "https://bonk.fun",
+          description: params.description,
+          image: imgUri,
+          name: params.name,
+          symbol: params.symbol,
+          website: params.website
+        }),
+      });
+      const metadataUri = await metadataResponse.text();
+
+      const response = await fetch(
+        `https://pumpportal.fun/api/trade?api-key=${params.apiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "create",
+            tokenMetadata: {
+              name: params.name,
+              symbol: params.symbol,
+              uri: metadataUri,
+            },
+            mint: bs58.encode(mintKeypair.secretKey),
+            denominatedInSol: "true",
+            amount: params.amount || 0.5,
+            slippage: params.slippage || 5,
+            priorityFee: params.priorityFee || 0.00005,
+            pool: "bonk"
+          }),
+        }
+      );
+
+      if (response.status === 200) {
+        const data = await response.json();
+        return {
+          success: true,
+          transaction: data,
+          mintAddress: mintKeypair.publicKey.toBase58(),
+          metadataUri
+        };
+      } else {
+        throw new Error(`Failed to create Bonk token: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error creating Bonk token:', error);
+      throw error;
+    }
+  }
+
+  async getTokenBondingStatus(tokenAddress) {
+    try {
+      // Validate token address
+      if (!tokenAddress || typeof tokenAddress !== 'string' || tokenAddress.length < 30) {
+        throw new Error('Invalid token address');
+      }
+
+      // Fetch bonding status and price in parallel
+      const statusUrl = `https://solana-gateway.moralis.io/token/mainnet/${tokenAddress}/bonding-status`;
+      const priceUrl = `https://solana-gateway.moralis.io/token/mainnet/${tokenAddress}/price`;
+      
+      const [statusResponse, priceResponse] = await Promise.all([
+        fetch(statusUrl, {
+          headers: {
+            'accept': 'application/json',
+            'X-API-Key': this.config.moralisApiKey
+          }
+        }),
+        fetch(priceUrl, {
+          headers: {
+            'accept': 'application/json',
+            'X-API-Key': this.config.moralisApiKey
+          }
+        })
+      ]);
+
+      if (!statusResponse.ok || !priceResponse.ok) {
+        const errorText = await Promise.all([statusResponse.text(), priceResponse.text()]);
+        throw new Error(`API request failed: ${errorText.join(' | ')}`);
+      }
+
+      const [statusData, priceData] = await Promise.all([
+        statusResponse.json(),
+        priceResponse.json()
+      ]);
+
+      // Calculate time remaining if bonding is in progress
+      let timeRemaining = null;
+      if (statusData.bondingProgress < 100) {
+        // Estimate time based on typical bonding curve progression
+        const progressRemaining = 100 - statusData.bondingProgress;
+        const estimatedHours = (progressRemaining / 5); // Rough estimate: 5% per hour
+        timeRemaining = this.formatTimeRemaining(estimatedHours * 60); // Convert hours to minutes
+      }
+
+      return {
+        success: true,
+        tokenAddress,
+        bondingProgress: statusData.bondingProgress,
+        isFullyBonded: statusData.bondingProgress >= 100,
+        timeRemaining,
+        price: {
+          usd: priceData.usdPrice,
+          native: {
+            value: priceData.nativePrice?.value,
+            symbol: priceData.nativePrice?.symbol || 'SOL',
+            decimals: priceData.nativePrice?.decimals || 9
+          },
+          exchange: {
+            name: priceData.exchangeName,
+            address: priceData.exchangeAddress
+          },
+          pairAddress: priceData.pairAddress
+        },
+        lastUpdated: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error fetching token bonding status:', error);
+      return {
+        success: false,
+        error: error.message,
+        tokenAddress,
+        lastUpdated: new Date().toISOString()
+      };
+    }
+  }
 
   cleanup() {
     console.log('🧹 Cleaning up PumpFunService...');

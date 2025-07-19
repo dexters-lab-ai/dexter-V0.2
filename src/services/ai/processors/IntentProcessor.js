@@ -5,6 +5,7 @@ import { User } from "../../../models/User.js";
 import { config } from '../../../core/config.js';
 import { decrypt, encrypt } from "../../../utils/encryption.js";
 import { Keypair } from "@solana/web3.js";
+import { randomBytes } from 'crypto';
 import bs58 from "bs58"; // For Base58 decoding
 import { normalizeNetwork, NETWORKS, NETWORK_DISPLAY_NAMES } from '../../../core/constants.js';
 
@@ -68,7 +69,6 @@ const chainAliasMapping = {
   "sonic": "0x146",
   "sonic mainnet": "0x146",
 
-  // Ethereum Mainnet
   "ethereum": "0x1",
   "mainnet": "0x1",
   "eth": "0x1",
@@ -1181,9 +1181,9 @@ export class IntentProcessor extends EventEmitter {
   }
 
   // Wallet Creation
-  async createEVMWallet(network) {
+  async createEVMWallet(userId, network) {
     try {
-      const wallet = await walletService.createWallet(network);
+      const wallet = await walletService.createWallet(userId, network);
       return wallet;
     } catch (error) {
       console.error(error.message);
@@ -3146,6 +3146,596 @@ export class IntentProcessor extends EventEmitter {
       return { success: false, error: error.message };
     }
   }  
+
+  /**
+   * Fetch graduated Pump.fun tokens that have moved to DEXs
+   * @param {string} userId - User ID
+   * @param {string} chatId - Chat ID for sending updates
+   * @param {Object} params - Query parameters
+   * @returns {Promise<Object>} List of graduated tokens with summary and pagination info
+   */
+  async getGraduatedPumpfunTokens(userId, chatId, params = {}) {
+    try {
+      const {
+        limit = 50, // Only accept limit parameter
+        timeframe = '24h', // Add default timeframe
+        minLiquidity = 0  // Add default minLiquidity
+      } = params;
+  
+      // Validate inputs
+      if (limit < 1 || limit > 100) {
+        throw new Error('Limit must be between 1 and 100');
+      }
+  
+      const validTimeframes = ['1h', '6h', '24h', '7d', '30d', 'all'];
+      if (!validTimeframes.includes(timeframe)) {
+        throw new Error(`Invalid timeframe. Must be one of: ${validTimeframes.join(', ')}`);
+      }
+  
+      if (minLiquidity < 0) {
+        throw new Error('Minimum liquidity must be a positive number');
+      }
+  
+      // Call PumpFunService to get graduated tokens
+      const result = await pumpFunService.getGraduatedTokens({
+        limit,
+        timeframe, // Add timeframe parameter
+        minLiquidity // Add minLiquidity parameter
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch graduated tokens');
+      }
+
+      // Return the full result with summary and pagination info
+      return {
+        success: true,
+        count: result.tokens.length,
+        ...result
+      };
+    } catch (error) {
+      console.error('Error in getGraduatedPumpfunTokens:', error);
+      await this.safeSendMessage(this.bot, chatId, `❌ Failed to fetch graduated Pump.fun tokens: ${error.message}`);
+      return { 
+        success: false, 
+        error: error.message,
+        tokens: [],
+        summary: {
+          totalLiquidity: 0,
+          avgLiquidity: 0,
+          minLiquidity: 0,
+          maxLiquidity: 0,
+          tokenCount: 0
+        },
+        cursor: null,
+        hasMore: false
+      };
+    }
+  }
+
+  /**
+   * Fetch Pump.fun tokens still in bonding curve phase
+   * @param {string} userId - User ID
+   * @param {string} chatId - Chat ID for sending updates
+   * @param {Object} params - Query parameters
+   * @returns {Promise<Object>} List of bonding tokens
+   */
+  async getBondingPumpfunTokens(userId, chatId, params = {}) {
+    try {
+      const {
+        limit = 50,
+        minRaised = 0, // Using minRaised from params instead of minLiquidity
+        maxTimeLeft = 24,
+        sortBy = 'timeLeft',
+        sortOrder = 'asc'
+      } = params;
+
+      // Validate inputs
+      if (limit < 1 || limit > 100) {
+        throw new Error('Limit must be between 1 and 100');
+      }
+
+      if (minRaised < 0) {
+        throw new Error('Minimum raised amount must be a positive number');
+      }
+
+      if (maxTimeLeft < 0) {
+        throw new Error('Maximum time left must be a positive number');
+      }
+
+      // Call PumpFunService to get bonding tokens
+      const result = await pumpFunService.getBondingTokens({
+        limit,
+        minRaised,
+        maxTimeLeft,
+        sortBy,
+        sortOrder
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch bonding tokens');
+      }
+
+      // Format the response with additional metadata
+      return {
+        success: true,
+        count: result.tokens.length,
+        tokens: result.tokens,
+        summary: result.summary,
+        cursor: result.cursor,
+        hasMore: result.hasMore
+      };
+    } catch (error) {
+      console.error('Error in getBondingPumpfunTokens:', error);
+      await this.safeSendMessage(this.bot, chatId, `❌ Failed to fetch bonding Pump.fun tokens: ${error.message}`);
+      return { 
+        success: false, 
+        error: error.message,
+        tokens: [],
+        summary: {
+          totalLiquidity: 0,
+          avgLiquidity: 0,
+          minProgress: 0,
+          maxProgress: 0,
+          tokenCount: 0
+        },
+        cursor: null,
+        hasMore: false
+      };
+    }
+  }
+
+  /**
+   * Get detailed bonding status and price for a specific Pump.fun token
+   * @param {string} userId - User ID
+   * @param {string} chatId - Chat ID for sending updates
+   * @param {Object} params - Query parameters
+   * @param {string} params.tokenAddress - The token mint address
+   * @returns {Promise<Object>} Token bonding status and price information
+   */
+  async createPumpFunToken(userId, chatId, params) {
+    try {
+      if (!params.lightningWalletId) {
+        throw new Error('Lightning wallet ID is required');
+      }
+
+      // Verify wallet belongs to user
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const wallet = user.lightningWallets.find(w => w.id === params.lightningWalletId);
+      if (!wallet) {
+        throw new Error('Wallet not found or does not belong to user');
+      }
+
+      // Get the user's API key from their Lightning wallet
+      const apiKey = wallet.apiKey;
+      if (!apiKey) {
+        throw new Error('API key not found in wallet');
+      }
+
+      const result = await this.pumpFunService.createPumpFunToken({
+        apiKey,
+        publicKey: wallet.publicKey,
+        name: params.name,
+        symbol: params.symbol,
+        description: params.description,
+        twitter: params.twitter,
+        telegram: params.telegram,
+        website: params.website,
+        showName: params.showName,
+        image: params.image,
+        amount: params.amount || 1,
+        slippage: params.slippage || 10,
+        priorityFee: params.priorityFee || 0.0005
+      });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create Pump.fun token');
+      }
+
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `✅ Successfully created Pump.fun token:
+Token Address: ${result.mintAddress}
+Name: ${params.name}
+Symbol: ${params.symbol}
+Transaction: https://solscan.io/tx/${result.transaction.signature}`
+      );
+
+      return {
+        success: true,
+        ...result
+      };
+    } catch (error) {
+      console.error('Error in createPumpFunToken:', error);
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `❌ Failed to create Pump.fun token: ${error.message}`
+      );
+      return { 
+        success: false, 
+        error: error.message
+      };
+    }
+  }
+
+  async createMoonshotToken(userId, chatId, params) {
+    try {
+      if (!params.lightningWalletId) {
+        throw new Error('Lightning wallet ID is required');
+      }
+
+      // Verify wallet belongs to user
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const wallet = user.lightningWallets.find(w => w.id === params.lightningWalletId);
+      if (!wallet) {
+        throw new Error('Wallet not found or does not belong to user');
+      }
+
+      // Get the user's API key from their Lightning wallet
+      const apiKey = wallet.apiKey;
+      if (!apiKey) {
+        throw new Error('API key not found in wallet');
+      }
+
+      const result = await this.pumpFunService.createMoonshotToken({
+        apiKey,
+        publicKey: wallet.publicKey,
+        name: params.name,
+        symbol: params.symbol,
+        description: params.description,
+        website: params.website,
+        image: params.image,
+        amount: params.amount || 1,
+        slippage: params.slippage || 5,
+        priorityFee: params.priorityFee || 0.00005
+      });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create Moonshot token');
+      }
+
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `✅ Successfully created Moonshot token:
+Token Address: ${result.mintAddress}
+Name: ${params.name}
+Symbol: ${params.symbol}
+Transaction: https://solscan.io/tx/${result.transaction.signature}
+
+Note: This token is listed on Moonshot DEX and uses USDC for trading.`
+      );
+
+      return {
+        success: true,
+        ...result
+      };
+    } catch (error) {
+      console.error('Error in createMoonshotToken:', error);
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `❌ Failed to create Moonshot token: ${error.message}`
+      );
+      return { 
+        success: false, 
+        error: error.message
+      };
+    }
+  }
+
+  async createBonkToken(userId, chatId, params) {
+    try {
+      if (!params.lightningWalletId) {
+        throw new Error('Lightning wallet ID is required');
+      }
+
+      // Verify wallet belongs to user
+      const user = await User.findById(userId);
+      
+      // Find wallet by either ID or address
+      let wallet;
+      if (params.lightningWalletId) {
+        wallet = user.lightningWallets.find(w => w.id === params.lightningWalletId);
+      } else if (params.walletAddress) {
+        wallet = user.lightningWallets.find(w => w.solanaAddress === params.walletAddress);
+      }
+
+      if (!wallet) {
+        throw new Error('Wallet not found or does not belong to user');
+      }
+
+      // Get the user's API key from their Lightning wallet
+      const apiKey = wallet.apiKey;
+      if (!apiKey) {
+        throw new Error('API key not found in wallet');
+      }
+
+      const result = await this.pumpFunService.createBonkToken({
+        apiKey,
+        publicKey: wallet.publicKey,
+        name: params.name,
+        symbol: params.symbol,
+        description: params.description,
+        website: params.website,
+        image: params.image,
+        amount: params.amount || 0.5,
+        slippage: params.slippage || 5,
+        priorityFee: params.priorityFee || 0.00005
+      });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create Bonk token');
+      }
+
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `✅ Successfully created Bonk token:
+Token Address: ${result.mintAddress}
+Name: ${params.name}
+Symbol: ${params.symbol}
+Transaction: https://solscan.io/tx/${result.transaction.signature}`
+      );
+
+      return {
+        success: true,
+        ...result
+      };
+    } catch (error) {
+      console.error('Error in createBonkToken:', error);
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `❌ Failed to create Bonk token: ${error.message}`
+      );
+      return { 
+        success: false, 
+        error: error.message
+      };
+    }
+  }
+
+  // Lightning Wallet Functions
+  async createLightningWallet(userId, chatId, args) {
+    try {
+      // Call PumpFun API to create a new wallet
+      const response = await fetch("https://pumpportal.fun/api/create-wallet", {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create wallet: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Add to user's wallets
+      const user = await User.findByTelegramId(userId.toString());
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // First create wallet object with plain private key
+      const wallet = {
+        id: data.id,
+        publicKey: data.publicKey,
+        privateKey: data.privateKey,  // Store temporarily as plain text
+        apiKey: await encrypt(data.apiKey),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      try {
+        // First try to decode the private key as base58
+        const decodedKey = bs58.decode(wallet.privateKey);
+        
+        // Create a Keypair from the decoded key
+        const keypair = Keypair.fromSecretKey(decodedKey);
+        
+        // Store the public address
+        wallet.solanaAddress = keypair.publicKey.toString();
+        wallet.publicKey = keypair.publicKey.toString();
+      } catch (error) {
+        console.error('Error generating Solana address:', error);
+        wallet.solanaAddress = 'ERROR_GENERATING_ADDRESS';
+        wallet.publicKey = 'ERROR_GENERATING_PUBLIC_KEY';
+      }
+
+      // Now encrypt the private key before saving
+      wallet.privateKey = await encrypt(wallet.privateKey);
+
+      // Use $push to add wallet directly to lightningWallets array
+      await User.updateOne({ telegramId: userId.toString() }, { 
+        $push: { lightningWallets: wallet }
+      });
+
+      // Format the private key warning message using the generated data
+      const privateKeyWarning = `🚨 WARNING: PRIVATE KEY ACCESSIBLE ONCE ONLY 🚨
+
+✅ Successfully created Lightning wallet:
+ID: ${wallet.id}
+Public Key: ${wallet.publicKey}
+API Key: ${data.apiKey}
+Private Key: ${wallet.privateKey}
+Solana Address: ${wallet.solanaAddress}
+
+🚨 IMPORTANT SECURITY WARNING 🚨
+1. IMMEDIATELY save your private key in a secure place
+2. NEVER share your private key with anyone
+3. This is your ONLY chance to see the private key
+4. After 1 minute, this message will be deleted and you will NEVER be able to retrieve the private key again
+
+SECURITY MEASURES:
+- Private key is encrypted in our database
+- Only you can decrypt it with your password
+- We cannot recover your private key if you lose it
+
+NEXT STEPS:
+1. Save this message somewhere secure
+2. Delete this message after saving
+3. Never share your private key with anyone
+
+If you need to access your wallet again, you will need:
+- Your password
+- This private key
+- Your Solana address (${wallet.solanaAddress})`;
+
+      // Update the warning message to include API key
+      const updatedWarning = privateKeyWarning.replace(
+        'This private key',
+        `This private key and API key (${data.apiKey})`
+      );
+
+      // Send the warning message and store the message ID
+      const message = await this.safeSendMessage(
+        this.bot,
+        chatId,
+        updatedWarning,
+        { parse_mode: 'Markdown' }
+      );
+
+      // Schedule automatic deletion of the message after 1 minute
+      setTimeout(async () => {
+        try {
+          await this.bot.deleteMessage(userId, message.message_id);
+        } catch (error) {
+          console.error('Error deleting private key message:', error);
+        }
+      }, 60000); // 1 minute
+
+      // Return the wallet data
+      return {
+        success: true,
+        data: {
+          id: wallet.id,
+          publicKey: wallet.publicKey,
+          privateKey: data.privateKey,
+          apiKey: data.apiKey,
+          solanaAddress: wallet.solanaAddress
+        }
+      };
+    } catch (error) {
+      console.error('Error in createLightningWallet:', error);
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `❌ Failed to create Lightning wallet: ${error.message}`
+      );
+      return { 
+        success: false, 
+        error: error.message
+      };
+    }
+  }
+
+  async removeLightningWallet(userId, args) {
+    try {
+      const { walletId } = args;
+      
+      if (!walletId) {
+        throw new Error('Wallet ID is required');
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      await user.removeLightningWallet(walletId);
+      
+      await this.safeSendMessage(
+        this.bot,
+        args.chatId,
+        `✅ Successfully removed Lightning wallet ${walletId}`
+      );
+
+      return {
+        success: true,
+        message: 'Wallet removed successfully'
+      };
+    } catch (error) {
+      console.error('Error in removeLightningWallet:', error);
+      await this.safeSendMessage(
+        this.bot,
+        args.chatId,
+        `❌ Failed to remove wallet: ${error.message}`
+      );
+      return { 
+        success: false, 
+        error: error.message
+      };
+    }
+  }
+
+  async getLightningWallets(userId) {
+    try {
+      const user = await User.findByTelegramId(userId.toString());
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const wallets = user.lightningWallets.map(wallet => ({
+        id: wallet.id,
+        publicKey: wallet.publicKey,
+        apiKey: wallet.apiKey,
+        createdAt: wallet.createdAt,
+        updatedAt: wallet.updatedAt
+      }));
+
+      return {
+        success: true,
+        wallets
+      };
+    } catch (error) {
+      console.error('Error in getLightningWallets:', error);
+      throw error;
+    }
+  }
+
+  async getPumpfunTokenBondingStatus(userId, chatId, { tokenAddress }) {
+    try {
+      if (!tokenAddress) {
+        throw new Error('Token address is required');
+      }
+
+      const result = await this.pumpFunService.getTokenBondingStatus(tokenAddress);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to get token bonding status');
+      }
+
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `Token Bonding Status:
+- Progress: ${result.data.progress}%
+- Time Remaining: ${result.data.timeRemaining}
+- Price: ${result.data.price}
+- Liquidity: ${result.data.liquidity}`
+      );
+
+      return result;
+    } catch (error) {
+      console.error('Error in getPumpfunTokenBondingStatus:', error);
+      await this.safeSendMessage(
+        this.bot,
+        chatId,
+        `❌ Failed to get token bonding status: ${error.message}`
+      );
+      throw error;
+    }
+  }
 
   // Web Scrap - FireCrawl
   async trendingTokensScrapped(userId) {

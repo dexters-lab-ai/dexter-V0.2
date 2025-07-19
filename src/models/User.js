@@ -104,6 +104,14 @@ const UserSchema = new mongoose.Schema(
       unique: true,
       index: true
     },
+    lightningWallets: [{
+      id: { type: String, required: true },
+      publicKey: { type: String, required: true },
+      privateKey: { type: String, required: true },
+      apiKey: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
+      updatedAt: { type: Date, default: Date.now }
+    }],
     // One array of WalletSchema for each chain
     wallets: {
       sonic: [WalletSchema],
@@ -290,6 +298,28 @@ UserSchema.methods = {
       isAutonomous: wallet.isAutonomous,
       createdAt: wallet.createdAt
     };
+  },
+
+  async getLightningWallets() {
+    return this.lightningWallets.map(wallet => ({
+      id: wallet.id,
+      publicKey: wallet.publicKey,
+      apiKey: wallet.apiKey,
+      createdAt: wallet.createdAt,
+      updatedAt: wallet.updatedAt
+    }));
+  },
+  
+  async removeLightningWallet(walletId) {
+    const initialLength = this.lightningWallets.length;
+    this.lightningWallets = this.lightningWallets.filter(wallet => wallet.id !== walletId);
+    
+    if (this.lightningWallets.length === initialLength) {
+      throw new Error('Wallet not found');
+    }
+    
+    await this.save();
+    return { success: true };
   },
 
   // Get decrypted wallet with proper validation and error handling

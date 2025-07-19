@@ -1,107 +1,150 @@
-# **README.md**
-
 ```plaintext
-                                                                                                    
-                     ▓█████████████████████████████████████████████████████████████████████████████████████████████   
-                     ▓█████████████████████████████████████████████████████████████████████████████████████████████   
-                     ▓████▒▒▒▒████████████████░░░░░░░░░░░░░░░░░░░░░░██████░▒████████████████░░░░░░░░░░▒▒▒▒▒▒▒░█████   
-                     ▓████░░░░░░████████████▒▒░░░░░      ░░░░░░   ░░░█████░░░░████████████░░░░░░░░░░░░░░░░░░░░█████   
-                     ▓████░░░░░░░░░░░▒▒▒▒▒▒░░░    ░      ░░░░░░   ░░░█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█████   
-                      █████░░░░░░░░░░░░░░░░░░░    ░ ░░   ░░░░░░   ░░░█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██████   
-                      █████▒░░░░░░░░░░░░░░░░░░    ░      ░░░░░░   ░░░██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█████    
-                       █████░░░░░░░░░░░░░░░░░░    ░ ░░   ░░░░░░   ░░███████▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██████    
-                        █████░░░░░░░░░░░░░░░░░    ░      ░░░░░░   ░▒█████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██████     
-                         ██████░░░░░░░░░░░░░░░      ░    ░░░░░░   ░███████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░██████      
-                          ██████░░░░░░░░░░░░░░       ░   ░░░░░░  ▓█████████████████████████████░░░░░░░░░███████       
-                           ▓██████░░░░░░░░░░░░       ░   ░░     ██████                    ███░░░░░░░░░███████         
-                     ▒       ████████░░░░░░░░░       ░  ░░░   ███████                   ███░░░░░░░▓█████████      █   
-                     ▓         █████████▓░░░░░       ░  ░░░▓███████                  ▒███████████████████▒       ██   
-                     ▓█░         ██████████████▓     ░▓██████████                  ███████████████████         ████   
-                      ███           ███████████████████████████    ▒             ███▓██████████▒              ███     
-                       ▓██              ▒██████████████████          █         ███                          ████      
-                         ███                                           █        ██                        ████        
-                           ███                                           ██     ██                      ▓███          
-                             ███                                           ██   ░█                    ████            
-                               ███                                           ███ ██                 ████              
-                                 ████                                          ████               ███    ░            
-                              ▓     ████                                          █            ████      █            
-                              █        ████                                                 ████         █            
-                              █           █████                                         █████            █            
-                              █               █████                                 ▓█████               █            
-                              █                 █ ██████                        ██████                   █            
-                             ▒█████████         █      ████████           ▒███████               █████████            
-                     ▓███████▓▓▓▓▓▓███          █     █      ░██████████████                      ██▓▓▓▓▓▓▓███████▓   
-                     ▓▓▓▓▓▓▓▓▓▓▓▓▓██            █    ███                                            ██▓▓▓▓▓▓▓▓▓▓▓▓▓   
-                     ▓██▓▓▓▓▓▓▓▓▓██             █    ███                                             ██▓▓▓▓▓▓▓▓▓███   
-                       ███▓▓▓▓▓▓██▓             █    ███                                            ░▓██▓▓▓▓▓▓███     
-                        ░██▓▓▓▓▓▓▓▓▓▓▓███       █    ███                                      ░███▓▓▓▓▓▓▓▓▓▓▓██       
-                  
-                  
-                                                      🔥 **DEXTER AI'!** 🔥
+{{ ... }}
+
+🔥 **KATZ! (O.P.E.R.A.T.O.R-TG)** 🔥
 ```
 
+# KATZ! (O.P.E.R.A.T.O.R-TG)
 
-# Dexter AI
+## 🤖 The Flagship Implementation of Dexter AI
 
----
+KATZ! is the premier implementation of the Dexter AI platform, a sophisticated autonomous agent that processes natural language inputs to perform complex tasks across multiple blockchains and platforms. Powered by a custom engine, KATZ! understands context, maintains conversation state, and executes multi-step workflows with ease.
 
-## **📖 Overview**
+![KATZ! Banner](assets/images/O.P.E.R.A.T.O.R-TG-logo.jpg)
 
----
+## 🏆 Competitive Edge
 
-Dexter AI is the next-generation autonomous AI agent engineered to transform natural language commands into precise, multi-step actions. Built as part of our CookieDAO hackathon journey, Dexter AI is designed not only to perform complex crypto trading and financial operations but also to serve as a versatile assistant for a wide range of tasks—from market analysis and trading execution to e-commerce and personal productivity. 🎯💡
+KATZ! stands out from traditional AI agents because it:
 
-Dexter AI is being developed as the core engine for a family of intelligent assistants, with plans for multiple specialized versions:
-- **KATZ! [O.P.E.R.A.T.O.R-TG] (Pioneering Version):** A multi-sector agent covering crypto, shopping, payments, and more. 🛒💰
-- **DeFi Trading Version:** Focused on executing and managing complex DeFi strategies across multiple platforms. 📊📉
-- **Autonomous Crypto Trading Version:** A self-evolving trading agent with dynamic strategy adaptation that will push toward early AGI capabilities. 🤖📈
+- ✅ Executes complex multi-step tasks from a single prompt (research, analytics, sentiment assessments, swaps, approvals, bridging, payments)
+- ✅ Analyzes and interprets data in a structured logic tree with dependency categorization
+- ✅ Integrates with both Web2 & Web3 services through a simple Telegram interface
+- ✅ Handles voice commands for full hands-free execution
+- ✅ Supports customization for adaptive use and growth
+- ✅ Maintains persistent user information and context awareness
 
----
+## 🌍 Core Capabilities
 
-## 🌟 Vision 
+### 🌐 Multi-Chain Support
+- **Ethereum** (Mainnet, Goerli)
+- **Solana** (Mainnet, Devnet)
+- **Polygon** (Mainnet, Mumbai)
+- **BSC** (Mainnet, Testnet)
+- **Avalanche** (C-Chain, Fuji)
+- **Arbitrum** (One, Nova)
+- **Optimism**
+- **Fantom**
 
-Dexter AI is not just an assistant—it is an autonomous AI-driven agent capable of executing complex, multi-layered commands across multiple domains. The long-term vision is to make Dexter AI a self-learning, context-aware agent that evolves dynamically based on market trends, user preferences, and real-time execution data. Future iterations will integrate additional AI models such as DeepSeek and self-referencing intelligence, allowing Dexter to refine trading strategies, analyze financial data at a deeper level, and provide predictive insights. 
+### 🔄 Key Features
+- Natural language understanding and processing
+- Multi-step task execution with context awareness
+- Cross-chain token swaps and transfers
+- Portfolio tracking and management
+- Advanced token analysis and research
+- Voice command support (TTS/STT)
+- Automated trading strategies
+- Price alerts and monitoring
+- Smart contract interactions
 
-## 🏆 Competetive Edge
-Dexter AI is more powerful and functional than traditional AI agents because it:
+## 🛠 Available Functions
 
-- ✅ Executes complex multi-step tasks from a single prompt; in one prompt it can process>> (research, analytics, sentiment assessments, swaps, approvals, bridging, payments)
-- ✅ Analyzes and interprets data in a structured logic tree, with dependency categorization as well as follow-up actions.
-- ✅ Integrates with both Web2 & Web3 services, do more than just crypto using one simple telegram interface. You can create tasks, update google calenders, send or have emails read out, make payments, shop, and more coming...
-- ✅ Handles voice commands for full hands-free execution 🎙️Talk to it, ask it its name, its features, a demo, then experiment ways to use its services. You can map any path to destination.
-- ✅ Supports customization for adaptive use and growth, all user information is database persistent and the AI model can reference all, including its own functionality/readmes.
+### 🔍 Token Operations
+- `approve_token` - Approve token spending
+- `revoke_token_approval` - Revoke token approvals
+- `analyze_token_by_symbol` - Get token information by symbol
+- `analyze_token_by_address` - Get token information by contract address
+- `fetch_tokenaddress_fromsymbol` - Find token address by symbol
 
-Currently, GitHub is private to maintain a competitive edge over projects like SENDAI, which are in early stages of building similar Iron Man-style AI assistants. Open-source release plans are post-product launch with an SDK version for developers who want to extend Dexter AI without running the full agent code locally.
----
+### 🔄 Trading & Swaps
+- `evm_token_swap` - Swap tokens on EVM chains
+- `execute_solana_swap` - Swap tokens on Solana via Jupiter
+- `execute_avalanche_swap` - Swap tokens on Avalanche
+- `ethereum_base_token_transfer` - Transfer tokens on EVM chains
+- `process_bridge_intent` - Bridge tokens between chains
 
-## 📖 Table of Contents 
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Architecture & Workflow](#architecture--workflow)
-- [Function Definitions](#function-definitions)
-- [Setup & Installation](#setup--installation)
-- [Usage Examples](#usage-examples)
-- [Development & Customization](#development--customization)
-- [Future Plans](#future-plans)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact & Support](#contact--support)
+### 📊 Market Data
+- `get_market_conditions` - Get current market conditions
+- `fetch_market_categories` - List market categories
+- `fetch_market_category_metrics` - Get metrics for market categories
+- `fetch_coins_by_category` - List coins by category
+- `fetch_trending_tokens_all_sources` - Get trending tokens across all sources
+- `fetch_trending_tokens_by_chain` - Get trending tokens by blockchain
 
----
+### 💰 Portfolio & Wallet Management
+- `get_portfolio` - View portfolio summary
+- `get_wallet_balances` - Check wallet token balances
+- `get_wallet_token_transactions` - View token transaction history
+- `create_price_alert` - Set up price alerts
+- `view_price_alerts` - View active price alerts
+- `getLightningWallets` - View all Lightning wallets
+- `removeLightningWallet` - Remove a Lightning wallet from your account
+
+### 🚀 Token Launch & Management
+- `createLightningWallet` - Create a new Lightning wallet for token operations
+- `removeLightningWallet` - Remove a wallet from your account
+- `getLightningWallets` - View all your Lightning wallets
+
+**Supported Launchpads:**
+
+#### 🚀 Pump.fun
+- Create viral meme tokens with built-in DEX support
+- Automatic liquidity management via bonding curve
+- Graduation to Raydium DEX at 50K liquidity
+- Real-time price and volume tracking
+
+#### 🐶 Bonk.fun
+- Meme tokens with native NFT integration
+- Perfect for community-driven projects
+- Active degens community
+- Built on Solana for fast, low-cost transactions
+
+#### 🌕 Moonshot
+- USDC-denominated stable launches
+- Fast deployment with stable value
+- Clean, simple interface
+- Ideal for serious projects
+
+#### 🔄 Token Management
+- Create and manage multiple tokens
+- Track token performance
+- Monitor liquidity and trading volume
+- Seamless cross-platform operations
+
+### 🎯 Trading Automation
+- `setup_flipper_mode` - Configure automated trading mode
+- `start_flipper_mode` - Start automated trading
+- `stop_flipper_mode` - Stop automated trading
+- `monitor_kol` - Monitor key opinion leader wallets
+- `get_kol_monitor_positions` - View KOL monitoring positions
+
+### 🔍 Research & Analysis
+- `search_token_by_twitterusername` - Research tokens by Twitter handle
+- `check_token_mindshare_on_market` - Analyze token market sentiment
+- `suggest_token_investments_dominating` - Get token investment suggestions
+- `search_twitter_by_address` - Search Twitter for token addresses
+- `get_token_market_sentiment_changes` - Track sentiment changes
+
+### 📧 Communication
+- `send_email` - Send emails
+- `search_emails` - Search email history
+- `read_email` - Read specific emails
+- `reply_email` - Reply to emails
+- `manage_calendar_event` - Manage calendar events
+
 
 ## 🌍 Overview 
 
-Dexter AI is designed to be an intelligent, natural language–driven agent that performs complex tasks with minimal user intervention. It converts everyday language into intricate sequences of function calls, processes multi-step tasks with error-resilient logic, and returns comprehensive results—all while continuously tracking context to inform follow-up actions. Whether you need to execute a crypto swap, monitor market sentiment, set up price alerts, or even manage your schedule, Dexter AI is built to handle it all. 
+O.P.E.R.A.T.O.R-TG is designed to be an intelligent, natural language–driven agent that performs complex tasks with minimal user intervention. It converts everyday language into intricate sequences of function calls, processes multi-step tasks with error-resilient logic, and returns comprehensive results—all while continuously tracking context to inform follow-up actions. Whether you need to execute a crypto swap, monitor market sentiment, set up price alerts, or even manage your schedule, O.P.E.R.A.T.O.R-TG is built to handle it all. 
 
-Dexter AI’s ability to manage dependencies and execute multiple actions in a structured, logical order makes it a powerful AI assistant capable of tackling real-world problems. By integrating seamlessly with multiple blockchain networks, API services, and external applications, Dexter AI extends beyond basic AI chatbots into a fully functional digital agent. 
+O.P.E.R.A.T.O.R-TG’s ability to manage dependencies and execute multiple actions in a structured, logical order makes it a powerful AI assistant capable of tackling real-world problems. By integrating seamlessly with multiple blockchain networks, API services, and external applications, O.P.E.R.A.T.O.R-TG extends beyond basic AI chatbots into a fully functional digital agent. 
 
 ---
 
-## 🔑 Key Features 
+## 🔑 Key Functions 
 
 ### **Multi-Stage Processing Pipeline**
 1. **processMessage**: Gathers conversation context, composes comprehensive instructions, and routes user requests to the right function. 
-2. **getFunctionResponse**: Uses recent context and execution results to determine if further function calls are needed. 
+2. **getFunctionResponse**: Uses recent context and execution results in a dynamic tree approach to determine if further function calls are needed or what hasnt been done yet regarding a task. 
 3. **generateAIResponse**: Produces a final, user-friendly output summarizing results and next steps. 
 
 ### **Advanced Context Management**
@@ -110,20 +153,69 @@ Dexter AI’s ability to manage dependencies and execute multiple actions in a s
 - Ensures that dependent tasks are executed in the correct order, preventing redundant actions and optimizing response time. 
 
 ### **Function Calling & Retry Logic**
-- Supports dynamic task trees with dependency resolution. 
+- Supports dynamic task trees with dependency resolution. Mnetioned above, this is what shows the "noodling" updates when tasks are running revealing what it is doing behind the scenes. 
 - Implements robust error handling and retry logic with user confirmation prompts. 
 - Automatically converts blockchain-specific units (e.g., lamports) into human-readable formats for clarity.
+
+### **Media Interactions**
+
+#### 🖼️ Image Processing
+- **AI Image Generation**: Create custom images using natural language prompts
+- **Image Editing**: Modify existing images with text-based instructions
+- **Image Variations**: Generate multiple variations of an existing image
+- **Image Analysis**: Get detailed descriptions of image contents
+- **Media Processing**: Handle various image formats and sizes with automatic optimization
+
+#### 🎙️ Voice Interaction
+O.P.E.R.A.T.O.R-TG supports full voice interaction for hands-free execution using Whisper AI for transcription and Google TTS.
+
+**Features**:
+- 🎤 Voice commands (e.g., "Buy 1 ETH worth of SOL")
+- 🔊 Spoken responses (e.g., "Your trade has been executed")
+- 🎧 Hands-free interaction
+
+**Technical Implementation**:
+```javascript
+const processedText = await this.voiceService.transcribeVoiceWhisp(fileUrl);
+const audioBuffer = await this.voiceService.synthesizeGoogle(responseText);
+```
 
 ### **Extensible & Modular Design**
 - Provides a comprehensive suite of functions on multiple networks (Solana, Ethereum, Avalanche, Base), market analysis, price alerts, limit orders, swaps, bridging, transfers, payments, staking(soon), wallet access, portfolio management, strategy discussion and saving, and more. 
 - Built to integrate with external services such as QuickNode, CoinGecko, DexScreener, Brave Search, and pretty much any service that is willing to offer a user case and an API for our users. 
-- Designed to scale from a monolithic prototype into an SDK and fully open-source project.
+
+#### Image Generation & Editing Examples
+
+```javascript
+// Generate a new image
+const response = await openAIService.createImage({
+  prompt: 'A futuristic city skyline at sunset',
+  n: 1,
+  size: '1024x1024'
+});
+
+// Edit an existing image
+const editedImage = await openAIService.createImageEdit({
+  image: imageBuffer,  // Original image buffer
+  mask: maskBuffer,    // Optional mask for selective editing
+  prompt: 'Add a flying car to the sky',
+  n: 1,
+  size: '1024x1024'
+});
+
+// Generate variations of an image
+const variations = await openAIService.createImageVariation({
+  image: imageBuffer,
+  n: 3,  // Generate 3 variations
+  size: '1024x1024'
+});
+```
 
 ###📜 **Function Definitions Insights**
 
-Dexter AI includes a large suite of executable functions across multiple domains.
+O.P.E.R.A.T.O.R-TG includes a large suite of executable functions across multiple domains, including advanced media processing capabilities. They look like this:
 
-### Trading & Portfolio Management
+### Trading & Portfolio Management example
 
 ```json
 {
@@ -151,7 +243,7 @@ Dexter AI includes a large suite of executable functions across multiple domains
 }
 ```
 
-### Market Analysis & Sentiment Tracking
+### Market Analysis & Sentiment Tracking example
 ```json
 {
   "name": "fetch_trending_tokens_all_sources",
@@ -161,33 +253,18 @@ Dexter AI includes a large suite of executable functions across multiple domains
 }
 ```
 
-###🎙️ Voice-Powered Execution
+### 🔬 Future Plans 
 
-Dexter AI supports full voice interaction for hands-free execution. Using Whisper AI for transcription and Google TTS, users can:
-
-🎤 Give voice commands (e.g., “Buy 1 ETH worth of SOL”)
-🔊 Receive spoken responses (e.g., “Your trade has been executed”)
-🎧 Interact entirely through speech
-Technical Implementation:
-```json
-const processedText = await this.voiceService.transcribeVoiceWhisp(fileUrl);
-const audioBuffer = await this.voiceService.synthesizeGoogle(responseText);
-```
-
----
-
-## 🔬 Future Plans 
-
-- **SDK Release & Open Sourcing** 
-- **Deep AI Integration for Autonomous Referencing and Self Check Optimization** 
+- **Open Sourcing** 
+- **Autonomous Referencing** 
 - **Expanded Integrations: Shopify, Amazon, Travel, Liquid Staking** 
 - **Advanced KOL Monitoring & Sentiment-Based Trading** 
-- **AI-Powered Self Code Mode**: Allow Dexter to modify and optimize its own logic on demand. 
+- **O.P.E.R.A.T.O.R-WebApp Integration**: Allow O.P.E.R.A.T.O.R-TG to send and receive commands to/from your localhost Agent on PC. 
 - **Improved Trading Execution Strategies**: Leverage machine learning for smarter, data-driven trading decisions. 
 
 ---
 
-Dexter AI is more than just an assistant—it’s your intelligent, versatile partner for navigating the complexities of crypto trading and beyond. 
+KATZ! is more than just an assistant—it’s your intelligent, versatile partner for navigating the complexities of crypto trading and beyond. 
 
 ---
 
@@ -243,51 +320,31 @@ Dexter AI is more than just an assistant—it’s your intelligent, versatile pa
 ---
 
 ### 🪱 Wormhole Bridging Service
-Dexter AI integrates **Wormhole** to facilitate cross-chain bridging between **Solana, Ethereum, and Avalanche**.  
+O.P.E.R.A.T.O.R-TG integrates **Wormhole** to facilitate cross-chain bridging between **Solana, Ethereum, and Avalanche**.  
 - Users can **bridge tokens seamlessly** between these chains, unlocking arbitrage opportunities and cross-ecosystem transfers.  
 - The agent **automates bridging decisions** based on **real-time market conditions**, fee structures, and token availability.  
 - This integration enhances **DeFi accessibility**, allowing users to interact with multiple blockchains effortlessly.  
 
 ---
 
-### 💰 Solana Pay for Payments
-Dexter AI features full integration with **Solana Pay**, enabling instant, low-cost crypto payments.  
+### 💰 Solana Pay for Payments [WIP]
+O.P.E.R.A.T.O.R-TG features full integration with **Solana Pay**, enabling instant, low-cost crypto payments.  
 - Users can generate **QR codes** for seamless transactions.  
 - Payments are verified in **real-time**, ensuring secure and efficient transfers.  
 - Invoice generation and **payment history tracking** provide a smooth experience for crypto commerce.  
 
 ---
 
-### 🛒 Shopping & E-Commerce
+### 🛒 Shopping & E-Commerce [WIP]
 #### 🛍️ Shopify Integration
 - Direct **product search and purchase** from Shopify stores via API access.  
-- Dexter AI will source products, **track order status**, and manage cart-based transactions.  
-- Future plans include **aggregating Shopify-listed products** into a **curated shopping experience** within Dexter AI.  
+- O.P.E.R.A.T.O.R-TG will source products, **track order status**, and manage cart-based transactions.  
+- Future plans include **aggregating Shopify-listed products** into a **curated shopping experience** within O.P.E.R.A.T.O.R-TG.  
 
-#### 📦 Amazon Purchases via Crypto
-- While **Amazon does not natively accept crypto**, Dexter AI **integrates Bitrefill**, allowing users to **buy Amazon gift cards with crypto**.  
+#### 📦 Amazon Purchases via Crypto [WIP]
+- While **Amazon does not natively accept crypto**, O.P.E.R.A.T.O.R-TG **integrates Bitrefill**, allowing users to **buy Amazon gift cards with crypto**.  
 - Users can purchase **gift cards** in various denominations, apply them instantly, and receive real-time confirmation.  
 - This extends to **other e-commerce platforms**, creating a **crypto-to-fiat bridge** for mainstream purchases.  
-
----
-
-### 🧠 AI Model Customization & Self-Improvement
-#### 🔀 DeepSeek AI Integration
-- Dexter AI supports **custom LLM selection**, allowing users to **switch between OpenAI and DeepSeek** (a powerful Chinese AI model).  
-- Users can **optimize for cost, performance, or language support**, selecting the best AI model for their needs.  
-
-#### 📊 Self-Assessment & Performance Optimization
-- **Dexter AI uses DeepSeek as a self-reference model**, periodically reviewing its own **execution history**.  
-- By analyzing past actions and **success rates**, Dexter AI **improves its decision-making dynamically**.  
-- A feedback loop with **DeepSeek detects inefficiencies, errors, or biases**, continuously refining function execution.  
-
-#### 📜 Persistent Instruction Document for Self-Learning
-- **MongoDB-based long-term memory** allows Dexter AI to **update its own instructions, behavior, and habits** over time.  
-- **Examples of self-learning adjustments**:
-  - **Refining trade execution strategies** based on past success rates.  
-  - **Adapting response tone and interaction styles** to match user preferences.  
-  - **Optimizing transaction prioritization** for bridging, swaps, and payments. 
-
 ---
 
 🛠️ Tech Stack
@@ -307,7 +364,7 @@ Dexter AI features full integration with **Solana Pay**, enabling instant, low-c
 
 📦 Dependencies
 
-Dexter AI relies on a robust suite of dependencies to handle blockchain interactions, AI-based processing, real-time data retrieval, and automation.
+O.P.E.R.A.T.O.R-TG relies on a robust suite of dependencies to handle blockchain interactions, AI-based processing, real-time data retrieval, and automation.
 
 🔗 Core Dependencies
 
@@ -381,14 +438,14 @@ Dexter AI relies on a robust suite of dependencies to handle blockchain interact
 
 📜 Installation & Setup
 
-Dexter AI requires Node.js >= 18.0.0. Follow these steps to install and configure your environment.
+O.P.E.R.A.T.O.R-TG requires Node.js >= 18.0.0. Follow these steps to install and configure your environment.
 
 ```sh
 # Clone the repo
-git clone https://github.com/private-dexter-ai-repo
+git clone https://github.com/dexters-lab-ai/dexter-V0.2.git
 
 # Navigate to the directory
-cd dexter-ai
+cd dexter-V0.2
 
 # Install dependencies
 npm install
@@ -466,49 +523,10 @@ We'd love your contributions!
 ---
 
 ## **💻 Code Access**
-Currently, GitHub is private to maintain a competitive edge over projects like SENDAI, which are in early stages of building similar Iron Man-style AI assistants. Open-source release plans are post-product launch with an SDK version for developers who want to extend Dexter AI without running the full agent code locally.
+Currently, GitHub is private to maintain a competitive edge over projects like SENDAI, which are in early stages of building similar Iron Man-style AI assistants. Open-source release plans are post-product launch with an SDK version for developers who want to extend O.P.E.R.A.T.O.R-TG without running the full agent code locally.
 ---
 
 ## **📜 License**
 
 **MIT License**  
 Latest repo is private. Feel free to fork the public repos, improve, or remix—just give credit where it's due. ❤️
-
----
-
-**Crafted with 🤖, 🧠, and a dash of sass at Dexter's AI Lab.**
-```plaintext
-
-
-▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒████            ░█████░                                              
-▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒████                                                                    
-▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█████                                                                        
-█████▒▒▒▒▒▒▒▒▒▒████████                                      ███████░                               
-    █████████████                                          ████████████                             
-              █████████▓                                ░█████████                                  
-              ██████████████▓                          ███████▓                              ░██████
-            ████      ▒█████████                     ███████                         ▒██████████████
-           ██ ██          ▒██████         █         █████                    ███████████████████████
-           ▒  ██              ██          █        ████              ██████████████████████████▓████
-             ▓██                          ██      ███        ██████████████████████████▒        ████
-             ███                           ██    ███▒██████████████████████████                ▓████
-             ██▓                            ███████████████████████████████                    █████
-             ██                     ███████████████████████████████████████                   ██████
-             ██             ██████████████████████████▒ ░█████████████████                    ██████
-             ██    ▒██████████████████████████████        █████████████▒                     ███████
-           ▓██████████████████████████  ███████████                                         ████████
-   ███████████████████████████          ████████████                                      █████████ 
-████████████████████████                ██████████████                                   █████████  
-███████████████████████                 ████████████████                               ██████████   
-█████ ░███████████████                 ░██████ ███████████                          ███████████     
-██      ░█████████░                    ██▒      ██████████████                   ████████████       
-███                               ██▒              ███████████████████████████████████████▒         
-████                        ███░                      █████████████████████████████████▒            
-█████░                   ███                              ░████████████████████████                 
-███████▒                      ░██▓                                 ▓███████░                        
-██████████                     ████████                                                             
-██████████████▒            ████████████ █                                                           
-  ▒██████████████████████████████████   █                                                           
-
-
-```

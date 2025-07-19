@@ -4,8 +4,10 @@ import { db } from '../database.js';
 export class RateLimiter extends EventEmitter {
   constructor(options = {}) {
     super();
-    this.windowMs = options.windowMs || 300000; // Default window: 1 minute
-    this.max = options.max || 5000; // Default max requests per window
+    // More reasonable defaults:
+    // 100 requests per hour
+    this.windowMs = options.windowMs || 3600000; // 1 hour
+    this.max = options.max || 100; // 100 requests per hour
     this.collection = null;
     this.logsCollection = null;
     this.isInitialized = false;

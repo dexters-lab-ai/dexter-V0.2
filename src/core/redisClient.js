@@ -11,6 +11,7 @@ class RedisClient {
     this.initializing = false;
     this.connected = false;
     this.connectPromise = null;
+    this.connectionAttempts = 0;
 
     const redisHost = process.env.REDIS_HOST || 'redis';
     const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
@@ -91,6 +92,20 @@ class RedisClient {
   }
 
   async initialize() {
+    // Force close any existing connection first to prevent "max connections" error
+    // This is especially important during Docker builds/updates
+    if (this.client && this.client.status !== 'end') {
+      console.log('🔄 Force closing existing Redis connection before initializing new one');
+      try {
+        await this.close();
+        // Short delay to ensure connection fully closes
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (closeError) {
+        console.warn('⚠️ Error while closing existing Redis connection:', closeError.message);
+        // Continue anyway, as we'll try to create a new connection
+      }
+    }
+
     if (this.initialized) {
       return this.client;
     }
@@ -109,6 +124,7 @@ class RedisClient {
     }
 
     this.initializing = true;
+    this.connectionAttempts++;
     
     try {
       // ioredis connects automatically, just wait for ready event
@@ -126,7 +142,15 @@ class RedisClient {
         const onError = (err) => {
           clearTimeout(timeout);
           this.client.off('ready', onReady);
-          reject(err);
+          
+          // Special handling for max connections error
+          if (err.message && err.message.includes('max number of clients reached')) {
+            console.error('❌ Redis max connections reached. Attempting to recover...');
+            // We'll handle this specially in the catch block
+            reject(new Error('MAX_CONNECTIONS_ERROR'));
+          } else {
+            reject(err);
+          }
         };
 
         if (this.client.status === 'ready') {
@@ -137,9 +161,29 @@ class RedisClient {
         this.client.once('error', onError);
       });
 
+      // Reset connection attempts on successful connection
+      this.connectionAttempts = 0;
       return this.client;
     } catch (error) {
       this.initializing = false;
+      
+      // Special handling for max connections error
+      if (error.message === 'MAX_CONNECTIONS_ERROR') {
+        console.warn('⚠️ Detected Redis max connections error, attempting recovery...');
+        
+        // Force disconnect any Redis clients in the process that might be using the same config
+        // This helps when Docker is rebuilding and connections aren't properly closed
+        if (this.connectionAttempts < 3) {
+          console.log(`🔄 Connection recovery attempt ${this.connectionAttempts + 1}/3`);
+          
+          // Allow any existing connections to fully close before retrying
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Try to initialize again
+          return this.initialize();
+        }
+      }
+      
       console.error('❌ Failed to connect to Redis:', error);
       throw error;
     }
@@ -233,9 +277,20 @@ class RedisClient {
   async close() {
     try {
       if (this.client) {
-        await this.client.quit();
+        this.initializing = false;
+        this.initialized = false;
         this.connected = false;
         this.connectPromise = null;
+        
+        try {
+          // First try a graceful quit
+          await this.client.quit();
+        } catch (quitError) {
+          console.warn('⚠️ Error during graceful Redis quit, forcing disconnect:', quitError.message);
+          // If graceful quit fails, force disconnect
+          this.client.disconnect();
+        }
+        
         console.log('🔌 Redis client connection closed');
       }
     } catch (error) {
