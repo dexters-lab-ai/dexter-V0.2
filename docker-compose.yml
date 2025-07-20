@@ -28,6 +28,8 @@ services:
 
       # Performance
       - NODE_OPTIONS=--max_old_space_size=4096
+      # API Credentials
+      - GOOGLE_API_KEY_FILE=/usr/src/app/config/katz-speech-to-text-key.json
     working_dir: /usr/src/app
     tty: true  # Keeps container running for debugging
     depends_on:

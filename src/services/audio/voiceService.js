@@ -8,6 +8,7 @@ import path from "path";
 import os from "os";
 import OpenAI from "openai";
 import textToSpeech from "@google-cloud/text-to-speech";
+import fs from "fs";
 import { aiMetricsService } from "../../services/aiMetricsService.js";
 
 const openai = new OpenAI();
@@ -18,14 +19,87 @@ export class VoiceService {
     this.elevenLabs = new ElevenLabsClient({
       apiKey: config.elevenLabsApiKey,
     });
-    this.speechClient = new SpeechClient({
-      keyFilename: config.googleApiKeyFile, 
-    });
-    this.ttsClient = new textToSpeech.TextToSpeechClient({
-      keyFilename: config.googleApiKeyFile, 
-    });
+    
+    // Initialize Google clients safely with fallbacks for path resolution
+    this.initGoogleClients();
+    
     this.defaultModel = "eleven_multilingual_v2"; // Default model for ElevenLabs multilingual support
     this.defaultVoice = "N2lVS1w4EtoT3dr4eOWO"; // Default ElevenLabs voice
+  }
+  
+  /**
+   * Safely initialize Google API clients with path resolution and fallbacks
+   */
+  initGoogleClients() {
+    try {
+      // Get the key file path from config
+      const keyFilePath = config.googleApiKeyFile;
+      console.log(`🔑 Initializing Google clients with key file path: ${keyFilePath}`);
+      
+      // Check if file exists at the configured path
+      let finalKeyPath = keyFilePath;
+      
+      // Helper to check if a file exists
+      const fileExists = (path) => {
+        try {
+          return fs.existsSync(path);
+        } catch (err) {
+          return false;
+        }
+      };
+      
+      // Try different path variations to find the file
+      if (!fileExists(finalKeyPath)) {
+        console.log(`⚠️ Key file not found at: ${finalKeyPath}, trying alternatives...`);
+        
+        // Try absolute path if relative was provided
+        if (!finalKeyPath.startsWith('/')) {
+          const absolutePath = `/usr/src/app/${keyFilePath}`;
+          if (fileExists(absolutePath)) {
+            console.log(`✅ Found key file at absolute path: ${absolutePath}`);
+            finalKeyPath = absolutePath;
+          }
+        }
+        
+        // Check backup location
+        if (!fileExists(finalKeyPath)) {
+          const backupPath = '/usr/src/app/katz-speech-to-text-key.json';
+          if (fileExists(backupPath)) {
+            console.log(`✅ Found key file at backup path: ${backupPath}`);
+            finalKeyPath = backupPath;
+          }
+        }
+        
+        // Still not found - try to create it
+        if (!fileExists(finalKeyPath)) {
+          console.log(`⚠️ Key file not found anywhere, attempting to create it at: ${finalKeyPath}`);
+          this.createGoogleTTSKeyFile(finalKeyPath);
+        }
+      }
+      
+      // Initialize clients with the resolved path
+      console.log(`🔄 Initializing Google clients with resolved key path: ${finalKeyPath}`);
+      
+      try {
+        this.speechClient = new SpeechClient({ keyFilename: finalKeyPath });
+        console.log('✅ Speech client initialized successfully');
+      } catch (error) {
+        console.error('❌ Failed to initialize Speech client:', error.message);
+        this.speechClient = null;
+      }
+      
+      try {
+        this.ttsClient = new textToSpeech.TextToSpeechClient({ keyFilename: finalKeyPath });
+        console.log('✅ TTS client initialized successfully');
+      } catch (error) {
+        console.error('❌ Failed to initialize TTS client:', error.message);
+        this.ttsClient = null;
+      }
+    } catch (error) {
+      console.error('❌ Error initializing Google clients:', error.message);
+      this.speechClient = null;
+      this.ttsClient = null;
+    }
   }
 
   // Exponential Backoff Retry Helper
@@ -120,6 +194,42 @@ export class VoiceService {
    * @param {string} chatId - Chat ID (for logging if needed)
    * @returns {Promise<Buffer>} - Generated audio buffer
    */
+  /**
+   * Create Google TTS key file at the specified path
+   * @param {string} filePath - Path where the key file should be created
+   */
+  createGoogleTTSKeyFile(filePath) {
+    try {
+      // Ensure the directory exists
+      const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+      if (!fs.existsSync(dir)) {
+        console.log(`📁 Creating directory: ${dir}`);
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      // Create the key file with placeholder content
+      const keyFileContent = JSON.stringify({
+        "type": "service_account",
+        "project_id": "katz-speech-to-text",
+        "private_key_id": "...",
+        "private_key": "...",
+        "client_email": "...",
+        "client_id": "...",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "..."
+      }, null, 2);
+
+      fs.writeFileSync(filePath, keyFileContent, { mode: 0o600 });
+      console.log(`✅ Created Google TTS key file at: ${filePath}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Failed to create key file at ${filePath}:`, error.message);
+      return false;
+    }
+  }
+
   async synthesizeGoogle(text, chatId) {
     const languageCode = "en-US";
     const voiceName = "en-US-Neural2-J";
@@ -130,11 +240,13 @@ export class VoiceService {
       
       // Check if TTS client is available
       if (!this.ttsClient) {
-        console.error("❌ Google TTS client not initialized. Attempting to reinitialize...");
-        this.ttsClient = this.initializeGoogleTTSClient();
+        console.log("❌ Google TTS client not initialized. Attempting to reinitialize...");
+        
+        // Try to reinitialize with proper path handling
+        this.initGoogleClients();
         
         if (!this.ttsClient) {
-          throw new Error("Google TTS client unavailable. Check credentials configuration.");
+          throw new Error("Google TTS client unavailable after reinitialization.");
         }
       }
       
