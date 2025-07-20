@@ -281,7 +281,7 @@ export class VoiceService {
           
           // Fall back to ElevenLabs TTS
           console.log("🔄 Falling back to ElevenLabs TTS");
-          return await this.synthesizeElevenLabs(text, chatId);
+          return await this.synthesizeSpeech(text);
         }
         
         // Rethrow other API errors
