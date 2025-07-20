@@ -8,7 +8,6 @@ import path from "path";
 import os from "os";
 import OpenAI from "openai";
 import textToSpeech from "@google-cloud/text-to-speech";
-import fs from "fs";
 import { aiMetricsService } from "../../services/aiMetricsService.js";
 
 const openai = new OpenAI();
