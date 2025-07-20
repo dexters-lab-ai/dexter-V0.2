@@ -60,8 +60,16 @@ COPY --from=builder /prod_deps/node_modules/ ./node_modules/
 # Create directory for Google TTS credential file
 RUN mkdir -p /usr/src/app/config
 
-# Create a properly formatted Google TTS key file with proper newline handling
-RUN printf '{\n  "type": "service_account",\n  "project_id": "katz-446913",\n  "private_key_id": "b94403913665f62ee1dc9097c537836189568e5a",\n  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC0R3aXJuhoNtg6\ntsBLcYgc9qkPM2WCcedqT0LPonv66gSOFq3WaI4AMvCGmKeI97qop800iY0MQhTY\npCd2CQ9ng1VSUNVP+9wsdPGRM+UwM4G+CAOKBXphOcGks942kSzAcLz7H1TPJlek\nCG328wsQCnLUSkLwTbHxCgdyJjySpRM/wgCeDgoI6VafsOXG5W3waRoNwxI1kpHe\nYF1BKeipdJLB7vE+dWFhwe86mkPBya+PijWnlu1MsBrjC4x+Bb0oZhD0XgdLrind\nxvhjInPW+gKXzV9VOyZCU1rYj/4Umxpbr3TalXUSG5DQvCSqoFzKyh/L/pSiTdzs\nhevjQkLLAgMBAAECggEAQD6zYVxJOFJLLmlQD9Kuufug9bzQMPNcj8MdQRdbbWiW\nJPiqDJ2H9UQx+RVPpvz5dP8Pnuhh7ntiKG4fbe3+olnoPwR1cCKGLQWjzKYcx9ej\nJdB/SmF3YkyN2J8M0o9bzlyezDM3Kvc0Bk3GulmUmKvQjhzEzBQ0FH0JeEFuFqfJ\nlrM9SxmOc5HRH5qt3he11JwGiBHK3CV6Y8twwb+QG6uXGa2h/tCcmvVmm8n+EGvi\nlC8vcElr9BAdqeMr8/fk2rlrbyiwm9ONItybEhDy6gsrYmn+X31pYtbnkx7oK0mx\n2+cftpBDIJs54mqUB3HTxPIz7CynzuXPNPRD2haR+QKBgQDpZO1b45SKPKGqgnuI\nr+DKGxdY98pieIDA4aCGXIdyMM+S2GsSf867DYWOha8qWRlVRXaYuSbBz4+bPU4i\nWg4lTnoLcQ4F0OEp0BosBYpPQq08/kjLPg0bU1FOI2GGOYN9+4r1hOwz8DVuVD+w\npx36y0fl9kZ3GyrwyzUOJgegZwKBgQDFvYh5S9VZM7fln4dnRoHDc/aOGqBcixfy\n4zCJdfSTOFaTDZSfWdVtf+qW860G/VAihIvn6YHTaOnkhhXq4PwROre+308Wa8Vq\nWeFkILGB50leg4DoprsSTsuRU9+LRB0Lx3an+3uz7lgl9DX3q0XXat/bvUTvSYnT\nUQOaOZc7/QKBgQCJI/no7ZABrmDcXTGTfq0adNLCP0/XjrExJSL68HHSImZGBg7c\nXuctuGNK/LiRrKsbFOb8FId2iKz8bgh0XPBE8Zj7EiJIPpWfyR0n0tWTfz1mQpCp\nhDuVW97BiD6s7SyboWvkmodkeXgb7TtDZN9T15DWymBbakZQGUeCmcwPbwKBgB3N\nG8VUFXpVHhEAQvLgoGvpjS4Le0GXQOu9K7J70Xlik0GkWVLOwii3j45ieSBFiw84\ntLEl8wf+lsl3H9R/Rd3+4HRmyU+SvHTzyNFDUB1I0zjoTsRBZI40y99CKb2ebVY6\nIHrent0WPbiynnOOH3+Avu4qDzqU9a2gVw+mQFGtAoGAWLvNMKwmEpaOSDXpIpdy\n+z88PtAGHv2G9B9ZYD7xu1n6uQEHAon+PNH38O/1rFOpSuxz8YgGDztTpSUYdnFc\nmGo1WtQEdVuU7skyCmUdHf5vRgMAEpxNjvudHpOHWEPee7LO9fBDzttrR+FifrUo\nUy4zrNle8UQ6dFZVol6mz2Y=\n-----END PRIVATE KEY-----\n",\n  "client_email": "katzvoicetranscripter@katz-446913.iam.gserviceaccount.com",\n  "client_id": "103643753675784733416",\n  "auth_uri": "https://accounts.google.com/o/oauth2/auth",\n  "token_uri": "https://oauth2.googleapis.com/token",\n  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",\n  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/katzvoicetranscripter%%40katz-446913.iam.gserviceaccount.com",\n  "universe_domain": "googleapis.com"\n}' > /usr/src/app/config/katz-speech-to-text-key.json
+# Add the local credentials file during build
+# NOTE: This requires the file to be present in the build context
+# If building on Digital Ocean, need to ensure this file is included in the build context
+COPY config/katz-speech-to-text-key.json /usr/src/app/config/
+
+# Fallback: If file copy fails, create a minimum file that will allow the app to start and fall back to ElevenLabs
+RUN if [ ! -f /usr/src/app/config/katz-speech-to-text-key.json ]; then \
+    echo '{"type":"service_account","project_id":"katz-446913","client_email":"fallback@example.com"}' > /usr/src/app/config/katz-speech-to-text-key.json; \
+    echo "⚠️ Using fallback credentials file"; \
+fi
 
 # Verify the key file was created successfully and set proper permissions
 RUN ls -la /usr/src/app/config/katz-speech-to-text-key.json && \
