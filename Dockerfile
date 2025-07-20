@@ -73,6 +73,11 @@ RUN mkdir -p /usr/src/app/config && cat <<EOF > /usr/src/app/config/katz-speech-
 }
 EOF
 
+# Verify the key file was created successfully and set proper permissions
+RUN ls -la /usr/src/app/config/katz-speech-to-text-key.json && \
+    chmod 600 /usr/src/app/config/katz-speech-to-text-key.json && \
+    echo "✅ Google TTS key file created and secured successfully"
+
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
     chown -R appuser:appgroup /usr/src/app

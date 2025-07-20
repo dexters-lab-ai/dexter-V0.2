@@ -124,8 +124,20 @@ export class VoiceService {
     const languageCode = "en-US";
     const voiceName = "en-US-Neural2-J";
     const start = Date.now();
+    
     try {
       console.log("Google TTS Input Text:", text);
+      
+      // Check if TTS client is available
+      if (!this.ttsClient) {
+        console.error("❌ Google TTS client not initialized. Attempting to reinitialize...");
+        this.ttsClient = this.initializeGoogleTTSClient();
+        
+        if (!this.ttsClient) {
+          throw new Error("Google TTS client unavailable. Check credentials configuration.");
+        }
+      }
+      
       const request = {
         input: { text },
         voice: { languageCode, ssmlGender: 'MALE', name: voiceName },
@@ -137,6 +149,7 @@ export class VoiceService {
           sampleRateHertz: 48000,
         },
       };
+      
       const [response] = await this.ttsClient.synthesizeSpeech(request);
       if (response.audioContent) {
         console.log("✅ Google TTS succeeded");
@@ -147,6 +160,34 @@ export class VoiceService {
       }
     } catch (error) {
       console.error("❌ Google TTS Error:", error.message);
+      console.error("❌ Stack trace:", error.stack);
+      
+      // Provide more detailed error information
+      if (error.message.includes('ENOENT')) {
+        console.error("❌ This appears to be a credentials file issue. Check:");
+        console.error("   - GOOGLE_API_KEY_FILE environment variable is set");
+        console.error("   - The credentials file exists and is readable");
+        console.error("   - The file contains valid JSON service account credentials");
+        console.error(`   - Current GOOGLE_API_KEY_FILE value: ${config.googleApiKeyFile}`);
+        
+        // Try to diagnose the file system issue
+        try {
+          const keyFile = config.googleApiKeyFile;
+          if (keyFile) {
+            const dir = path.dirname(keyFile);
+            console.error(`   - Directory exists: ${fs.existsSync(dir)}`);
+            console.error(`   - File exists: ${fs.existsSync(keyFile)}`);
+            if (fs.existsSync(keyFile)) {
+              const stats = fs.statSync(keyFile);
+              console.error(`   - File size: ${stats.size} bytes`);
+              console.error(`   - File permissions: ${stats.mode.toString(8)}`);
+            }
+          }
+        } catch (diagError) {
+          console.error(`   - Error during file system diagnosis: ${diagError.message}`);
+        }
+      }
+      
       throw new Error("Failed to synthesize and send speech.");
     } finally {
       const duration = Date.now() - start;
