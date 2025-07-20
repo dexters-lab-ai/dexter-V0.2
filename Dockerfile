@@ -87,6 +87,7 @@ ENV PORT=3000
 ENV NODE_OPTIONS=--max_old_space_size=4096
 ENV BASE_URL=http://localhost:3000
 ENV GOOGLE_CLIENT_REDIRECT=http://localhost:3000
+ENV GOOGLE_API_KEY_FILE=/usr/src/app/config/katz-speech-to-text-key.json
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
