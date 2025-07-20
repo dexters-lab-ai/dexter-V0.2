@@ -19,13 +19,22 @@ export class VoiceService {
       apiKey: config.elevenLabsApiKey,
     });
     
-    // Initialize Google clients with flexible configuration handling
+    // Initialize Google clients with the key file from config
     try {
-      const googleCredentials = this.resolveGoogleCredentials();
-      console.log(`✅ Using Google credentials from: ${googleCredentials.source}`);
+      // For handling both local development and Docker paths
+      const keyFilePath = config.googleApiKeyFile;
       
-      this.speechClient = new SpeechClient(googleCredentials.config);
-      this.ttsClient = new textToSpeech.TextToSpeechClient(googleCredentials.config);
+      console.log(`✅ Attempting to use Google credentials from: ${keyFilePath}`);
+      
+      // Simple initialization without additional complexity
+      this.speechClient = new SpeechClient({
+        keyFilename: keyFilePath
+      });
+      this.ttsClient = new textToSpeech.TextToSpeechClient({
+        keyFilename: keyFilePath
+      });
+      
+      console.log(`✅ Successfully initialized Google clients with: ${keyFilePath}`);
     } catch (error) {
       console.error("❌ Failed to initialize Google clients:", error.message);
       // Still create the services, they'll throw more specific errors when used
@@ -35,57 +44,6 @@ export class VoiceService {
     
     this.defaultModel = "eleven_multilingual_v2"; // Default model for ElevenLabs multilingual support
     this.defaultVoice = "N2lVS1w4EtoT3dr4eOWO"; // Default ElevenLabs voice
-  }
-  
-  /**
-   * Resolve Google credentials using multiple fallback methods
-   * @returns {Object} Object with config and source properties
-   */
-  resolveGoogleCredentials() {
-    // Try environment variable path first
-    if (config.googleApiKeyFile) {
-      const keyPath = config.googleApiKeyFile;
-      if (fs.existsSync(keyPath)) {
-        return {
-          config: { keyFilename: keyPath },
-          source: `environment variable (${keyPath})`
-        };
-      }
-      console.warn(`⚠️ Key file specified in environment variable not found: ${keyPath}`);
-    }
-    
-    // Try relative path to config directory (for both dev and prod)
-    const possiblePaths = [
-      path.join(process.cwd(), 'config/katz-speech-to-text-key.json'),
-      './config/katz-speech-to-text-key.json',
-      '../config/katz-speech-to-text-key.json',
-      '/usr/src/app/config/katz-speech-to-text-key.json'
-    ];
-    
-    for (const keyPath of possiblePaths) {
-      if (fs.existsSync(keyPath)) {
-        return {
-          config: { keyFilename: keyPath },
-          source: `found file (${keyPath})`
-        };
-      }
-    }
-    
-    // If we still haven't found it and we're in a docker container, 
-    // try to use credentials from environment variable directly
-    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-      try {
-        const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-        return {
-          config: { credentials },
-          source: 'GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable'
-        };
-      } catch (error) {
-        console.warn('⚠️ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:', error.message);
-      }
-    }
-    
-    throw new Error('Could not resolve Google credentials from any source');
   }
 
   // Exponential Backoff Retry Helper

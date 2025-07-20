@@ -60,35 +60,16 @@ COPY --from=builder /prod_deps/node_modules/ ./node_modules/
 # Copy the config directory including the key file
 COPY --from=builder /usr/src/app/config/ ./config/
 
-# Create a fallback speech-to-text key file if it doesn't exist
-# This is used as a last resort if the file doesn't get copied properly
-RUN mkdir -p /usr/src/app/config && \
-    if [ ! -f /usr/src/app/config/katz-speech-to-text-key.json ]; then \
-        cat <<EOF > /usr/src/app/config/katz-speech-to-text-key.json \
-        { \
-          "type": "service_account", \
-          "project_id": "katz-speech-to-text", \
-          "private_key_id": "...", \
-          "private_key": "...", \
-          "client_email": "...", \
-          "client_id": "...", \
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth", \
-          "token_uri": "https://oauth2.googleapis.com/token", \
-          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", \
-          "client_x509_cert_url": "..." \
-        } \
-        EOF \
-    fi \
-    && chmod 644 /usr/src/app/config/katz-speech-to-text-key.json \
-    && echo "✅ Google TTS key file secured successfully"
+# Copy the project files
+COPY --from=builder /usr/src/app/config/katz-speech-to-text-key.json /usr/src/app/config/
 
-# Set up backup environment variable for credentials
-# This will be used if all file-based approaches fail
-ENV GOOGLE_APPLICATION_CREDENTIALS_JSON='{"type":"service_account","project_id":"katz-speech-to-text","private_key_id":"...","private_key":"...","client_email":"...","client_id":"...","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_x509_cert_url":"..."}'
+# Set file permissions and verify the file exists
+RUN chmod 644 /usr/src/app/config/katz-speech-to-text-key.json && \
+    ls -la /usr/src/app/config/ && \
+    echo "✅ Google TTS key file copied and secured successfully"
 
-# Verify key file presence
-RUN ls -la /usr/src/app/config/ && \
-    echo "✅ Config directory contents listed"
+# Set the environment variable for Google API key file
+ENV GOOGLE_API_KEY_FILE=config/katz-speech-to-text-key.json
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
