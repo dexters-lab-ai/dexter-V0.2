@@ -261,13 +261,31 @@ export class VoiceService {
         },
       };
       
-      const [response] = await this.ttsClient.synthesizeSpeech(request);
-      if (response.audioContent) {
-        console.log("✅ Google TTS succeeded");
-        return Buffer.from(response.audioContent, 'binary');
-      } else {
-        console.log("❌ No audio content received from TTS service.");
-        return null;
+      // Check for OpenSSL/Certificate errors by making a test API call
+      try {
+        const [response] = await this.ttsClient.synthesizeSpeech(request);
+        if (response.audioContent) {
+          console.log("✅ Google TTS succeeded");
+          return Buffer.from(response.audioContent, 'binary');
+        } else {
+          console.log("❌ No audio content received from TTS service.");
+          throw new Error("No audio content received");
+        }
+      } catch (apiError) {
+        // Check if this is an OpenSSL certificate error
+        if (apiError.message.includes('DECODER') || 
+            apiError.message.includes('certificate') || 
+            apiError.message.includes('metadata from plugin failed')) {
+          console.error("❌ Google TTS OpenSSL Certificate Error:", apiError.message);
+          console.error("⚠️ Credential file likely has invalid certificate format. Falling back to ElevenLabs.");
+          
+          // Fall back to ElevenLabs TTS
+          console.log("🔄 Falling back to ElevenLabs TTS");
+          return await this.synthesizeElevenLabs(text, chatId);
+        }
+        
+        // Rethrow other API errors
+        throw apiError;
       }
     } catch (error) {
       console.error("❌ Google TTS Error:", error.message);
