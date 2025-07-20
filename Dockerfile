@@ -57,26 +57,13 @@ RUN apk add --no-cache \
 COPY --from=builder /usr/src/app/dist/ ./dist/
 COPY --from=builder /prod_deps/node_modules/ ./node_modules/
 
-# Create the speech-to-text key file using a heredoc to avoid linter errors
-RUN mkdir -p /usr/src/app/config && cat <<EOF > /usr/src/app/config/katz-speech-to-text-key.json
-{
-  "type": "service_account",
-  "project_id": "katz-speech-to-text",
-  "private_key_id": "...",
-  "private_key": "...",
-  "client_email": "...",
-  "client_id": "...",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "..."
-}
-EOF
+# Copy the actual Google credentials file directly
+COPY config/katz-speech-to-text-key.json /usr/src/app/config/katz-speech-to-text-key.json
 
-# Verify the key file was created successfully and set proper permissions
+# Verify the key file was copied successfully and set proper permissions
 RUN ls -la /usr/src/app/config/katz-speech-to-text-key.json && \
     chmod 600 /usr/src/app/config/katz-speech-to-text-key.json && \
-    echo "✅ Google TTS key file created and secured successfully"
+    echo "✅ Google TTS key file copied and secured successfully"
 
 # Create a backup copy in case the file is accidentally deleted or not found at runtime
 RUN cp /usr/src/app/config/katz-speech-to-text-key.json /usr/src/app/katz-speech-to-text-key.json && \
