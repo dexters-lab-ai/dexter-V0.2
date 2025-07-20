@@ -137,8 +137,15 @@ class PumpFunService extends EventEmitter {
           default:
             console.log(`ℹ️ Unhandled PumpFun txType: "${message.txType}"`);
         }
+      } else if (message.message) {
+        // Handle subscription confirmation and other status messages
+        if (message.message.includes('subscribed')) {
+          console.log(`✅ PumpFun: ${message.message}`);
+        } else {
+          console.log(`ℹ️ PumpFun status: ${message.message}`);
+        }
       } else {
-        console.warn('⚠️ Missing txType in PumpFun message. Ignoring:', message);
+        console.warn('⚠️ Unknown PumpFun message format. Ignoring:', message);
       }
     } catch (error) {
       console.error('❌ Error processing WS message:', error);
