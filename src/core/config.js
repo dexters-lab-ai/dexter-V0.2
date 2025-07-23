@@ -95,9 +95,9 @@ class Config {
     // QuickNode Configuration (if needed)
     this.quickNode = {
       apiKey: process.env.QUICKNODE_API_KEY,
-      evmEndpoint: process.env.QUICKNODE_EVM_ENDPOINT || 'https://dimensional-alpha-energy.base-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f',
-      solanaEndpoint: process.env.QUICKNODE_SOLANA_ENDPOINT || 'https://dimensional-alpha-energy.solana-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f',
-      avalancheEndpoint: process.env.QUICKNODE_AVAX_RPC || 'https://dimensional-alpha-energy.avalanche-mainnet.quiknode.pro/db09e49b74164019f4d6c12f0ab62859f578694f/ext/bc/C/rpc/',
+      evmEndpoint: process.env.QUICKNODE_EVM_ENDPOINT || 'https://dimensional-alpha-energy.base-mainnet.quiknode.pro/d57dcd4aa664f37784911254c51f2b474bdc6369',
+      solanaEndpoint: process.env.QUICKNODE_SOLANA_ENDPOINT || 'https://dimensional-alpha-energy.solana-mainnet.quiknode.pro/d57dcd4aa664f37784911254c51f2b474bdc6369',
+      avalancheEndpoint: process.env.QUICKNODE_AVAX_RPC || 'https://dimensional-alpha-energy.avalanche-mainnet.quiknode.pro/d57dcd4aa664f37784911254c51f2b474bdc6369/ext/bc/C/rpc/',
     };
 
     // Jupiter v6 API & Solana    

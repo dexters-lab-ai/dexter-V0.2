@@ -21,12 +21,12 @@ export class VoiceService {
     
     // Initialize Google clients with the key file from config
     try {
-      // For handling both local development and Docker paths
-      const keyFilePath = config.googleApiKeyFile;
+      // Try to find the key file in multiple possible locations
+      const keyFilePath = this.findCredentialsFile(config.googleApiKeyFile);
       
-      console.log(`✅ Attempting to use Google credentials from: ${keyFilePath}`);
+      console.log(`✅ Using Google credentials from: ${keyFilePath}`);
       
-      // Simple initialization without additional complexity
+      // Initialize with the resolved path
       this.speechClient = new SpeechClient({
         keyFilename: keyFilePath
       });
@@ -44,6 +44,45 @@ export class VoiceService {
     
     this.defaultModel = "eleven_multilingual_v2"; // Default model for ElevenLabs multilingual support
     this.defaultVoice = "N2lVS1w4EtoT3dr4eOWO"; // Default ElevenLabs voice
+  }
+
+  /**
+   * Finds a valid Google credentials file by checking multiple possible paths
+   * @param {string} configPath - Path from config
+   * @returns {string} - The path to a valid credentials file
+   */
+  findCredentialsFile(configPath) {
+    // Try the config path first
+    if (configPath && fs.existsSync(configPath)) {
+      return configPath;
+    }
+
+    // Check various possible paths for the key file
+    const possiblePaths = [
+      // Docker production paths
+      '/usr/src/app/config/katz-speech-to-text-key.json',
+      
+      // Local development paths
+      './config/katz-speech-to-text-key.json',
+      path.join(process.cwd(), 'config/katz-speech-to-text-key.json'),
+      path.join(process.cwd(), '/config/katz-speech-to-text-key.json'),
+      '../config/katz-speech-to-text-key.json',
+      
+      // Absolute path from project root
+      path.resolve(__dirname, '../../../config/katz-speech-to-text-key.json')
+    ];
+
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        console.log(`✅ Found credentials file at: ${p}`);
+        return p;
+      }
+    }
+
+    // If we get here, we couldn't find the file
+    // Just return the config path and let the Google client handle the error
+    console.warn(`⚠️ Could not find credentials file at any location, falling back to: ${configPath}`);
+    return configPath || './config/katz-speech-to-text-key.json';
   }
 
   // Exponential Backoff Retry Helper
