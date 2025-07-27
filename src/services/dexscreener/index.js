@@ -240,31 +240,49 @@ class DexScreenerService {
   
   // More Queries
   async getTokenInfoBySymbol(query) {
-    try{
+    try {
+      console.log(`🔍 DexScreener: Searching for token symbol: ${query}`);
+      
       const rawResponse = await this.fetchWithCache(
         `/latest/dex/search?q=${query}`,
         {},
         `dexscreener:tokenInfo:${query}`
       );
 
-      console.log(rawResponse);
+      console.log(`📊 DexScreener raw response for ${query}:`, rawResponse);
     
+      // Ensure we have pairs data
+      if (!rawResponse || !rawResponse.pairs || !Array.isArray(rawResponse.pairs)) {
+        console.warn(`⚠️ DexScreener: No pairs data found for ${query}`);
+        return []; // Always return array
+      }
+      
       // Format each pair in the response
-      const formattedPairs = rawResponse.pairs?.map(this.formatPairData) || [];
+      const formattedPairs = rawResponse.pairs.map(pair => {
+        try {
+          return this.formatPairData(pair);
+        } catch (error) {
+          console.error(`Error formatting pair data:`, error);
+          return null;
+        }
+      }).filter(Boolean); // Remove null entries
     
-      // If no pairs, return empty array
-      if (!formattedPairs.length) return [];
+      console.log(`✅ DexScreener: Formatted ${formattedPairs.length} pairs for ${query}`);
+      
+      // If no valid formatted pairs, return empty array
+      if (!formattedPairs.length) {
+        console.warn(`⚠️ DexScreener: No valid formatted pairs for ${query}`);
+        return []; // Always return array
+      }
     
-      // Select the "main" LP based on the highest liquidity or other metric
-      const mainPair = formattedPairs.reduce((best, current) => {
-        return current.liquidity.usd > (best?.liquidity.usd || 0) ? current : best;
-      }, null);
-    
-      return mainPair ? [mainPair] : [];
-    } catch {
-      return {baseToken:{symbol:"NONE"}}
+      // Return all formatted pairs (not just the main one)
+      // The caller will filter for Solana tokens
+      return formattedPairs;
+      
+    } catch (error) {
+      console.error(`❌ DexScreener: Error searching for ${query}:`, error);
+      return []; // Always return array, never an object
     }
-    
   }  
   
   async getTokenInfoByAddress(query) {

@@ -919,33 +919,69 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create an array of card creation tasks with labels for better debugging
             const cardCreationTasks = [];
             
-            // Add each available data type to our card creators array with labels for debugging
+            // Add each available data type to our card creators array with error handling
             if (data.tokenInfo && Object.keys(data.tokenInfo).length > 0) {
-                cardCreationTasks.push({ 
-                    type: 'tokenInfo', 
-                    creator: () => createTokenInfoCard(data.tokenInfo)
-                });
+                // Check if this is an error response
+                if (data.tokenInfo.error) {
+                    console.warn('TokenInfo contains error:', data.tokenInfo.error);
+                    cardCreationTasks.push({ 
+                        type: 'tokenInfo', 
+                        creator: () => createErrorCard('Token Information', data.tokenInfo.error)
+                    });
+                } else {
+                    cardCreationTasks.push({ 
+                        type: 'tokenInfo', 
+                        creator: () => createTokenInfoCard(data.tokenInfo)
+                    });
+                }
             }
             
             if (data.tokenMetadata && Object.keys(data.tokenMetadata).length > 0) {
-                cardCreationTasks.push({ 
-                    type: 'tokenMetadata', 
-                    creator: () => createMetadataCard(data.tokenMetadata)
-                });
+                // Check if this is an error response
+                if (data.tokenMetadata.error) {
+                    console.warn('TokenMetadata contains error:', data.tokenMetadata.error);
+                    cardCreationTasks.push({ 
+                        type: 'tokenMetadata', 
+                        creator: () => createErrorCard('Token Metadata', data.tokenMetadata.error)
+                    });
+                } else {
+                    cardCreationTasks.push({ 
+                        type: 'tokenMetadata', 
+                        creator: () => createMetadataCard(data.tokenMetadata)
+                    });
+                }
             }
             
             if (data.securityAnalysis && Object.keys(data.securityAnalysis).length > 0) {
-                cardCreationTasks.push({ 
-                    type: 'securityAnalysis', 
-                    creator: () => createSecurityCard(data.securityAnalysis)
-                });
+                // Check if this is an error response
+                if (data.securityAnalysis.error) {
+                    console.warn('SecurityAnalysis contains error:', data.securityAnalysis.error);
+                    cardCreationTasks.push({ 
+                        type: 'securityAnalysis', 
+                        creator: () => createErrorCard('Security Analysis', data.securityAnalysis.error)
+                    });
+                } else {
+                    cardCreationTasks.push({ 
+                        type: 'securityAnalysis', 
+                        creator: () => createSecurityCard(data.securityAnalysis)
+                    });
+                }
             }
             
             if (data.socialData && (Array.isArray(data.socialData) ? data.socialData.length > 0 : Object.keys(data.socialData).length > 0)) {
-                cardCreationTasks.push({ 
-                    type: 'socialData', 
-                    creator: () => createSocialCard(data.socialData)
-                });
+                // Check if this is an error response
+                if (data.socialData.error) {
+                    console.warn('SocialData contains error:', data.socialData.error);
+                    cardCreationTasks.push({ 
+                        type: 'socialData', 
+                        creator: () => createErrorCard('Social Data', data.socialData.error)
+                    });
+                } else {
+                    cardCreationTasks.push({ 
+                        type: 'socialData', 
+                        creator: () => createSocialCard(data.socialData)
+                    });
+                }
             }
             
             // If no results

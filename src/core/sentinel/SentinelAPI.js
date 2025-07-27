@@ -478,6 +478,8 @@ async function handleUrlQuery(url) {
  */
 async function fetchTokenInfo(tokenIdentifier, network) {
   try {
+    logger.info(`🔍 Fetching token info for: ${tokenIdentifier} on ${network}`);
+    
     // For token symbol, need to find contract address first
     let tokenAddress = tokenIdentifier;
     let symbol = null;
@@ -487,59 +489,102 @@ async function fetchTokenInfo(tokenIdentifier, network) {
       logger.debug(`Token identifier appears to be a symbol: ${tokenIdentifier}`);
       symbol = tokenIdentifier;
       
-      // Use the dexscreener singleton service to resolve the symbol to address
-      
       try {
-        // Search for token by symbol
+        // Search for token by symbol using DexScreener
         const tokensBySymbol = await dexscreener.getTokenInfoBySymbol(tokenIdentifier);
+        
+        // Validate that we received an array
+        if (!Array.isArray(tokensBySymbol)) {
+          logger.error(`DexScreener returned non-array data:`, typeof tokensBySymbol, tokensBySymbol);
+          return {
+            error: `Invalid data structure returned from DexScreener for symbol ${tokenIdentifier}`,
+            symbol: tokenIdentifier,
+            message: 'Data structure mismatch - expected array'
+          };
+        }
+        
         logger.debug(`DexScreener returned ${tokensBySymbol.length} results for symbol ${tokenIdentifier}`);
         
         // Filter for Solana tokens only
-        const solanaTokens = tokensBySymbol.filter(token => token.chainId === 'solana' || (token.baseToken && token.baseToken.chainId === 'solana'));
+        const solanaTokens = tokensBySymbol.filter(token => {
+          try {
+            // Check multiple possible chain identifiers
+            const chainId = token.chainId || token.chain || (token.baseToken && token.baseToken.chainId);
+            return chainId === 'solana' || chainId === 'sol';
+          } catch (filterError) {
+            logger.warn(`Error filtering token:`, filterError);
+            return false;
+          }
+        });
+        
         logger.debug(`Found ${solanaTokens.length} Solana tokens for symbol ${tokenIdentifier}`);
         
         // If Solana results found, use the first Solana result's address
         if (solanaTokens && solanaTokens.length > 0) {
           // Extract the token address from the first Solana result
-          tokenAddress = solanaTokens[0].baseToken?.address;
+          const firstToken = solanaTokens[0];
+          tokenAddress = firstToken.baseToken?.address || firstToken.tokenAddress || firstToken.address;
+          
           logger.info(`Resolved symbol ${tokenIdentifier} to Solana address ${tokenAddress}`);
           
           if (!tokenAddress) {
             logger.warn(`Failed to extract Solana address for symbol ${tokenIdentifier}`);
             return {
-              message: `Could not resolve symbol ${tokenIdentifier} to a Solana address`,
-              symbol: tokenIdentifier
+              error: `Could not extract address from token data for symbol ${tokenIdentifier}`,
+              symbol: tokenIdentifier,
+              tokenData: firstToken
             };
           }
         } else {
-          logger.warn(`No results found for symbol ${tokenIdentifier}`);
+          logger.warn(`No Solana tokens found for symbol ${tokenIdentifier}`);
           return {
-            message: `No tokens found for symbol ${tokenIdentifier}`,
-            symbol: tokenIdentifier
+            error: `No Solana tokens found for symbol ${tokenIdentifier}`,
+            symbol: tokenIdentifier,
+            totalResults: tokensBySymbol.length,
+            message: 'Try searching with a contract address instead'
           };
         }
       } catch (symbolError) {
         logger.error(`Error resolving symbol to address: ${symbolError.message}`);
         return {
-          message: `Error resolving symbol ${tokenIdentifier}: ${symbolError.message}`,
+          error: `Error resolving symbol ${tokenIdentifier}: ${symbolError.message}`,
           symbol: tokenIdentifier,
-          error: symbolError.message
+          details: symbolError.message
         };
       }
     }
     
     // Get token info from DexTools
-    const tokenInfo = await dextools.getTokenInfo(network, tokenAddress);
-    
-    // If we started with a symbol, add it to the result
-    if (symbol) {
-      tokenInfo.originalSymbol = symbol;
+    try {
+      logger.debug(`Fetching DexTools data for address: ${tokenAddress}`);
+      const tokenInfo = await dextools.getTokenInfo(network, tokenAddress);
+      
+      // If we started with a symbol, add it to the result
+      if (symbol) {
+        tokenInfo.originalSymbol = symbol;
+        tokenInfo.resolvedAddress = tokenAddress;
+      }
+      
+      logger.info(`✅ Successfully fetched token info for ${tokenIdentifier}`);
+      return tokenInfo;
+      
+    } catch (dextoolsError) {
+      logger.error(`Error fetching from DexTools: ${dextoolsError.message}`);
+      return {
+        error: `Error fetching token data from DexTools: ${dextoolsError.message}`,
+        tokenAddress,
+        symbol,
+        details: dextoolsError.message
+      };
     }
     
-    return tokenInfo;
   } catch (error) {
-    console.error('Error fetching token info:', error);
-    throw error;
+    logger.error(`Error in fetchTokenInfo: ${error.message}`);
+    return {
+      error: `Failed to fetch token info for ${tokenIdentifier}: ${error.message}`,
+      tokenIdentifier,
+      details: error.message
+    };
   }
 }
 
