@@ -433,26 +433,7 @@ body {
   100% { transform: rotate(360deg); }
 }
 
-.sentinel-search-type {
-  padding-right: 8px;
-  display: flex;
-  align-items: center;
-}
-
-.sentinel-select {
-  background: rgba(15, 23, 42, 0.8);
-  color: var(--sentinel-text-muted);
-  border: none;
-  padding: 8px;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.sentinel-select:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--sentinel-glow);
-}
+/* Search type dropdown removed - AI handles tool selection automatically */
 
 .sentinel-search-button {
   background: var(--metallic-gradient);
@@ -1571,23 +1552,20 @@ body {
     margin-bottom: 1rem;
   }
 
-  /* Mobile controls row - mic and dropdown above search */
+  /* Mobile controls row - mic button only */
   .sentinel-mobile-controls {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
-    gap: 0.75rem;
     margin-bottom: 0.5rem;
   }
 
-  /* Hide desktop controls on mobile */
-  .sentinel-search-container .sentinel-search-type,
+  /* Hide desktop mic button on mobile */
   .sentinel-search-container .sentinel-mic-button {
     display: none;
   }
 
-  /* Show mobile controls */
-  .sentinel-mobile-controls .sentinel-search-type,
+  /* Show mobile mic button */
   .sentinel-mobile-controls .sentinel-mic-button {
     display: flex;
   }
@@ -1628,19 +1606,7 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  /* Mobile search type dropdown - compact */
-  .sentinel-mobile-controls .sentinel-search-type {
-    padding: 0;
-  }
-
-  .sentinel-mobile-controls .sentinel-select {
-    padding: 8px 12px;
-    font-size: 0.85rem;
-    border-radius: 10px;
-    min-height: 44px;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
+  /* Search type dropdown removed - AI handles tool selection */
 
   /* Search button mobile - more compact */
   .sentinel-search-button {

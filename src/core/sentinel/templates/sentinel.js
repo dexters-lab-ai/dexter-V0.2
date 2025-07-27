@@ -3533,24 +3533,11 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Initializing mobile controls...');
             
             // Get mobile control elements
-            const searchTypeMobile = document.getElementById('searchTypeMobile');
             const sentinelMicButtonMobile = document.getElementById('sentinelMicButtonMobile');
             const searchInput = document.getElementById('sentinelSearch');
-            const searchTypeDesktop = document.getElementById('searchType');
             const sentinelMicButtonDesktop = document.getElementById('sentinelMicButton');
             
-            // Synchronize mobile and desktop search type dropdowns
-            if (searchTypeMobile && searchTypeDesktop) {
-                searchTypeMobile.addEventListener('change', function() {
-                    searchTypeDesktop.value = this.value;
-                    console.log('Mobile search type changed to:', this.value);
-                });
-                
-                searchTypeDesktop.addEventListener('change', function() {
-                    searchTypeMobile.value = this.value;
-                    console.log('Desktop search type changed to:', this.value);
-                });
-            }
+            // Search type dropdown removed - AI handles tool selection automatically
             
             // Synchronize mobile and desktop mic buttons
             if (sentinelMicButtonMobile && sentinelMicButtonDesktop) {
@@ -3632,24 +3619,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Clear history button listener attached');
             }
             
-            // Set up search type dropdown listener with wallet enforcement
-            if (searchTypeSelect) {
-                searchTypeSelect.addEventListener('change', function() {
-                    console.log('🔽 Search type changed - checking wallet connection...');
-                    console.log('Wallet connected:', walletConnected);
-                    
-                    if (!walletConnected || !walletAddress) {
-                        console.warn('🚫 Search type change blocked: Wallet not connected');
-                        showNotification('🔒 Wallet Required: Please connect your wallet to use SENTINEL', 'warning');
-                        // Reset to default option
-                        this.value = 'auto';
-                        return;
-                    }
-                    
-                    console.log('✅ Search type change allowed:', this.value);
-                });
-                console.log('Search type dropdown listener attached');
-            }
+            // Search type dropdown removed - AI handles tool selection automatically
             
             // Set up suggestion chip listeners
             if (suggestionChips && suggestionChips.length > 0) {
