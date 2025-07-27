@@ -334,14 +334,23 @@ document.addEventListener('DOMContentLoaded', function() {
             // Clear existing items
             timelineContainer.innerHTML = '';
             
-            // Show placeholder if history is empty
+            // Hide entire timeline if history is empty
+            const searchHistoryTimeline = document.getElementById('searchHistoryTimeline');
             if (searchHistory.length === 0) {
+                if (searchHistoryTimeline) {
+                    searchHistoryTimeline.style.display = 'none';
+                }
                 timelineContainer.innerHTML = `
                     <div class="sentinel-timeline-placeholder">
                         <p>Your search history will appear here</p>
                     </div>
                 `;
                 return;
+            } else {
+                // Show timeline if we have history
+                if (searchHistoryTimeline) {
+                    searchHistoryTimeline.style.display = 'block';
+                }
             }
             
             // Add each item to timeline

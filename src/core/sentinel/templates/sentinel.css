@@ -554,7 +554,6 @@ body {
   -webkit-backdrop-filter: blur(10px);
   position: relative;
   transform: translateY(20px);
-  opacity: 0;
 }
 
 .sentinel-result-card::before {
@@ -1453,4 +1452,339 @@ body {
 .sentinel-wallet-connect-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(0, 212, 255, 0.4);
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  /* Container adjustments for mobile */
+  .sentinel-container {
+    padding: 1rem 0.75rem;
+    grid-template-columns: 1fr;
+    grid-template-areas: 
+      "header"
+      "search"
+      "results"
+      "summary";
+    gap: 15px;
+  }
+
+  /* Hide search history timeline on mobile */
+  .sentinel-search-history {
+    display: none !important;
+  }
+
+  /* Header mobile optimizations */
+  .sentinel-header {
+    padding: 1.5rem 0.5rem;
+  }
+
+  /* Logo container mobile adjustments */
+  .sentinel-logo-container {
+    margin-bottom: 0.75rem;
+  }
+
+  .sentinel-logo-animation {
+    width: 120px;
+    height: 120px;
+  }
+
+  .sentinel-logo {
+    width: 80px;
+    height: 80px;
+  }
+
+  .sentinel-logo-img {
+    width: 60px;
+    height: 60px;
+  }
+
+  /* Reduce glow effects on mobile for better performance */
+  .sentinel-logo-glow {
+    width: 100px;
+    height: 100px;
+    filter: blur(20px);
+    opacity: 0.4;
+  }
+
+  /* Reduce node animations on mobile */
+  .sentinel-node {
+    width: 8px;
+    height: 8px;
+    box-shadow: 0 0 6px 1px var(--sentinel-primary), 0 0 12px 3px rgba(166, 0, 255, 0.2);
+  }
+
+  /* Simplify connection lines on mobile */
+  .sentinel-connection {
+    opacity: 0.3;
+    animation: none;
+  }
+
+  /* Mobile title adjustments */
+  .sentinel-title {
+    font-size: 2rem;
+    letter-spacing: 0.1rem;
+  }
+
+  .sentinel-title span {
+    font-size: 1.4rem;
+  }
+
+  .sentinel-subtitle {
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+  }
+
+  /* Wallet button mobile positioning */
+  .sentinel-wallet-container {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    z-index: 100;
+  }
+
+  .sentinel-wallet-button {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    min-width: auto;
+  }
+
+  .sentinel-wallet-button i {
+    margin-right: 4px;
+  }
+
+  /* Search section mobile optimizations */
+  .sentinel-search-section {
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    border-radius: 12px;
+  }
+
+  /* Search container mobile layout */
+  .sentinel-search-container {
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Input wrapper mobile adjustments */
+  .sentinel-input-wrapper {
+    min-height: 48px;
+    border-radius: 12px;
+  }
+
+  .sentinel-search-input {
+    padding: 14px 16px;
+    font-size: 1rem;
+  }
+
+  /* Mic button mobile sizing */
+  .sentinel-mic-button {
+    padding: 0 16px;
+    font-size: 1.1rem;
+    min-width: 48px;
+  }
+
+  /* Search type dropdown mobile */
+  .sentinel-search-type {
+    padding-right: 12px;
+  }
+
+  .sentinel-select {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    min-height: 40px;
+  }
+
+  /* Search button mobile */
+  .sentinel-search-button {
+    width: 100%;
+    padding: 14px;
+    font-size: 1rem;
+    border-radius: 12px;
+    min-height: 48px;
+  }
+
+  /* Suggestions mobile layout */
+  .sentinel-suggestions {
+    text-align: center;
+  }
+
+  .sentinel-suggestions p {
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .sentinel-suggestion-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .sentinel-suggestion-chip {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    border-radius: 16px;
+    white-space: nowrap;
+  }
+
+  /* Results section mobile */
+  .sentinel-results-section {
+    padding: 0;
+  }
+
+  /* Result cards mobile */
+  .sentinel-result-card {
+    margin-bottom: 1rem;
+    border-radius: 12px;
+  }
+
+  /* AI Summary mobile */
+  .sentinel-ai-summary {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 12px;
+  }
+
+  /* Loading overlay mobile */
+  .sentinel-loading {
+    padding: 1rem;
+  }
+
+  .sentinel-loading-content {
+    max-width: 90%;
+  }
+
+  .sentinel-loading-text {
+    font-size: 0.9rem;
+  }
+
+  /* Tool statuses mobile */
+  .sentinel-tool-statuses {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .sentinel-tool-status {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  /* Modal mobile adjustments */
+  .solana-wallet-modal {
+    max-width: 95%;
+    margin: 1rem;
+  }
+
+  .wallet-modal-header {
+    padding: 20px 20px 16px;
+  }
+
+  .wallet-modal-header h3 {
+    font-size: 18px;
+  }
+
+  .wallet-modal-content {
+    padding: 20px;
+  }
+
+  .wallet-option {
+    padding: 16px 18px;
+    gap: 16px;
+  }
+
+  .wallet-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .wallet-name {
+    font-size: 16px;
+  }
+
+  .wallet-info small {
+    font-size: 12px;
+  }
+}
+
+/* Extra small mobile devices */
+@media (max-width: 480px) {
+  .sentinel-container {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .sentinel-header {
+    padding: 1rem 0.25rem;
+  }
+
+  .sentinel-title {
+    font-size: 1.8rem;
+  }
+
+  .sentinel-title span {
+    font-size: 1.2rem;
+  }
+
+  .sentinel-search-section {
+    padding: 1rem;
+  }
+
+  .sentinel-search-input {
+    font-size: 0.95rem;
+  }
+
+  .sentinel-suggestion-chip {
+    font-size: 0.75rem;
+    padding: 5px 10px;
+  }
+
+  .sentinel-wallet-button {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+
+  /* Reduce logo size further on very small screens */
+  .sentinel-logo-animation {
+    width: 100px;
+    height: 100px;
+  }
+
+  .sentinel-logo {
+    width: 70px;
+    height: 70px;
+  }
+
+  .sentinel-logo-img {
+    width: 50px;
+    height: 50px;
+  }
+
+  /* Minimal glow on very small screens */
+  .sentinel-logo-glow {
+    width: 80px;
+    height: 80px;
+    opacity: 0.2;
+  }
+}
+
+/* Landscape mobile orientation */
+@media (max-width: 768px) and (orientation: landscape) {
+  .sentinel-header {
+    padding: 1rem 0.5rem;
+  }
+
+  .sentinel-logo-animation {
+    width: 100px;
+    height: 100px;
+  }
+
+  .sentinel-title {
+    font-size: 1.8rem;
+  }
+
+  .sentinel-subtitle {
+    font-size: 0.85rem;
+  }
 }
