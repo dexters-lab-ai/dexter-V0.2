@@ -495,6 +495,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
+            // Check if wallet is connected first
+            if (!walletConnected || !walletAddress) {
+                showNotification('Please connect your wallet to use SENTINEL', 'warning');
+                // Show static wallet connection overlay
+                showWalletConnectionOverlay();
+                return;
+            }
+            
             let searchType = searchTypeSelect.value;
             const validTypes = ['text', 'contract', 'url', 'auto']; // Add all valid types here
             
@@ -2570,31 +2578,93 @@ document.addEventListener('DOMContentLoaded', function() {
             overlay.classList.remove('visible');
         }
     }
+    
+    /**
+     * Handle wallet connect button click
+     */
+    function handleConnectWalletClick() {
+        try {
+            // For demo purposes, simulate wallet connection
+            walletAddress = generateWalletAddress();
+            walletConnected = true;
+            
+            // Update UI to show connected state
+            if (connectWalletButton) {
+                connectWalletButton.classList.remove('connect');
+                connectWalletButton.classList.add('connected');
+                connectWalletButton.innerHTML = `<i class="fas fa-wallet"></i> ${truncateAddress(walletAddress)}`;
+            }
+            
+            // Enable SENTINEL features
+            enableSentinelFeatures();
+            
+            // Show success notification
+            showNotification('Wallet connected successfully', 'success');
+            console.log('Wallet connected:', walletAddress);
+        } catch (error) {
+            console.error('Error connecting wallet:', error);
+            showNotification('Failed to connect wallet', 'error');
+        }
+    }
+    
+    /**
+     * Enable all SENTINEL features after wallet connection
+     */
+    function enableSentinelFeatures() {
+        if (searchButton) searchButton.disabled = false;
+        if (searchInput) searchInput.disabled = false;
+        if (searchTypeSelect) searchTypeSelect.disabled = false;
+        if (micButton) micButton.disabled = false;
+        
+        // Show any wallet-specific UI elements
+        const walletElements = document.querySelectorAll('.wallet-required');
+        walletElements.forEach(el => el.classList.remove('hidden'));
+        
+        // Hide the wallet connection overlay if it's visible
+        hideWalletConnectionOverlay();
+    }
+    
+    /**
+     * Disable SENTINEL features until wallet is connected
+     */
+    function disableSentinelFeatures() {
+        if (searchButton) searchButton.disabled = true;
+        if (searchInput) searchInput.disabled = true;
+        if (searchTypeSelect) searchTypeSelect.disabled = true;
+        if (micButton) micButton.disabled = true;
+        
+        // Hide wallet-specific UI elements
+        const walletElements = document.querySelectorAll('.wallet-required');
+        walletElements.forEach(el => el.classList.add('hidden'));
+        
+        // Ensure the wallet connection UI is visible/ready
+        if (connectWalletButton) {
+            connectWalletButton.classList.add('connect');
+            connectWalletButton.classList.remove('connected');
+            connectWalletButton.innerHTML = '<i class="fas fa-wallet"></i> Connect Wallet';
+        }
+    }
 
     /**
      * Generate a simulated wallet address for demo purposes
-     * @returns {string} - Simulated Solana wallet address
      */
-    function generateSimulatedWalletAddress() {
-        // Generate a random Solana-like address for demo purposes
-        const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-        let address = '';
-        for (let i = 0; i < 44; i++) {
-            address += chars.charAt(Math.floor(Math.random() * chars.length));
+    function generateWalletAddress() {
+        const chars = '0123456789abcdef';
+        let addr = '0x';
+        for (let i = 0; i < 40; i++) {
+            addr += chars.charAt(Math.floor(Math.random() * chars.length));
         }
-        return address;
+        return addr;
     }
-
+    
     /**
      * Truncate wallet address for display
-     * @param {string} address - Full wallet address
-     * @returns {string} - Truncated address for display
      */
-    function truncateWalletAddress(address) {
+    function truncateAddress(address) {
         if (!address) return '';
-        return `${address.substring(0, 4)}...${address.substring(address.length - 4)}`;
+        return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
     }
-
+    
     /**
      * Load search history for a specific wallet address
      * @param {string} address - Wallet address
@@ -2852,6 +2922,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Search button listener attached');
             }
             
+            // Set up wallet connection button
+            if (connectWalletButton) {
+                connectWalletButton.addEventListener('click', handleConnectWalletClick);
+                console.log('Wallet connect button listener attached');
+            }
+            
             if (searchInput) {
                 searchInput.addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') {
@@ -2906,6 +2982,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Initialize voice recording capabilities
             initializeVoiceRecording();
+            
+            // Disable SENTINEL features until wallet is connected
+            // Will be enabled when wallet is connected
+            disableSentinelFeatures();
             
             console.log('SENTINEL API initialized successfully');
         } catch (error) {
