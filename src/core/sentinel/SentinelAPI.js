@@ -20,6 +20,56 @@ const __dirname = path.dirname(__filename);
 // Search cache to store results (simple in-memory storage for demo)
 const searchCache = new Map();
 
+// Saved results storage (persistent storage for search history)
+const savedResults = new Map();
+
+/**
+ * Save search result to persistent storage
+ * @param {string} id - Search ID
+ * @param {Object} data - Search data including results and query info
+ */
+export async function saveSearchResult(id, data) {
+  try {
+    // Store results with timestamp
+    const savedData = {
+      id,
+      results: data.results,
+      query: data.query,
+      type: data.type,
+      timestamp: Date.now()
+    };
+    
+    savedResults.set(id, savedData);
+    
+    logger.info(`Saved search result with ID: ${id}`);
+    return { success: true, id };
+  } catch (error) {
+    logger.error(`Error saving search result: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Retrieve a saved search result by ID
+ * @param {string} id - Search ID
+ * @returns {Object|null} - The saved search data or null if not found
+ */
+export async function getSavedResult(id) {
+  try {
+    if (!savedResults.has(id)) {
+      logger.warn(`Search result not found for ID: ${id}`);
+      return null;
+    }
+    
+    const savedData = savedResults.get(id);
+    logger.info(`Retrieved saved search result with ID: ${id}`);
+    return savedData;
+  } catch (error) {
+    logger.error(`Error retrieving saved search result: ${error.message}`);
+    throw error;
+  }
+}
+
 /**
  * Main function to render the SENTINEL page
  * Loads HTML, CSS, and JavaScript from separate files

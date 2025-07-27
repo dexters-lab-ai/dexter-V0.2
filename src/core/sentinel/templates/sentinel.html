@@ -72,6 +72,20 @@
             </div>
         </section>
 
+        <!-- Search history timeline sidebar -->
+        <div class="sentinel-search-history" id="searchHistoryTimeline">
+            <div class="sentinel-history-header">
+                <h4>Search History</h4>
+                <button id="clearHistoryBtn" class="sentinel-clear-history"><i class="fas fa-trash"></i></button>
+            </div>
+            <div class="sentinel-timeline-container" id="timelineContainer">
+                <!-- Search history items will be added here -->
+                <div class="sentinel-timeline-placeholder">
+                    <p>Your search history will appear here</p>
+                </div>
+            </div>
+        </div>
+
         <section class="sentinel-results-section" id="resultsSection">
             <!-- Results will be injected here -->
             <div class="sentinel-placeholder">
@@ -81,6 +95,20 @@
                 <p>Enter a search query to analyze tokens, contracts, or websites</p>
             </div>
         </section>
+
+        <!-- AI summary section -->
+        <div class="sentinel-ai-summary" id="aiSummarySection">
+            <div class="sentinel-summary-header">
+                <h3>AI Summary</h3>
+                <div class="sentinel-summary-controls">
+                    <button id="copySummaryBtn" class="sentinel-summary-btn"><i class="fas fa-copy"></i></button>
+                    <button id="expandSummaryBtn" class="sentinel-summary-btn"><i class="fas fa-expand"></i></button>
+                </div>
+            </div>
+            <div class="sentinel-summary-content" id="summaryContent">
+                <p class="sentinel-empty-summary">AI will provide a summary of your search results here</p>
+            </div>
+        </div>
 
         <div class="sentinel-loading" id="loadingOverlay">
             <div class="sentinel-loading-content">

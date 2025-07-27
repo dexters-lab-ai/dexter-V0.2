@@ -1,5 +1,5 @@
 import express from 'express';
-import { renderSentinelPage, searchSentinel, getSearchStatus } from '../core/sentinel/SentinelAPI.js';
+import { renderSentinelPage, searchSentinel, getSearchStatus, saveSearchResult, getSavedResult } from '../core/sentinel/SentinelAPI.js';
 
 const router = express.Router();
 
@@ -55,17 +55,22 @@ router.post('/search', async (req, res) => {
 /**
  * Endpoint for raw data view
  */
-router.get('/raw', async (req, res) => {
+router.get('/raw/:id', async (req, res) => {
   try {
-    const { id } = req.query;
+    const { id } = req.params;
     
     if (!id) {
       return res.status(400).json({ error: 'Search ID is required' });
     }
     
     // Fetch raw search results by ID from storage/cache
-    const results = await getSentinelRawData(id);
-    res.status(200).json(results);
+    const searchResults = await getSearchStatus(id);
+    
+    if (!searchResults) {
+      return res.status(404).json({ error: 'Search results not found' });
+    }
+    
+    res.status(200).json(searchResults);
   } catch (error) {
     console.error('Error fetching raw SENTINEL data:', error);
     res.status(500).json({ error: error.message });
@@ -83,8 +88,21 @@ router.post('/save', async (req, res) => {
       return res.status(400).json({ error: 'Search ID is required' });
     }
     
+    // Get the search data from the cache or search history
+    const searchResults = await getSearchStatus(id);
+    
+    if (!searchResults || !searchResults.results) {
+      return res.status(404).json({ error: 'Search results not found' });
+    }
+    
+    // Add notes to the search data if provided
+    const dataToSave = {
+      ...searchResults,
+      notes: notes || ''
+    };
+    
     // Save the search results with optional user notes
-    const savedResult = await saveSentinelResults(id, notes);
+    const savedResult = await saveSearchResult(id, dataToSave);
     res.status(200).json(savedResult);
   } catch (error) {
     console.error('Error saving SENTINEL results:', error);
@@ -109,6 +127,32 @@ router.get('/status', async (req, res) => {
     res.status(200).json(status);
   } catch (error) {
     console.error('Error fetching SENTINEL search status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Retrieve endpoint to get saved search results by ID
+ * Used by the frontend to display past searches from history
+ */
+router.get('/retrieve/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Search ID is required' });
+    }
+    
+    // Get the saved results from the database
+    const results = await getSavedResult(id);
+    
+    if (!results) {
+      return res.status(404).json({ error: 'Search results not found' });
+    }
+    
+    res.status(200).json(results);
+  } catch (error) {
+    console.error('Error retrieving saved SENTINEL results:', error);
     res.status(500).json({ error: error.message });
   }
 });
