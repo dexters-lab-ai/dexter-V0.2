@@ -462,7 +462,26 @@ body {
 }
 
 /* Search type dropdown removed - AI handles tool selection automatically */
+.sentinel-search-type {
+  padding-right: 8px;
+  display: flex;
+  align-items: center;
+}
 
+.sentinel-select {
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--sentinel-text-muted);
+  border: none;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.sentinel-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sentinel-glow);
+}
 .sentinel-search-button {
   background: linear-gradient(135deg, var(--sentinel-primary), var(--sentinel-secondary));
   color: #ffffff;
@@ -535,7 +554,7 @@ body {
   font-size: 0.875rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  border: 1px solid rgba(123, 47, 247, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .sentinel-suggestion-chip:hover {
@@ -1677,6 +1696,23 @@ body {
   /* Show mobile mic button */
   .sentinel-mobile-controls .sentinel-mic-button {
     display: flex;
+  }
+
+  /* Mobile search type dropdown - compact */
+
+
+  .sentinel-mobile-controls .sentinel-search-type {
+    padding: 0;
+  }
+  
+  .sentinel-mobile-controls .sentinel-select {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    border-radius: 10px;
+    min-height: 44px;
+    height: 44px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 0.5px solid rgba(255, 255, 255, 0.1);
   }
 
   /* Input wrapper mobile adjustments - more compact */

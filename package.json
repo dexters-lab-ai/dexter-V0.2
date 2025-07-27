@@ -29,6 +29,7 @@
     "@mendable/firecrawl-js": "^1.19.0",
     "@moralisweb3/common-evm-utils": "^2.27.2",
     "@quicknode/sdk": "^2.4.0",
+    "@ricky0123/vad-web": "^0.0.24",
     "@shopify/storefront-api-client": "^1.0.3",
     "@solana/pay": "^0.2.5",
     "@solana/spl-token": "^0.4.9",

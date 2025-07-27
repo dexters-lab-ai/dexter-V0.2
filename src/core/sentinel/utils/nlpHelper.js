@@ -88,32 +88,63 @@ export function detectQueryIntent(query) {
  */
 export function extractTokens(query) {
   const tokens = [];
+  const trimmedQuery = query.trim();
   
-  // Extract cashtags ($XXX)
-  const cashtags = query.match(/\$([a-zA-Z0-9]+)/g);
-  if (cashtags) {
-    cashtags.forEach(tag => {
-      const symbol = tag.substring(1).toUpperCase();
-      if (!tokens.includes(symbol)) tokens.push(symbol);
+  // 1. Extract Solana token addresses (base58, 32-44 characters)
+  const solanaAddressPattern = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g;
+  const solanaMatches = trimmedQuery.match(solanaAddressPattern);
+  if (solanaMatches) {
+    solanaMatches.forEach(address => {
+      if (!tokens.includes(address)) {
+        tokens.push(address);
+      }
     });
   }
   
-  // Extract token names based on common contexts
-  const tokenContexts = [
-    /(?:about|for|of|on|is)\s+([A-Za-z0-9]+)(?:\s|$)/g,
-    /([A-Za-z0-9]{3,5})\s+(?:price|token|crypto|coin)/gi
-  ];
+  // 2. Extract cashtags ($XXX)
+  const cashtagPattern = /\$([a-zA-Z0-9]+)/g;
+  let cashtagMatch;
+  while ((cashtagMatch = cashtagPattern.exec(trimmedQuery)) !== null) {
+    const symbol = cashtagMatch[1].toUpperCase();
+    if (!tokens.includes(symbol)) {
+      tokens.push(symbol);
+    }
+  }
   
-  tokenContexts.forEach(context => {
-    let match;
-    while ((match = context.exec(query)) !== null) {
+  // 3. Extract hashtags (#XXX)
+  const hashtagPattern = /#([a-zA-Z0-9]+)/g;
+  let hashtagMatch;
+  while ((hashtagMatch = hashtagPattern.exec(trimmedQuery)) !== null) {
+    const symbol = hashtagMatch[1].toUpperCase();
+    if (!tokens.includes(symbol)) {
+      tokens.push(symbol);
+    }
+  }
+  
+  // 4. Extract URLs
+  const urlPattern = /https?:\/\/[^\s]+/g;
+  const urlMatches = trimmedQuery.match(urlPattern);
+  if (urlMatches) {
+    urlMatches.forEach(url => {
+      if (!tokens.includes(url)) {
+        tokens.push(url);
+      }
+    });
+  }
+  
+  // 5. If no specific patterns found, try standalone token symbols
+  // This handles cases like just "BONK" or "SOL" without prefixes
+  if (tokens.length === 0) {
+    const standalonePattern = /^([A-Za-z0-9]{2,10})$/;
+    const match = trimmedQuery.match(standalonePattern);
+    if (match) {
       const potentialToken = match[1].toUpperCase();
-      // Filter out common words
-      if (potentialToken.length >= 3 && !isCommonWord(potentialToken) && !tokens.includes(potentialToken)) {
+      // Filter out common words and add length constraints for crypto tokens
+      if (potentialToken.length >= 2 && potentialToken.length <= 10 && !isCommonWord(potentialToken)) {
         tokens.push(potentialToken);
       }
     }
-  });
+  }
   
   return tokens;
 }

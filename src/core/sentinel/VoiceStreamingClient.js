@@ -4,6 +4,8 @@
  * Handles WebSocket connection to backend, voice activity detection,
  * chunked audio streaming, and AI audio response playback
  */
+import { VAD } from '@ricky0123/vad-web';
+
 export class VoiceStreamingClient {
   constructor() {
     this.ws = null;
@@ -15,11 +17,10 @@ export class VoiceStreamingClient {
     this.isSessionActive = false;
     this.walletAddress = null;
     
-    // Voice Activity Detection settings
-    this.vadThreshold = 20; // Volume threshold for speech detection
-    this.silenceThreshold = 5; // Volume threshold for silence
-    this.silenceTimeout = 1500; // ms of silence before stopping stream
-    this.silenceTimer = null;
+    // VAD
+    this.vad = null;
+    this.vadRunning = false;
+    this.heartbeatInterval = null;
     
     // Audio settings
     this.audioSettings = {
@@ -60,6 +61,8 @@ export class VoiceStreamingClient {
         this.isConnected = true;
         console.log('✅ Connected to voice streaming server');
         this.updateState('connected');
+        // Start heartbeat
+        this.heartbeatInterval = setInterval(() => this.ping(), 25000);
         resolve();
       };
 
@@ -148,134 +151,71 @@ export class VoiceStreamingClient {
   async startAudioCapture() {
     try {
       // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: this.audioSettings 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: this.audioSettings
       });
 
-      // Set up AudioContext for real-time processing
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: this.audioSettings.sampleRate
-      });
-      
-      const source = this.audioContext.createMediaStreamSource(stream);
-      
-      // Set up Voice Activity Detection
-      await this.setupVAD(source);
-      
-      // Set up MediaRecorder for chunked streaming
-      const mimeType = this.getSupportedMimeType();
+      // Set up VAD with the raw stream
+      await this.setupVAD(stream);
+
+      // Set up MediaRecorder
       this.mediaRecorder = new MediaRecorder(stream, {
-        mimeType: mimeType,
-        audioBitsPerSecond: 16000
+        mimeType: this.getSupportedMimeType()
       });
 
       this.mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && this.isStreaming && this.isSessionActive) {
+        if (event.data.size > 0 && this.isStreaming) {
           this.sendAudioChunk(event.data);
         }
       };
 
       this.mediaRecorder.onerror = (error) => {
         console.error('MediaRecorder error:', error);
-        if (this.onError) this.onError('Recording error');
+        this.updateState('error');
+        if (this.onError) this.onError('Audio capture error');
       };
 
-      // Start recording in small chunks (100ms intervals)
-      this.mediaRecorder.start(100);
-      
-      console.log('🎵 Audio capture started');
-      this.updateState('listening');
-      
+      this.mediaRecorder.start(250); // Collect audio in 250ms chunks
+      console.log('🎙️ Audio capture started');
+
     } catch (error) {
       console.error('Error starting audio capture:', error);
-      if (this.onError) this.onError('Could not access microphone');
+      this.updateState('error');
+      if (this.onError) this.onError('Microphone access denied');
       throw error;
     }
   }
 
   /**
-   * Set up Voice Activity Detection using Web Audio API
-   * @param {MediaStreamAudioSourceNode} audioSource - Audio source node
+   * Sets up and starts the real-time VAD processing.
+   * @param {MediaStream} stream The raw audio stream from the microphone.
    */
-  async setupVAD(audioSource) {
-    const analyser = this.audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.8;
-    audioSource.connect(analyser);
+  async setupVAD(stream) {
+    try {
+      this.vad = await VAD.create({
+        stream: stream,
+        workletURL: '/vad.worklet.js', // Make sure this path is correct
+        modelURL: '/silero_vad.onnx',
+        onSpeechStart: () => {
+          console.log('🎤 Speech detected, starting stream...');
+          this.isStreaming = true;
+          this.updateState('speaking_detected');
+        },
+        onSpeechEnd: () => {
+          console.log('🤫 Silence detected, stopping stream...');
+          this.isStreaming = false;
+          this.updateState('listening');
+        },
+      });
 
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    
-    this.vadProcessor = () => {
-      if (!this.isSessionActive) return;
-      
-      analyser.getByteFrequencyData(dataArray);
-      
-      // Calculate average volume
-      const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
-      
-      // Speech detected
-      if (volume > this.vadThreshold && !this.isStreaming) {
-        this.startStreaming();
-      }
-      // Silence detected
-      else if (volume < this.silenceThreshold && this.isStreaming) {
-        this.scheduleStreamingStop();
-      }
-      // Continue speaking (reset silence timer)
-      else if (volume > this.vadThreshold && this.isStreaming) {
-        this.clearSilenceTimer();
-      }
-    };
+      this.vad.start();
+      console.log('✅ VAD started');
 
-    // Run VAD check every 50ms
-    this.vadInterval = setInterval(this.vadProcessor, 50);
-  }
-
-  /**
-   * Start streaming audio chunks
-   */
-  startStreaming() {
-    if (this.isStreaming) return;
-    
-    this.isStreaming = true;
-    this.clearSilenceTimer();
-    this.updateState('streaming');
-    console.log('🎤 Voice streaming started (speech detected)');
-  }
-
-  /**
-   * Schedule streaming stop after silence timeout
-   */
-  scheduleStreamingStop() {
-    if (this.silenceTimer) return; // Timer already set
-    
-    this.silenceTimer = setTimeout(() => {
-      if (this.isStreaming) {
-        this.stopStreaming();
-      }
-    }, this.silenceTimeout);
-  }
-
-  /**
-   * Clear silence timer
-   */
-  clearSilenceTimer() {
-    if (this.silenceTimer) {
-      clearTimeout(this.silenceTimer);
-      this.silenceTimer = null;
+    } catch (error) {
+      console.error('Failed to setup VAD:', error);
+      this.updateState('error');
+      if (this.onError) this.onError('VAD setup failed');
     }
-  }
-
-  /**
-   * Stop streaming audio chunks
-   */
-  stopStreaming() {
-    if (!this.isStreaming) return;
-    
-    this.isStreaming = false;
-    this.clearSilenceTimer();
-    this.updateState('processing');
-    console.log('🤐 Voice streaming stopped (silence detected)');
   }
 
   /**
@@ -300,32 +240,25 @@ export class VoiceStreamingClient {
    * Stop audio capture
    */
   stopAudioCapture() {
-    // Stop MediaRecorder
+    //  stopAudioCapture() {
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.stop();
+      this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      this.mediaRecorder = null;
     }
 
-    // Stop VAD processing
-    if (this.vadInterval) {
-      clearInterval(this.vadInterval);
-      this.vadInterval = null;
+    if (this.vad) {
+      this.vad.destroy();
+      this.vad = null;
+      console.log('⏹️ VAD stopped');
     }
 
-    // Clear silence timer
-    this.clearSilenceTimer();
-
-    // Close AudioContext
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();
+      this.audioContext = null;
     }
-
-    // Stop all tracks
-    if (this.mediaRecorder && this.mediaRecorder.stream) {
-      this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
-    }
-
-    this.isStreaming = false;
-    console.log('🔇 Audio capture stopped');
+    
+    console.log('⏹️ Audio capture stopped');
   }
 
   /**
@@ -396,41 +329,79 @@ export class VoiceStreamingClient {
   }
 
   /**
-   * Play AI audio response
-   * @param {string} base64Audio - Base64 encoded audio
-   * @param {string} mimeType - Audio MIME type
+   * Initializes the audio playback system using MediaSource Extensions.
    */
-  async playAudioResponse(base64Audio, mimeType = 'audio/wav') {
-    try {
-      this.updateState('speaking');
-      
-      // Convert base64 to audio blob
-      const audioBlob = this.base64ToBlob(base64Audio, mimeType);
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      
-      // Set up audio event handlers
-      audio.onended = () => {
-        this.updateState('listening');
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      audio.onerror = (error) => {
-        console.error('Audio playback error:', error);
-        this.updateState('listening');
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      // Play audio response
-      await audio.play();
-      
-      if (this.onAudioResponse) {
-        this.onAudioResponse(audioBlob);
-      }
-      
-    } catch (error) {
-      console.error('Error playing audio response:', error);
+  setupAudioPlayback() {
+    this.audioElement = new Audio();
+    this.mediaSource = new MediaSource();
+    this.audioElement.src = URL.createObjectURL(this.mediaSource);
+    this.audioQueue = [];
+    this.sourceBuffer = null;
+    this.isAppending = false;
+
+    this.mediaSource.addEventListener('sourceopen', () => {
+      console.log('✅ MediaSource opened, creating source buffer.');
+      // Use a common and robustly supported codec
+      const mimeCodec = 'audio/mpeg'; 
+      this.sourceBuffer = this.mediaSource.addSourceBuffer(mimeCodec);
+      this.sourceBuffer.addEventListener('updateend', () => {
+        this.isAppending = false;
+        this.processAudioQueue(); // Process next chunk
+      });
+      this.processAudioQueue(); // Process any chunks that arrived before setup
+    });
+
+    this.audioElement.onended = () => {
       this.updateState('listening');
+    };
+
+    this.audioElement.onerror = (e) => {
+        console.error('Audio element error:', e);
+        this.updateState('listening');
+    };
+  }
+
+  /**
+   * Queues a chunk of audio data for playback.
+   * @param {string} base64Audio - Base64 encoded audio data chunk.
+   */
+  playAudioResponse(base64Audio) {
+    if (!this.audioElement) {
+        this.setupAudioPlayback();
+    }
+
+    // Decode base64 to ArrayBuffer
+    const byteCharacters = atob(base64Audio);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+
+    this.audioQueue.push(byteArray);
+    this.processAudioQueue();
+  }
+
+  /**
+   * Processes the queue of audio chunks, appending them to the SourceBuffer.
+   */
+  processAudioQueue() {
+    if (this.isAppending || this.audioQueue.length === 0 || !this.sourceBuffer || this.sourceBuffer.updating) {
+      return;
+    }
+
+    this.isAppending = true;
+    const audioChunk = this.audioQueue.shift();
+    
+    try {
+        this.sourceBuffer.appendBuffer(audioChunk);
+        if (this.audioElement.paused) {
+            this.audioElement.play().catch(e => console.error('Playback start failed:', e));
+            this.updateState('speaking');
+        }
+    } catch (error) {
+        console.error('Error appending buffer:', error);
+        this.isAppending = false; // Reset flag on error
     }
   }
 
@@ -518,6 +489,11 @@ export class VoiceStreamingClient {
   disconnect() {
     if (this.isSessionActive) {
       this.endVoiceSession();
+    }
+
+    if (this.heartbeatInterval) {
+        clearInterval(this.heartbeatInterval);
+        this.heartbeatInterval = null;
     }
     
     if (this.ws) {

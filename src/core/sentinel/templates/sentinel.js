@@ -1,5 +1,6 @@
 // SENTINEL API JavaScript
-document.addEventListener('DOMContentLoaded', function() {
+console.log('Sentinel.js loaded - Version: ' + new Date().getTime());
+import { VoiceStreamingClient } from '../VoiceStreamingClient.js';
     // Elements
     const searchInput = document.getElementById('sentinelSearch');
     const searchButton = document.getElementById('searchButton');
@@ -30,11 +31,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Search history in memory (will be saved to localStorage)
     let searchHistory = [];
     
-    // Voice recording state
-    let mediaRecorder = null;
-    let audioChunks = [];
-    let isRecording = false;
-    let recordingTimeout = null;
+    // Voice Client
+    const voiceClient = new VoiceStreamingClient();
     
     // Wallet connection state
     let walletConnected = false;
@@ -488,65 +486,53 @@ document.addEventListener('DOMContentLoaded', function() {
      * in the results section or specified container
      * @returns {void}
      */
+    /**
+     * Show wallet connection overlay with static message
+     */
     function showWalletConnectionOverlay() {
         try {
-            console.log('Showing wallet connection overlay');
+            console.log('🔒 Showing wallet connection overlay');
             
-            // Ensure results section exists
-            if (!resultsSection) {
-                console.error('Results section not found for wallet overlay');
+            const overlay = document.getElementById('walletConnectionOverlay');
+            if (!overlay) {
+                console.error('Wallet connection overlay element not found');
                 return;
             }
             
-            // Clear existing content with fade effect
-            resultsSection.classList.add('fade-out');
+            // Show the overlay
+            overlay.classList.add('visible');
             
-            setTimeout(() => {
-                // Clear and remove fade-out
-                resultsSection.innerHTML = '';
-                resultsSection.classList.remove('fade-out');
+            // Set up the connect wallet button in the overlay
+            const connectBtn = document.getElementById('walletConnectBtn');
+            if (connectBtn) {
+                // Remove previous listeners to avoid duplicates
+                const newConnectBtn = connectBtn.cloneNode(true);
+                connectBtn.parentNode.replaceChild(newConnectBtn, connectBtn);
                 
-                // Create wallet connection overlay
-                const walletOverlay = document.createElement('div');
-                walletOverlay.className = 'sentinel-wallet-overlay fade-in';
-                walletOverlay.innerHTML = `
-                    <div class="sentinel-wallet-message">
-                        <div class="sentinel-wallet-icon">
-                            <i class="fas fa-wallet"></i>
-                        </div>
-                        <h3>Wallet Connection Required</h3>
-                        <p>Please connect your wallet to access SENTINEL features.</p>
-                        <p class="subtext">SENTINEL requires a connected wallet for verification and personalized results.</p>
-                        <button id="connectWalletBtn" class="sentinel-connect-btn">
-                            <i class="fas fa-plug"></i> Connect Wallet
-                        </button>
-                    </div>
-                `;
+                // Add click handler for connect button
+                newConnectBtn.addEventListener('click', () => {
+                    console.log('Connect wallet clicked from overlay');
+                    handleConnectWalletClick();
+                });
+            }
+            
+            // Set up the close button
+            const closeBtn = document.getElementById('closeWalletOverlay');
+            if (closeBtn) {
+                // Remove previous listeners to avoid duplicates
+                const newCloseBtn = closeBtn.cloneNode(true);
+                closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
                 
-                // Add to results section
-                resultsSection.appendChild(walletOverlay);
-                
-                // Add event listener to the connect button
-                const connectBtn = document.getElementById('connectWalletBtn');
-                if (connectBtn) {
-                    connectBtn.addEventListener('click', () => {
-                        // Use our well-defined handleConnectWalletClick function
-                        handleConnectWalletClick();
-                        
-                        // Clear the wallet connection overlay
-                        resultsSection.classList.add('fade-out');
-                        setTimeout(() => {
-                            resultsSection.innerHTML = '';
-                            resultsSection.classList.remove('fade-out');
-                        }, 300);
-                    });
-                }
-                
-                console.log('Wallet connection overlay displayed');
-            }, 300); // Wait for fade-out
+                // Add click handler for close button
+                newCloseBtn.addEventListener('click', () => {
+                    console.log('Close wallet overlay clicked');
+                    hideWalletConnectionOverlay();
+                });
+            }
+            
+            console.log('✅ Wallet connection overlay displayed with close button');
         } catch (error) {
             console.error('Error showing wallet connection overlay:', error);
-            showNotification('Could not display wallet connection message', 'error');
         }
     }
 
@@ -632,10 +618,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Simulate the AI thinking about which tools to use
                 await simulateAiToolSelection();
                 
+                console.log(`Initiating search for: "${query}"`);
+
                 // Prepare search data with wallet address
                 const searchData = {
                     query,
-                    type: searchType,
                     walletAddress // Include wallet address in all searches
                 };
                 
@@ -701,7 +688,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     const searchItem = {
                         id: data.id,
                         query: query,
-                        type: searchType,
                         timestamp: Date.now(),
                         summary: null // Will be updated when summary is generated
                     };
@@ -1749,148 +1735,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    /**
-     * Create a card displaying social data including tweets and sentiment analysis
-     * @param {Object} socialData - Social data object containing tweets, sentiment, and engagement metrics
-     * @returns {HTMLElement} - The created card element or an error card if creation failed
-     */
-    function createSocialCard(socialData) {
-        // Configuration for social card creation
-        const config = {
-            templateId: 'socialDataTemplate',
-            cardClass: 'sentinel-result-card social-card',
-            selectors: {
-                tweetCount: '[data-field="tweetCount"]',
-                engagement: '[data-field="engagement"]',
-                sentiment: '[data-field="sentiment"]',
-                tweetsList: '.sentinel-tweets-list'
-            },
-            classes: {
-                tweet: 'sentinel-tweet',
-                tweetHeader: 'sentinel-tweet-header',
-                tweetUser: 'sentinel-tweet-user',
-                tweetDate: 'sentinel-tweet-date',
-                tweetContent: 'sentinel-tweet-content',
-                tweetStats: 'sentinel-tweet-stats',
-                tweetLikes: 'sentinel-tweet-likes',
-                tweetRetweets: 'sentinel-tweet-retweets',
-                noData: 'sentinel-no-data',
-                // Sentiment classes
-                positive: 'positive',
-                negative: 'negative',
-                neutral: 'neutral'
-            },
-            maxTweetsToShow: 5,
-            defaultValues: {
-                tweetCount: '0',
-                engagement: '0',
-                sentiment: 'Neutral'
-            }
-        };
-        
-        try {
-            // Validate input
-            if (!socialData) {
-                console.error('Invalid social data provided to createSocialCard');
-                return createErrorCard('Social Data', 'No social information available');
-            }
-            
-            // Check if template exists
-            const templateElement = document.getElementById(config.templateId);
-            if (!templateElement) {
-                console.error(`Template not found: ${config.templateId}`);
-                return createErrorCard('Social Data', 'Template not available');
-            }
-            
-            const template = templateElement.content.cloneNode(true);
-            
-            // Create wrapper element to convert DocumentFragment to a proper DOM element
-            const cardElement = document.createElement('div');
-            cardElement.className = config.cardClass;
-            
-            // Helper function to safely query and update elements
-            function safeQueryAndUpdate(selector, updateFn) {
-                const element = template.querySelector(selector);
-                if (element) {
-                    updateFn(element);
-                } else {
-                    console.warn(`Element not found in template: ${selector}`);
-                }
-            }
-            
-            // Set tweet stats safely
-            safeQueryAndUpdate(config.selectors.tweetCount, element => {
-                element.textContent = socialData.tweetCount || config.defaultValues.tweetCount;
-            });
-            
-            safeQueryAndUpdate(config.selectors.engagement, element => {
-                element.textContent = formatNumber(socialData.engagement) || config.defaultValues.engagement;
-            });
-            
-            // Set sentiment with color
-            safeQueryAndUpdate(config.selectors.sentiment, element => {
-                const sentiment = socialData.sentiment || config.defaultValues.sentiment;
-                let sentimentClass = config.classes.neutral;
-                
-                // Determine sentiment class based on text
-                if (sentiment.toLowerCase().includes('positive')) {
-                    sentimentClass = config.classes.positive;
-                } else if (sentiment.toLowerCase().includes('negative')) {
-                    sentimentClass = config.classes.negative;
-                }
-                
-                element.textContent = sentiment;
-                element.classList.add(sentimentClass);
-            });
-            
-            // Add tweets
-            safeQueryAndUpdate(config.selectors.tweetsList, tweetsList => {
-                if (socialData.tweets && Array.isArray(socialData.tweets) && socialData.tweets.length > 0) {
-                    try {
-                        const tweetItems = socialData.tweets
-                            .slice(0, config.maxTweetsToShow)
-                            .map(tweet => {
-                                // Validate tweet object properties with defaults
-                                const username = tweet?.username || 'Anonymous';
-                                const date = tweet?.date || new Date().toISOString();
-                                const text = tweet?.text || 'No content available';
-                                const likes = tweet?.likes || 0;
-                                const retweets = tweet?.retweets || 0;
-                                
-                                return `
-                                    <div class="${config.classes.tweet}">
-                                        <div class="${config.classes.tweetHeader}">
-                                            <span class="${config.classes.tweetUser}">${username}</span>
-                                            <span class="${config.classes.tweetDate}">${formatDate(date)}</span>
-                                        </div>
-                                        <p class="${config.classes.tweetContent}">${text}</p>
-                                        <div class="${config.classes.tweetStats}">
-                                            <span class="${config.classes.tweetLikes}"><i class="far fa-heart"></i> ${likes}</span>
-                                            <span class="${config.classes.tweetRetweets}"><i class="fas fa-retweet"></i> ${retweets}</span>
-                                        </div>
-                                    </div>
-                                `;
-                            })
-                            .join('');
-                        
-                        tweetsList.innerHTML = tweetItems;
-                    } catch (tweetError) {
-                        console.error('Error processing tweet data:', tweetError);
-                        tweetsList.innerHTML = `<p class="${config.classes.noData}">Error processing tweet data</p>`;
-                    }
-                } else {
-                    tweetsList.innerHTML = `<p class="${config.classes.noData}">No tweets available</p>`;
-                }
-            });
-            
-            // Append the template to our element
-            cardElement.appendChild(template);
-            return cardElement;
-        } catch (error) {
-            console.error('Error creating social card:', error);
-            return createErrorCard('Social Data', 'Failed to create social card');
-        }
-    }
+
 
     
     /**
@@ -2717,13 +2562,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Error initializing wallet connection:', error);
-            // Removed notification to prevent alert on initialization
+            showNotification('Failed to initialize wallet connection. Please refresh the page.', 'error');
         }
     }
-
-    /**
-     * Handle connect wallet button click - Real Solana wallet integration
-     */
     async function handleConnectWalletClick() {
         try {
             if (walletConnected) {
@@ -3232,7 +3073,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Show any wallet-specific UI elements
-        const walletElements = document.querySelectorAll('.wallet-required');
+        const walletElements = document.querySelectorAll('.sentinel-wallet-overlay');
         walletElements.forEach(el => el.classList.remove('hidden'));
         
         // Hide the wallet connection overlay if it's visible
@@ -3267,11 +3108,11 @@ document.addEventListener('DOMContentLoaded', function() {
             searchInput.placeholder = 'Connect wallet to search...';
             console.log('Search input kept enabled (wallet check in handleSearch)');
         }
-        
         if (searchTypeSelect) {
             searchTypeSelect.disabled = true;
             console.log('Search type selector disabled');
         }
+        // Search type selector was removed from UI - AI handles tool selection automatically
         if (micButton) {
             micButton.disabled = true;
             console.log('Mic button disabled');
@@ -3285,62 +3126,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Hide any wallet-specific UI elements
-        const walletElements = document.querySelectorAll('.wallet-required');
+        const walletElements = document.querySelectorAll('.sentinel-wallet-overlay');
         walletElements.forEach(el => el.classList.add('hidden'));
         
-        // Removed annoying wallet connection notification on first load
         console.log('SENTINEL features disabled - wallet connection required');
     }
     
-    /**
-     * Show wallet connection overlay with static message
-     */
-    function showWalletConnectionOverlay() {
-        try {
-            console.log('🔒 Showing wallet connection overlay');
-            
-            const overlay = document.getElementById('walletConnectionOverlay');
-            if (!overlay) {
-                console.error('Wallet connection overlay element not found');
-                return;
-            }
-            
-            // Show the overlay
-            overlay.classList.add('visible');
-            
-            // Set up the connect wallet button in the overlay
-            const connectBtn = document.getElementById('walletConnectBtn');
-            if (connectBtn) {
-                // Remove previous listeners to avoid duplicates
-                const newConnectBtn = connectBtn.cloneNode(true);
-                connectBtn.parentNode.replaceChild(newConnectBtn, connectBtn);
-                
-                // Add click handler for connect button
-                newConnectBtn.addEventListener('click', () => {
-                    console.log('Connect wallet clicked from overlay');
-                    handleConnectWalletClick();
-                });
-            }
-            
-            // Set up the close button
-            const closeBtn = document.getElementById('closeWalletOverlay');
-            if (closeBtn) {
-                // Remove previous listeners to avoid duplicates
-                const newCloseBtn = closeBtn.cloneNode(true);
-                closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
-                
-                // Add click handler for close button
-                newCloseBtn.addEventListener('click', () => {
-                    console.log('Close wallet overlay clicked');
-                    hideWalletConnectionOverlay();
-                });
-            }
-            
-            console.log('✅ Wallet connection overlay displayed with close button');
-        } catch (error) {
-            console.error('Error showing wallet connection overlay:', error);
-        }
-    }
+
+
 
     /**
      * Hide wallet connection overlay
@@ -3359,72 +3152,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Error hiding wallet connection overlay:', error);
         }
-    }
-    
-    // This duplicate handleConnectWalletClick function has been removed
-    // The implementation at line ~2524 is now the single source of truth
-    
-    // This duplicate enableSentinelFeatures function has been removed
-    // The implementation at line ~2600 is now the single source of truth
-    
-    /**
-     * Disable SENTINEL features until wallet is connected
-     */
-    function disableSentinelFeatures() {
-        console.log('Disabling SENTINEL features until wallet is connected');
-        
-        if (searchButton) {
-            searchButton.disabled = true;
-            console.log('Search button disabled');
-        }
-        
-        // IMPORTANT: Do NOT disable the search input - users need to be able to type
-        // Instead, we'll check wallet connection in handleSearch() function
-        if (searchInput) {
-            // Keep search input enabled for typing, but add visual indicator
-            searchInput.disabled = false;
-            searchInput.placeholder = 'Connect wallet to search...';
-            console.log('Search input kept enabled with wallet prompt');
-        }
-        
-        if (micButton) {
-            micButton.disabled = true;
-            console.log('Mic button disabled');
-        }
-        
-        // IMPORTANT: Never disable the wallet connection button!
-        // Users need to be able to connect their wallet
-        if (connectWalletButton) {
-            connectWalletButton.disabled = false;
-            console.log('Wallet connection button kept enabled');
-        }
-        
-        // Hide any wallet-specific UI elements
-        const walletElements = document.querySelectorAll('.wallet-required');
-        walletElements.forEach(el => el.classList.add('hidden'));
-        
-        // Removed annoying wallet connection notification on first load
-        console.log('SENTINEL features disabled - wallet connection required');
-    }
-
-    /**
-     * Generate a simulated wallet address for demo purposes
-     */
-    function generateWalletAddress() {
-        const chars = '0123456789abcdef';
-        let addr = '0x';
-        for (let i = 0; i < 40; i++) {
-            addr += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return addr;
-    }
-    
-    /**
-     * Truncate wallet address for display
-     */
-    function truncateAddress(address) {
-        if (!address) return '';
-        return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
     }
     
     /**
@@ -3458,248 +3185,98 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Voice streaming client for real-time voice interaction
-    let voiceStreamingClient = null;
-    
-    // Import VoiceStreamingClient dynamically to avoid CORS issues
-    async function initializeVoiceStreamingClient() {
-        try {
-            const { VoiceStreamingClient } = await import('/VoiceStreamingClient.js');
-            voiceStreamingClient = new VoiceStreamingClient();
-            
-            // Set up event handlers
-            voiceStreamingClient.onStateChange = updateMicButtonState;
-            voiceStreamingClient.onTranscription = (text) => {
-                console.log('Voice transcription:', text);
-                showNotification(`Heard: "${text}"`, 'info');
-            };
-            voiceStreamingClient.onError = (error) => {
-                console.error('Voice streaming error:', error);
-                showNotification(`Voice error: ${error}`, 'error');
-                resetMicButton();
-            };
-            
-            console.log('✅ VoiceStreamingClient initialized successfully');
-            return true;
-        } catch (error) {
-            console.error('Failed to initialize VoiceStreamingClient:', error);
-            showNotification('Voice features unavailable', 'warning');
-            return false;
-        }
-    }
 
     /**
-     * Initialize real-time voice streaming functionality
-     * Sets up WebSocket connection and voice activity detection
+     * Sets up the voice client, its event listeners, and UI interactions.
      */
-    function initializeVoiceRecording() {
-        try {
-            if (!micButton) {
-                console.error('Mic button element not found');
+    function setupVoiceClient() {
+        const micButton = document.querySelector('#sentinelMicButton');
+        if (!micButton) return;
+
+        function updateMicButtonState(state) {
+            if (!micButton) return;
+            const states = ['idle', 'connecting', 'listening', 'speaking_detected', 'speaking', 'error', 'disconnected'];
+            micButton.classList.remove(...states);
+            micButton.classList.add(state);
+
+            switch (state) {
+                case 'idle':
+                    micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+                    break;
+                case 'connecting':
+                case 'disconnected': // Show spinner for disconnecting too
+                    micButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    break;
+                case 'listening':
+                    micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+                    break;
+                case 'speaking_detected':
+                    micButton.innerHTML = '<i class="fas fa-microphone-alt"></i>';
+                    break;
+                case 'speaking':
+                    micButton.innerHTML = '<i class="fas fa-volume-up"></i>';
+                    break;
+                case 'error':
+                    micButton.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+                    break;
+                default:
+                    micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            }
+        }
+
+        function resetMicButton() {
+            updateMicButtonState('idle');
+            if (voiceClient && voiceClient.isConnected) {
+                voiceClient.disconnect();
+            }
+        }
+
+        micButton.addEventListener('click', () => {
+            if (!walletConnected || !walletAddress) {
+                showNotification('🔒 Please connect your wallet to use voice.', 'warning');
+                showWalletConnectionOverlay();
                 return;
             }
 
-            // Import and initialize the voice streaming client
-            import('../VoiceStreamingClient.js').then(module => {
-                const { VoiceStreamingClient } = module;
-                voiceStreamingClient = new VoiceStreamingClient();
-                
-                // Set up event handlers
-                setupVoiceStreamingHandlers();
-                
-                console.log('✅ Voice streaming client initialized');
-            }).catch(error => {
-                console.error('Failed to load voice streaming client:', error);
-                showNotification('Voice streaming unavailable', 'error');
-            });
+            if (!voiceClient.isSessionActive) {
+                const instructions = `You are SENTINEL, an AI-powered crypto intelligence assistant. 
+                Analyze user voice queries about tokens, prices, security, or social sentiment. 
+                Provide concise, actionable insights. Keep responses under 30 seconds for voice interaction. 
+                Use available tools to fetch real-time data when needed.`;
+                voiceClient.startVoiceSession(instructions);
+            } else {
+                voiceClient.endVoiceSession();
+            }
+        });
 
-            // Set up mic button event listeners
-            micButton.addEventListener('click', toggleVoiceSession);
-            console.log('Mic button listener attached');
-        } catch (error) {
-            console.error('Error initializing voice recording:', error);
-            showNotification('Voice recording initialization failed', 'error');
-        }
-    }
+        document.addEventListener('walletConnected', async (e) => {
+            try {
+                await voiceClient.connect(e.detail.walletAddress);
+            } catch (error) {
+                console.error('Failed to connect voice client:', error);
+                showNotification('Voice service connection failed.', 'error');
+            }
+        });
 
-    /**
-     * Set up voice streaming event handlers
-     */
-    function setupVoiceStreamingHandlers() {
-        if (!voiceStreamingClient) return;
-
-        // Handle state changes (connected, listening, streaming, thinking, speaking, etc.)
-        voiceStreamingClient.onStateChange = (state) => {
+        voiceClient.onStateChange = (state) => {
             updateMicButtonState(state);
-            console.log(`🎤 Voice state: ${state}`);
         };
 
-        // Handle transcription results
-        voiceStreamingClient.onTranscription = (text) => {
-            console.log('💬 Transcription received:', text);
-            // Optionally show transcription in UI or trigger search
-            if (text.trim()) {
-                searchInput.value = text;
+        voiceClient.onTranscription = (transcription) => {
+            if (transcription.trim()) {
+                searchInput.value = transcription;
                 // Auto-trigger search for voice queries
                 setTimeout(() => handleSearch(), 500);
             }
         };
 
-        // Handle audio responses from AI
-        voiceStreamingClient.onAudioResponse = (audioBlob) => {
-            console.log('🔊 AI audio response received');
-            // Audio is automatically played by the voice client
-        };
-
-        // Handle errors
-        voiceStreamingClient.onError = (error) => {
-            console.error('Voice streaming error:', error);
-            showNotification(`Voice error: ${error}`, 'error');
+        voiceClient.onError = (error) => {
+            showNotification(`Voice Error: ${error}`, 'error');
             resetMicButton();
         };
-    }
 
-    /**
-     * Toggle voice session - start or stop real-time voice interaction
-     */
-    async function toggleVoiceSession() {
-        console.log('🎤 Voice session toggle initiated - checking wallet connection...');
-        console.log('Wallet connected:', walletConnected);
-        console.log('Wallet address:', walletAddress);
-        
-        // Check if wallet is connected first
-        if (!walletConnected || !walletAddress) {
-            console.warn('🚫 Voice session blocked: Wallet not connected');
-            showNotification('🔒 Wallet Required: Please connect your wallet to use voice features', 'warning');
-            showWalletConnectionOverlay();
-            return;
-        }
-        
-        console.log('✅ Wallet check passed - proceeding with voice session...');
-        
-        if (!voiceStreamingClient) {
-            showNotification('Voice streaming not available', 'error');
-            return;
-        }
-
-        try {
-            if (voiceStreamingClient.isReady()) {
-                // End current session
-                await endVoiceSession();
-            } else {
-                // Start new session
-                await startVoiceSession();
-            }
-        } catch (error) {
-            console.error('Error toggling voice session:', error);
-            showNotification('Voice session error', 'error');
-            resetMicButton();
-        }
-    }
-
-    /**
-     * Start a new real-time voice session
-     */
-    async function startVoiceSession() {
-        try {
-            updateMicButtonState('connecting');
-            showNotification('Connecting to voice service...', 'info');
-            
-            // Connect to voice streaming server
-            await voiceStreamingClient.connect(walletAddress);
-            
-            // Start voice session with SENTINEL instructions
-            const instructions = `You are SENTINEL, an AI-powered crypto intelligence assistant. 
-            Analyze user voice queries about tokens, prices, security, or social sentiment. 
-            Provide concise, actionable insights. Keep responses under 30 seconds for voice interaction. 
-            Use available tools to fetch real-time data when needed.`;
-            
-            await voiceStreamingClient.startVoiceSession(instructions);
-            
-            showNotification('Voice session active - speak now!', 'success');
-            console.log('✅ Voice session started successfully');
-            
-        } catch (error) {
-            console.error('Error starting voice session:', error);
-            showNotification('Failed to start voice session', 'error');
-            resetMicButton();
-        }
-    }
-
-    /**
-     * End the current voice session
-     */
-    async function endVoiceSession() {
-        try {
-            updateMicButtonState('disconnecting');
-            
-            if (voiceStreamingClient) {
-                await voiceStreamingClient.endVoiceSession();
-            }
-            
-            showNotification('Voice session ended', 'info');
-            resetMicButton();
-            console.log('✅ Voice session ended successfully');
-            
-        } catch (error) {
-            console.error('Error ending voice session:', error);
-            resetMicButton();
-        }
-    }
-
-    /**
-     * Update microphone button state based on voice streaming state
-     * @param {string} state - Current voice state
-     */
-    function updateMicButtonState(state) {
-        if (!micButton) return;
-        
-        // Remove all state classes
-        micButton.classList.remove('idle', 'connecting', 'listening', 'streaming', 'thinking', 'speaking', 'processing', 'disconnecting');
-        
-        // Add current state class
-        micButton.classList.add(state);
-        
-        // Update button icon and content based on state
-        switch (state) {
-            case 'idle':
-                micButton.innerHTML = '<i class="fas fa-microphone"></i>';
-                break;
-            case 'connecting':
-                micButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                break;
-            case 'listening':
-                micButton.innerHTML = '<i class="fas fa-microphone"></i>';
-                break;
-            case 'streaming':
-                micButton.innerHTML = '<i class="fas fa-microphone-alt"></i>';
-                break;
-            case 'thinking':
-                micButton.innerHTML = '<i class="fas fa-brain"></i>';
-                break;
-            case 'speaking':
-                micButton.innerHTML = '<i class="fas fa-volume-up"></i>';
-                break;
-            case 'processing':
-                micButton.innerHTML = '<i class="fas fa-cog fa-spin"></i>';
-                break;
-            case 'disconnecting':
-                micButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                break;
-            default:
-                micButton.innerHTML = '<i class="fas fa-microphone"></i>';
-        }
-    }
-
-    /**
-     * Reset microphone button to idle state
-     */
-    function resetMicButton() {
+        // Set initial state
         updateMicButtonState('idle');
-        
-        // Disconnect voice client if connected
-        if (voiceStreamingClient && voiceStreamingClient.isConnected) {
-            voiceStreamingClient.disconnect();
-        }
     }
 
     /**
@@ -3858,8 +3435,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Clear any summary content
             clearSummary();
             
-            // Initialize voice recording capabilities
-            initializeVoiceRecording();
+            // Initialize the voice client
+            setupVoiceClient();
             
             // Initialize wallet connection functionality
             initializeWalletConnection();
@@ -3867,9 +3444,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Initialize mobile controls and textarea functionality
             initializeMobileControls();
             
-            // Disable SENTINEL features until wallet is connected
-            // Will be enabled when wallet is connected
-            disableSentinelFeatures();
+
             
             console.log('SENTINEL API initialized successfully');
         } catch (error) {
@@ -3877,7 +3452,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Initialize when document is ready
-    init();
-});
 
+    
+    // Initialize the application
+    init();

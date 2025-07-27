@@ -51,6 +51,14 @@
         <section class="sentinel-search-section">
             <!-- Mobile controls row (hidden on desktop) -->
             <div class="sentinel-mobile-controls">
+                <div class="sentinel-search-type">
+                    <select id="searchTypeMobile" class="sentinel-select">
+                        <option value="auto">NLI</option>
+                        <option value="text">Symbol</option>
+                        <option value="contract">CA</option>
+                        <option value="url">URL</option>
+                    </select>
+                </div>
                 <button id="sentinelMicButtonMobile" class="sentinel-mic-button idle">
                     <i class="fas fa-microphone"></i>
                 </button>
@@ -64,6 +72,14 @@
                     <button id="sentinelMicButton" class="sentinel-mic-button idle">
                         <i class="fas fa-microphone"></i>
                     </button>
+                    <div class="sentinel-search-type">
+                        <select id="searchTypeSelect" class="sentinel-select">
+                            <option value="auto">Auto Detect</option>
+                            <option value="text">Symbol</option>
+                            <option value="contract">CA</option>
+                            <option value="url">URL</option>
+                        </select>
+                    </div>
                 </div>
                 <button id="searchButton" class="sentinel-search-button">
                     <i class="fas fa-search"></i> Search

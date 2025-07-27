@@ -27,7 +27,7 @@ import { pumpFunService } from './services/pumpfun/PumpFunService.js';
 import { startMonitoringDashboard } from './core/monitoring/Dashboard.js'; 
 import { intentProcessor } from './services/ai/processors/IntentProcessor.js';
 import { unifiedMessenger } from './core/UnifiedMessageHandler.js';
-import { WebSocketManager } from './services/solanaPay/WebSocketManager.js';
+import { WebSocketRouter } from './services/WebSocketRouter.js';
 
 import dashboardRouter from './core/monitoring/Dashboard.js';
 import apiRoutes from './core/monitoring/api/routes.js';
@@ -43,7 +43,7 @@ class ServerManager {
     this.httpServer = null;
     this.__dirname = path.dirname(fileURLToPath(import.meta.url));
     this.wss = null;
-    this.wsManager = new WebSocketManager();
+    this.wsManager = new WebSocketRouter();
     this.isShuttingDown = false;
     this.httpRetryCount = 0;
     this.MAX_RETRIES = 10;

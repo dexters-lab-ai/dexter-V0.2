@@ -176,7 +176,7 @@ export async function renderSentinelPage() {
     // Inject CSS and JS into HTML template
     const fullHtml = htmlTemplate
       .replace('<!-- SENTINEL_CSS_PLACEHOLDER -->', `<style>${cssContent}</style>`)
-      .replace('<!-- SENTINEL_JS_PLACEHOLDER -->', `<script>${jsContent}</script>`);
+      .replace('<!-- SENTINEL_JS_PLACEHOLDER -->', `<script type="module">${jsContent}</script>`);
     
     return fullHtml;
   } catch (error) {

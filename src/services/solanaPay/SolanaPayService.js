@@ -3,7 +3,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { ErrorHandler } from '../../core/errors/index.js';
 import { PaymentSessionManager } from './PaymentSessionManager.js';
 import { TransactionMonitor } from './TransactionMonitor.js';
-import { WebSocketManager } from './WebSocketManager.js';
+
 import { QRCodeGenerator } from './QRCodeGenerator.js';
 import { ReferenceTracker } from './ReferenceTracker.js';
 import { cleanupManager } from '../../core/cleanup.js';
@@ -27,7 +27,7 @@ class SolanaPayService extends EventEmitter {
     // Initialize sub-modules
     this.sessions = new PaymentSessionManager();
     this.monitor = new TransactionMonitor();
-    this.websocket = new WebSocketManager();
+
     this.qrGenerator = new QRCodeGenerator();
     this.referenceTracker = new ReferenceTracker();
   }
@@ -43,7 +43,7 @@ class SolanaPayService extends EventEmitter {
       await Promise.all([
         this.sessions.initialize(),
         this.monitor.initialize(this.connection),
-        this.websocket.initialize(),
+
         this.qrGenerator.initialize(),
         this.referenceTracker.initialize()
       ]);
@@ -62,7 +62,7 @@ class SolanaPayService extends EventEmitter {
   setupEventHandlers() {
     // Handle payment status updates
     this.sessions.on('statusUpdate', async ({ sessionId, status }) => {
-      this.websocket.notifyClient(sessionId, { type: 'status', status });
+      this.emit('paymentUpdate', { sessionId, data: { type: 'status', status } });
       const session = await this.sessions.getSession(sessionId);
       const merchant = await merchantService.getMerchantByEmail(session.merchantEmail);
       if (merchant) {
@@ -73,10 +73,7 @@ class SolanaPayService extends EventEmitter {
     // Handle transaction confirmations
     this.monitor.on('transactionConfirmed', async ({ sessionId, signature }) => {
       await this.sessions.updateStatus(sessionId, PaymentStatus.COMPLETED);
-      this.websocket.notifyClient(sessionId, { 
-        type: 'complete',
-        signature 
-      });
+      this.emit('paymentUpdate', { sessionId, data: { type: 'complete', signature } });
       const session = await this.sessions.getSession(sessionId);
       const merchant = await merchantService.getMerchantByEmail(session.merchantEmail);
       if (merchant) {
@@ -87,10 +84,7 @@ class SolanaPayService extends EventEmitter {
     // Handle errors
     this.monitor.on('error', async ({ sessionId, error }) => {
       await this.sessions.updateStatus(sessionId, PaymentStatus.FAILED);
-      this.websocket.notifyClient(sessionId, {
-        type: 'error',
-        error: error.message
-      });
+      this.emit('paymentUpdate', { sessionId, data: { type: 'error', error: error.message } });
       const session = await this.sessions.getSession(sessionId);
       const merchant = await merchantService.getMerchantByEmail(session.merchantEmail);
       if (merchant) {
@@ -158,7 +152,7 @@ class SolanaPayService extends EventEmitter {
     // Cleanup all sub-modules
     this.sessions.cleanup();
     this.monitor.cleanup();
-    this.websocket.cleanup();
+
     this.qrGenerator.cleanup();
     this.referenceTracker.cleanup();
 
