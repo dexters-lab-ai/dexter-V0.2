@@ -3526,6 +3526,79 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
+     * Initialize mobile controls and auto-expanding textarea functionality
+     */
+    function initializeMobileControls() {
+        try {
+            console.log('Initializing mobile controls...');
+            
+            // Get mobile control elements
+            const searchTypeMobile = document.getElementById('searchTypeMobile');
+            const sentinelMicButtonMobile = document.getElementById('sentinelMicButtonMobile');
+            const searchInput = document.getElementById('sentinelSearch');
+            const searchTypeDesktop = document.getElementById('searchType');
+            const sentinelMicButtonDesktop = document.getElementById('sentinelMicButton');
+            
+            // Synchronize mobile and desktop search type dropdowns
+            if (searchTypeMobile && searchTypeDesktop) {
+                searchTypeMobile.addEventListener('change', function() {
+                    searchTypeDesktop.value = this.value;
+                    console.log('Mobile search type changed to:', this.value);
+                });
+                
+                searchTypeDesktop.addEventListener('change', function() {
+                    searchTypeMobile.value = this.value;
+                    console.log('Desktop search type changed to:', this.value);
+                });
+            }
+            
+            // Synchronize mobile and desktop mic buttons
+            if (sentinelMicButtonMobile && sentinelMicButtonDesktop) {
+                sentinelMicButtonMobile.addEventListener('click', function() {
+                    sentinelMicButtonDesktop.click();
+                    console.log('Mobile mic button clicked');
+                });
+            }
+            
+            // Auto-expanding textarea functionality
+            if (searchInput && searchInput.tagName === 'TEXTAREA') {
+                searchInput.addEventListener('input', function() {
+                    // Reset height to auto to get the correct scrollHeight
+                    this.style.height = 'auto';
+                    
+                    // Set height based on scrollHeight, with min and max constraints
+                    const minHeight = 44; // Minimum height in pixels
+                    const maxHeight = 120; // Maximum height in pixels
+                    const newHeight = Math.min(Math.max(this.scrollHeight, minHeight), maxHeight);
+                    
+                    this.style.height = newHeight + 'px';
+                    
+                    // Show/hide scrollbar if content exceeds max height
+                    if (this.scrollHeight > maxHeight) {
+                        this.style.overflowY = 'auto';
+                    } else {
+                        this.style.overflowY = 'hidden';
+                    }
+                });
+                
+                // Handle Enter key (allow Shift+Enter for new lines)
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSearch();
+                    }
+                });
+                
+                console.log('Auto-expanding textarea initialized');
+            }
+            
+            console.log('Mobile controls initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize mobile controls:', error);
+        }
+    }
+
+    /**
      * Initialize all components and set up event listeners
      * This is the main initialization function that runs when the page loads
      */
@@ -3631,6 +3704,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Initialize wallet connection functionality
             initializeWalletConnection();
+            
+            // Initialize mobile controls and textarea functionality
+            initializeMobileControls();
             
             // Disable SENTINEL features until wallet is connected
             // Will be enabled when wallet is connected

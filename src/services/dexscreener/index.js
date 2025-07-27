@@ -32,7 +32,17 @@ class DexScreenerService {
     // Check rate limits first
     const isLimited = await rateLimiter.isRateLimited('dexscreener', endpoint);
     if (isLimited) {
-      throw new Error('Rate limit exceeded');
+      console.warn('🚫 DexScreener rate limit exceeded, checking cache for fallback...');
+      
+      // Try to return cached data even if expired as fallback
+      const cached = await cacheService.get(cacheKey, true); // Allow expired cache
+      if (cached) {
+        console.log('📦 Returning expired cache data due to rate limit');
+        return cached;
+      }
+      
+      // If no cache available, throw with helpful message
+      throw new Error('Rate limit exceeded - please try again in a few seconds');
     }
 
     // Check cache
@@ -47,6 +57,20 @@ class DexScreenerService {
       await cacheService.set(cacheKey, data, CACHE_DURATION);
       return data;
     } catch (error) {
+      // Handle specific rate limit errors from API
+      if (error.response && error.response.status === 429) {
+        console.warn('🚫 DexScreener API returned 429 (rate limited)');
+        
+        // Try expired cache as fallback
+        const cached = await cacheService.get(cacheKey, true);
+        if (cached) {
+          console.log('📦 Returning expired cache data due to API rate limit');
+          return cached;
+        }
+        
+        throw new Error('Rate limit exceeded - please try again in a few seconds');
+      }
+      
       await ErrorHandler.handle(error);
       throw error;
     }

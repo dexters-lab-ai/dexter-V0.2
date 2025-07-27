@@ -135,7 +135,7 @@ body {
   height: 100%;
   object-fit: contain;
   z-index: 2;
-  filter: drop-shadow(0 0 8px var(--sentinel-glow));
+  filter: drop-shadow(0 0 8px black);
   transition: all 0.5s ease;
 }
 
@@ -319,6 +319,11 @@ body {
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+}
+
+/* Hide mobile controls on desktop */
+.sentinel-mobile-controls {
+  display: none;
 }
 
 .sentinel-search-container {
@@ -1554,55 +1559,96 @@ body {
 
   /* Search section mobile optimizations */
   .sentinel-search-section {
-    padding: 1.25rem;
+    padding: 1rem;
     margin-bottom: 1.5rem;
     border-radius: 12px;
   }
 
-  /* Search container mobile layout */
+  /* Search container mobile layout - keep row for main input */
   .sentinel-search-container {
     flex-direction: column;
     gap: 0.75rem;
     margin-bottom: 1rem;
   }
 
-  /* Input wrapper mobile adjustments */
+  /* Mobile controls row - mic and dropdown above search */
+  .sentinel-mobile-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  /* Hide desktop controls on mobile */
+  .sentinel-search-container .sentinel-search-type,
+  .sentinel-search-container .sentinel-mic-button {
+    display: none;
+  }
+
+  /* Show mobile controls */
+  .sentinel-mobile-controls .sentinel-search-type,
+  .sentinel-mobile-controls .sentinel-mic-button {
+    display: flex;
+  }
+
+  /* Input wrapper mobile adjustments - more compact */
   .sentinel-input-wrapper {
-    min-height: 48px;
-    border-radius: 12px;
+    min-height: 44px;
+    border-radius: 10px;
+    position: relative;
+    overflow: visible;
   }
 
+  /* Expandable search input */
   .sentinel-search-input {
-    padding: 14px 16px;
+    padding: 12px 14px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    min-height: 44px;
+    max-height: 120px;
+    resize: none;
+    overflow-y: auto;
+    transition: height 0.2s ease;
+  }
+
+  /* Auto-expand textarea behavior */
+  .sentinel-search-input:focus {
+    outline: none;
+  }
+
+  /* Mobile mic button - compact */
+  .sentinel-mobile-controls .sentinel-mic-button {
+    padding: 8px 12px;
     font-size: 1rem;
+    min-width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  /* Mic button mobile sizing */
-  .sentinel-mic-button {
-    padding: 0 16px;
-    font-size: 1.1rem;
-    min-width: 48px;
+  /* Mobile search type dropdown - compact */
+  .sentinel-mobile-controls .sentinel-search-type {
+    padding: 0;
   }
 
-  /* Search type dropdown mobile */
-  .sentinel-search-type {
-    padding-right: 12px;
+  .sentinel-mobile-controls .sentinel-select {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    border-radius: 10px;
+    min-height: 44px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .sentinel-select {
-    padding: 10px 12px;
-    font-size: 0.9rem;
-    border-radius: 8px;
-    min-height: 40px;
-  }
-
-  /* Search button mobile */
+  /* Search button mobile - more compact */
   .sentinel-search-button {
     width: 100%;
-    padding: 14px;
-    font-size: 1rem;
-    border-radius: 12px;
-    min-height: 48px;
+    padding: 12px;
+    font-size: 0.95rem;
+    border-radius: 10px;
+    min-height: 44px;
   }
 
   /* Suggestions mobile layout */

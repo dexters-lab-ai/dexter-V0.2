@@ -603,24 +603,47 @@ async function fetchTokenMetadata(tokenIdentifier, network) {
       try {
         // Search for token by symbol
         const tokensBySymbol = await dexscreener.getTokenInfoBySymbol(tokenIdentifier);
+        
+        // Validate that we received an array
+        if (!Array.isArray(tokensBySymbol)) {
+          logger.error(`DexScreener returned non-array data in fetchTokenMetadata:`, typeof tokensBySymbol);
+          return {
+            error: `Invalid data structure returned from DexScreener for symbol ${tokenIdentifier}`
+          };
+        }
+        
         logger.debug(`DexScreener returned ${tokensBySymbol.length} results for symbol ${tokenIdentifier}`);
         
-        // If results found, use the first result's address
-        if (tokensBySymbol && tokensBySymbol.length > 0) {
-          // Extract the token address from the first result
-          tokenAddress = tokensBySymbol[0].baseToken?.address;
-          logger.info(`In fetchTokenMetadata: Resolved symbol ${tokenIdentifier} to address ${tokenAddress}`);
+        // Filter for Solana tokens only - CRITICAL FIX
+        const solanaTokens = tokensBySymbol.filter(token => {
+          try {
+            const chainId = token.chainId || token.chain || (token.baseToken && token.baseToken.chainId);
+            return chainId === 'solana' || chainId === 'sol';
+          } catch (filterError) {
+            logger.warn(`Error filtering token in fetchTokenMetadata:`, filterError);
+            return false;
+          }
+        });
+        
+        logger.debug(`Found ${solanaTokens.length} Solana tokens for symbol ${tokenIdentifier}`);
+        
+        // If Solana results found, use the first Solana result's address
+        if (solanaTokens && solanaTokens.length > 0) {
+          // Extract the token address from the first Solana result
+          const firstSolanaToken = solanaTokens[0];
+          tokenAddress = firstSolanaToken.baseToken?.address || firstSolanaToken.tokenAddress || firstSolanaToken.address;
+          logger.info(`In fetchTokenMetadata: Resolved symbol ${tokenIdentifier} to Solana address ${tokenAddress}`);
           
           if (!tokenAddress) {
-            logger.warn(`Failed to extract address for symbol ${tokenIdentifier}`);
+            logger.warn(`Failed to extract Solana address for symbol ${tokenIdentifier}`);
             return {
-              error: `Could not resolve symbol ${tokenIdentifier} to an address`
+              error: `Could not extract Solana address from token data for symbol ${tokenIdentifier}`
             };
           }
         } else {
-          logger.warn(`No results found for symbol ${tokenIdentifier}`);
+          logger.warn(`No Solana tokens found for symbol ${tokenIdentifier}`);
           return {
-            error: `No tokens found for symbol ${tokenIdentifier}`
+            error: `No Solana tokens found for symbol ${tokenIdentifier}. Try using a Solana contract address instead.`
           };
         }
       } catch (symbolError) {
