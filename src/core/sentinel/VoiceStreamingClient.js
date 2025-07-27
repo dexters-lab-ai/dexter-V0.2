@@ -4,7 +4,9 @@
  * Handles WebSocket connection to backend, voice activity detection,
  * chunked audio streaming, and AI audio response playback
  */
-import { VAD } from '@ricky0123/vad-web';
+// VAD import temporarily removed to fix module loading
+// TODO: Implement VAD with proper static file serving or CDN
+// import { VAD } from '@ricky0123/vad-web';
 
 export class VoiceStreamingClient {
   constructor() {

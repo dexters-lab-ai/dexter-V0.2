@@ -931,6 +931,7 @@ body {
 .sentinel-history-header h4 {
   margin: 0;
   font-size: 0.95rem;
+  font-weight: lighter;
   color: var(--sentinel-primary);
   letter-spacing: 0.5px;
 }
@@ -1605,6 +1606,12 @@ body {
   .sentinel-logo {
     width: 80px;
     height: 80px;
+    position: absolute;
+    top: 15%;
+    left: 0;
+    right: 0;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .sentinel-logo-img {
@@ -1622,8 +1629,8 @@ body {
 
   /* Reduce node animations on mobile */
   .sentinel-node {
-    width: 8px;
-    height: 8px;
+    width: 4px;
+    height: 4px;
     box-shadow: 0 0 6px 1px var(--sentinel-primary), 0 0 12px 3px rgba(166, 0, 255, 0.2);
   }
 

@@ -834,12 +834,12 @@ class TwitterService extends EventEmitter {
         onlyVerifiedUsers: false,
         sentimentAnalysis: true,
         sortBy: "Latest",
-        maxItems: 50,
+        maxItems: 100,
         minRetweets,
         minLikes,
         minReplies,
       };
-      const run = await this.apifyClient.actor("fastcrawler/twitter-x-cashtag-scraper-stock-crypto-sentiment-analysis").call(input);
+      const run = await this.apifyClient.actor("fastcrawler/monitor-stock-crypto-market-sentiment-on-twitter-x").call(input);
       const { items } = await this.apifyClient.dataset(run.defaultDatasetId).listItems();
       const filteredTweets = items.filter(
         (tweet) =>

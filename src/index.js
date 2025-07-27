@@ -53,8 +53,27 @@ class ServerManager {
   }
 
   setupRoutes() {
+    // Apply CORS middleware first
+    this.app.use(cors({
+      origin: '*',
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      allowedHeaders: 'Content-Type,Authorization',
+      credentials: true,
+    }));
+    
     // Serve static files from public directory
     this.app.use(express.static(path.join(this.__dirname, 'public')));
+    
+    // Serve SENTINEL components with correct MIME types
+    this.app.use('/components', express.static(path.join(this.__dirname, 'core/sentinel/components'), {
+      setHeaders: (res, path) => {
+        if (path.endsWith('.js')) {
+          res.setHeader('Content-Type', 'application/javascript');
+        } else if (path.endsWith('.css')) {
+          res.setHeader('Content-Type', 'text/css');
+        }
+      }
+    }));
   
     // Root route handler - serves the dashboard
     this.app.get('/', (req, res) => {
@@ -85,14 +104,6 @@ class ServerManager {
         serverPort: 80
       });
     });      
-
-    // Allow all origins
-    this.app.use(cors({
-      origin: '*',
-      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-      allowedHeaders: 'Content-Type,Authorization',
-      credentials: true,
-    }));
   
     // Handle 404s
     this.app.use((req, res) => {

@@ -1,6 +1,7 @@
 // SENTINEL API JavaScript
 console.log('Sentinel.js loaded - Version: ' + new Date().getTime());
-import { VoiceStreamingClient } from '../VoiceStreamingClient.js';
+import { VoiceStreamingClient } from '/sentinel/static/VoiceStreamingClient.js';
+import { renderSearchResults } from '/sentinel/static/components/ResultsRenderer.js';
     // Elements
     const searchInput = document.getElementById('sentinelSearch');
     const searchButton = document.getElementById('searchButton');
@@ -678,8 +679,9 @@ import { VoiceStreamingClient } from '../VoiceStreamingClient.js';
                         resultActions.classList.add('fade-in');
                     }
                     
-                    // Display results with animation
-                    displayResultsWithAnimation(data.results);
+                    // Display results with new modular renderer
+                    console.log('Displaying search results with animation:', data.results);
+                    renderSearchResults(data.results, resultsSection);
                     
                     // Generate AI summary of results
                     generateResultSummary(data.results);

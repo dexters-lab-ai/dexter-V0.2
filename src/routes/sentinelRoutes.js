@@ -1,7 +1,22 @@
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { renderSentinelPage, searchSentinel, getSearchStatus, saveSearchResult, getSavedResult, processVoiceInput, getUserSearchHistory } from '../core/sentinel/SentinelAPI.js';
 
 const router = express.Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve SENTINEL static files (JS modules and CSS)
+router.use('/static', express.static(path.join(__dirname, '../core/sentinel'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    }
+  }
+}));
 
 /**
  * Main route for the SENTINEL API page

@@ -69,9 +69,14 @@ export function detectQueryIntent(query) {
     }
   }
   
-  // If no specific intent is detected, default to TOKEN_INFO
+  // If no specific intent is detected, default to TOKEN_INFO and SOCIAL for cashtags/hashtags
   if (result.intents.length === 0 && result.entities.tokens.length > 0) {
     result.intents.push('TOKEN_INFO');
+    
+    // If the query contains cashtags ($) or hashtags (#), also add SOCIAL intent
+    if (/[$#]/.test(query)) {
+      result.intents.push('SOCIAL');
+    }
   }
   
   // Log the detected intent

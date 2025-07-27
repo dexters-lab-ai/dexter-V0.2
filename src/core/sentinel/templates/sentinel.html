@@ -6,6 +6,7 @@
     <title>SENTINEL API | Crypto & Token Intelligence</title>
     <link rel="icon" href="/assets/images/sentinel-api.png" type="image/png">
     <!-- SENTINEL_CSS_PLACEHOLDER -->
+    <link rel="stylesheet" href="/sentinel/static/components/ResultsRenderer.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
@@ -174,32 +175,11 @@
                     </div>
                 </div>
                 <div class="sentinel-result-content">
-                    <div class="sentinel-token-basic">
-                        <div class="sentinel-token-icon">
-                            <img src="{{tokenIcon}}" alt="{{tokenSymbol}}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0IiBmaWxsPSJub25lIj48Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSIzMCIgZmlsbD0iIzMzMzMzMyIgLz48dGV4dCB4PSIzMiIgeT0iMzgiIGZvbnQtc2l6ZT0iMzAiIGZpbGw9IiNmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPj88L3RleHQ+PC9zdmc+Cg=='">
-                        </div>
-                        <div class="sentinel-token-details">
-                            <h4>{{tokenName}} ({{tokenSymbol}})</h4>
-                            <p class="sentinel-token-price">{{tokenPrice}}</p>
-                            <div class="sentinel-token-change {{priceChangeClass}}">
-                                <i class="fas {{priceChangeIcon}}"></i> {{priceChange}}
-                            </div>
-                        </div>
+                    <!-- Results will be dynamically rendered here by ResultsRenderer.js -->
+                    <div class="sentinel-results-placeholder">
+                        <p class="sentinel-placeholder-text">Search results will appear here...</p>
                     </div>
-                    <div class="sentinel-token-stats">
-                        <div class="sentinel-stat">
-                            <span class="sentinel-stat-label">Market Cap</span>
-                            <span class="sentinel-stat-value">{{marketCap}}</span>
-                        </div>
-                        <div class="sentinel-stat">
-                            <span class="sentinel-stat-label">24h Volume</span>
-                            <span class="sentinel-stat-value">{{volume24h}}</span>
-                        </div>
-                        <div class="sentinel-stat">
-                            <span class="sentinel-stat-label">Liquidity</span>
-                            <span class="sentinel-stat-value">{{liquidity}}</span>
-                        </div>
-                    </div>
+                    <!-- Static template stats removed - now handled by ResultsRenderer.js -->
                 </div>
             </div>
         </template>

@@ -278,28 +278,26 @@ async function handleTextQuery(query) {
       logger.error(`Error fetching token info: ${error.message}`);
     }
     
-    // Based on specific intents, fetch additional data
-    if (intents.includes('HOLDERS') || intents.includes('TOKEN_INFO')) {
-      try {
-        results.tokenMetadata = await fetchTokenMetadata(token, 'solana');
-      } catch (error) {
-        logger.error(`Error fetching token metadata: ${error.message}`);
-      }
+    // Always fetch comprehensive token data for better user experience
+    try {
+      results.tokenMetadata = await fetchTokenMetadata(token, 'solana');
+    } catch (error) {
+      logger.error(`Error fetching token metadata: ${error.message}`);
     }
     
+    // Always fetch social data for tokens (especially important for cashtags/hashtags)
+    try {
+      results.socialData = await fetchTokenTweets(token);
+    } catch (error) {
+      logger.error(`Error fetching social data: ${error.message}`);
+    }
+    
+    // Fetch security analysis if specifically requested
     if (intents.includes('SECURITY')) {
       try {
         results.securityAnalysis = await fetchTokenSecurity(token, 'solana');
       } catch (error) {
         logger.error(`Error fetching security analysis: ${error.message}`);
-      }
-    }
-    
-    if (intents.includes('SOCIAL')) {
-      try {
-        results.socialData = await fetchTokenTweets(token);
-      } catch (error) {
-        logger.error(`Error fetching social data: ${error.message}`);
       }
     }
     
@@ -704,23 +702,81 @@ async function fetchTokenSecurity(tokenIdentifier, network) {
  */
 async function fetchTokenTweets(tokenIdentifier) {
   try {
-    // If token identifier is a contract address, try to get the symbol
     let symbol = tokenIdentifier;
     
+    // If token identifier is a Solana contract address, try to get the symbol from DexScreener
     if (tokenIdentifier.length > 30) {
-      // This would get the token symbol from the contract address
-      // For now, we'll use a placeholder
-      symbol = 'UNKNOWN';
+      try {
+        const tokenData = await dexscreener.getTokenInfoBySymbol(tokenIdentifier);
+        if (tokenData && tokenData.length > 0) {
+          // Filter for Solana tokens only
+          const solanaToken = tokenData.find(token => 
+            token.chainId === 'solana' || 
+            (token.baseToken && token.baseToken.address === tokenIdentifier)
+          );
+          
+          if (solanaToken && solanaToken.baseToken && solanaToken.baseToken.symbol) {
+            symbol = solanaToken.baseToken.symbol;
+            logger.info(`Resolved contract address ${tokenIdentifier} to symbol: ${symbol}`);
+          }
+        }
+      } catch (error) {
+        logger.warn(`Could not resolve contract address to symbol: ${error.message}`);
+        // Continue with the original identifier
+      }
     }
     
-    // Search for tweets with the token as cashtag
-    const cashtag = `$${symbol}`;
-    const tweets = await twitterService.searchTweetsByCashtagAPI(cashtag);
+    // Search for tweets with multiple approaches
+    const searchTerms = [];
     
-    return tweets;
+    // Add cashtag version
+    if (!symbol.startsWith('$')) {
+      searchTerms.push(`$${symbol}`);
+    } else {
+      searchTerms.push(symbol);
+    }
+    
+    // Add hashtag version
+    const hashtagVersion = symbol.startsWith('$') ? `#${symbol.slice(1)}` : `#${symbol}`;
+    searchTerms.push(hashtagVersion);
+    
+    // Add plain symbol
+    const plainSymbol = symbol.startsWith('$') ? symbol.slice(1) : symbol;
+    searchTerms.push(plainSymbol);
+    
+    // Try searching with the primary cashtag first
+    const primaryTerm = searchTerms[0];
+    logger.info(`Searching for tweets with term: ${primaryTerm}`);
+    
+    const tweets = await twitterService.searchTweetsByCashtagAPI(primaryTerm);
+    
+    return {
+      searchTerm: primaryTerm,
+      alternativeTerms: searchTerms.slice(1),
+      tweets: tweets || [],
+      tokenSymbol: plainSymbol
+    };
   } catch (error) {
-    console.error('Error fetching token tweets:', error);
-    throw error;
+    logger.error('Error fetching token tweets:', error);
+    
+    // Return a clean error message for the frontend instead of throwing
+    let cleanErrorMessage = 'Unable to fetch social data';
+    
+    if (error.message.includes('Actor with this name was not found')) {
+      cleanErrorMessage = 'Twitter data service temporarily unavailable';
+    } else if (error.message.includes('rate limit')) {
+      cleanErrorMessage = 'Twitter API rate limit reached. Please try again later';
+    } else if (error.message.includes('network') || error.message.includes('timeout')) {
+      cleanErrorMessage = 'Network error while fetching social data';
+    }
+    
+    return {
+      error: true,
+      message: cleanErrorMessage,
+      searchTerm: symbol,
+      tweets: [],
+      tokenSymbol: symbol
+    };
   }
 }
 

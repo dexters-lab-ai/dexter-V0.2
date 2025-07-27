@@ -1,0 +1,701 @@
+/**
+ * SENTINEL Results Renderer Styles
+ * Modern DeFi-focused token data visualization
+ */
+
+/* Main Results Wrapper */
+.sentinel-results-wrapper {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    padding: 1rem;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.5s ease;
+}
+
+.sentinel-results-wrapper.fade-in {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Base Card Styles */
+.sentinel-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--glass-shadow);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.sentinel-card:hover {
+    border-color: rgba(0, 212, 255, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 212, 255, 0.1);
+    transform: translateY(-2px);
+}
+
+.sentinel-card-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sentinel-card-header h3 {
+    margin: 0;
+    color: var(--sentinel-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sentinel-card-content {
+    padding: 1.5rem;
+}
+
+/* Token Overview Card */
+.sentinel-overview-card .sentinel-card-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+}
+
+.token-identity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.token-logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 2px solid var(--glass-border);
+    background: var(--sentinel-dark);
+}
+
+.token-info {
+    flex: 1;
+}
+
+.token-name {
+    margin: 0;
+    color: var(--sentinel-text);
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.token-symbol {
+    color: var(--sentinel-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-right: 1rem;
+}
+
+.token-address {
+    color: var(--sentinel-text-muted);
+    font-size: 0.875rem;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.copy-address {
+    cursor: pointer;
+    color: var(--sentinel-primary);
+    transition: color 0.2s ease;
+}
+
+.copy-address:hover {
+    color: var(--sentinel-secondary);
+}
+
+.price-section {
+    position: absolute;
+    top: 0;
+    right: 2%;
+    text-align: right;
+}
+
+.current-price {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--sentinel-text);
+    margin-bottom: 0.5rem;
+}
+
+.price-change {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    justify-content: flex-end;
+}
+
+.price-change.positive {
+    color: var(--sentinel-success);
+}
+
+.price-change.negative {
+    color: var(--sentinel-danger);
+}
+
+/* Metrics Grid */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1rem;
+}
+
+.metric-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.metric-label {
+    color: var(--sentinel-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.metric-value {
+    color: var(--sentinel-text);
+    font-size: 1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.exchange-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+}
+
+/* Price Performance Card */
+.timeframe-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+}
+
+.timeframe-item {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.timeframe-item:hover {
+    border-color: var(--sentinel-primary);
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.timeframe-label {
+    display: block;
+    color: var(--sentinel-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.timeframe-change {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* Trading Activity Card */
+.trading-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+}
+
+.trading-timeframe {
+    background: rgba(15, 23, 42, 0.3);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.trading-timeframe h4 {
+    margin: 0 0 1rem 0;
+    color: var(--sentinel-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.trading-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.trading-row, .volume-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+}
+
+.buy-metric, .buy-volume {
+    color: var(--sentinel-success);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.sell-metric, .sell-volume {
+    color: var(--sentinel-danger);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.ratio-bar {
+    height: 6px;
+    background: var(--sentinel-dark);
+    border-radius: 3px;
+    overflow: hidden;
+    display: flex;
+}
+
+.buy-ratio {
+    background: var(--sentinel-success);
+    transition: width 0.3s ease;
+}
+
+.sell-ratio {
+    background: var(--sentinel-danger);
+    transition: width 0.3s ease;
+}
+
+/* Liquidity Card */
+.liquidity-overview {
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.liquidity-total {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.liquidity-label {
+    color: var(--sentinel-text-muted);
+    font-size: 0.875rem;
+}
+
+.liquidity-value {
+    color: var(--sentinel-text);
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.liquidity-changes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+}
+
+.liquidity-change-item {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.liquidity-change-item .timeframe {
+    display: block;
+    color: var(--sentinel-text-muted);
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.change-value {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    font-weight: 600;
+}
+
+/* Sniper Analysis Card */
+.sentinel-results-wrapper {
+    display: grid;
+    grid-template-columns: repeat(1, 1fr);
+    gap: 1.5rem;
+    padding: 1rem;
+}
+
+.sniper-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.sniper-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
+}
+
+.sniper-label {
+    color: var(--sentinel-text-muted);
+    font-size: 0.875rem;
+}
+
+.sniper-value {
+    color: var(--sentinel-text);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.sniper-wallet {
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.wallet-label {
+    color: var(--sentinel-text-muted);
+    font-size: 0.875rem;
+}
+
+.wallet-link {
+    color: var(--sentinel-primary);
+    text-decoration: none;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: color 0.2s ease;
+}
+
+.wallet-link:hover {
+    color: var(--sentinel-secondary);
+}
+
+/* Pair Information Card */
+.pair-count {
+    color: var(--sentinel-text-muted);
+    font-size: 0.875rem;
+}
+
+.pair-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 0.5rem;
+}
+
+.pair-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(15, 23, 42, 0.3);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.pair-item:hover {
+    border-color: var(--sentinel-primary);
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.pair-index {
+    color: var(--sentinel-text-muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+    min-width: 20px;
+}
+
+.pair-address {
+    flex: 1;
+    color: var(--sentinel-text);
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+}
+
+.copy-pair {
+    color: var(--sentinel-primary);
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.copy-pair:hover {
+    color: var(--sentinel-secondary);
+}
+
+.pair-more {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.show-more-pairs {
+    background: var(--sentinel-primary);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.show-more-pairs:hover {
+    background: var(--sentinel-secondary);
+    transform: translateY(-1px);
+}
+
+/* Error Card */
+.sentinel-error-card {
+    background: rgba(255, 71, 87, 0.1);
+    border: 1px solid rgba(255, 71, 87, 0.3);
+    border-radius: 16px;
+    padding: 2rem;
+    text-align: center;
+    color: var(--sentinel-danger);
+}
+
+.sentinel-error-card i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.7;
+}
+
+.sentinel-error-card h3 {
+    margin: 0 0 1rem 0;
+    color: var(--sentinel-danger);
+}
+
+.sentinel-error-card p {
+    margin: 0;
+    color: var(--sentinel-text-muted);
+}
+
+/* Copy Success Animation */
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: translateY(-10px); }
+    20% { opacity: 1; transform: translateY(0); }
+    80% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-10px); }
+}
+
+/* Trading Activity Improvements */
+.trading-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.buy-metric, .sell-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.trades-count {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.traders-count {
+    font-size: 0.85rem;
+    color: var(--sentinel-text-muted);
+    font-weight: 400;
+}
+
+/* Clickable Token Logo */
+.token-logo {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.token-logo:hover {
+    transform: scale(1.05);
+    border-color: var(--sentinel-primary);
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+/* Social Data Card */
+.sentinel-social-card .search-term {
+    font-size: 0.85rem;
+    color: var(--sentinel-text-muted);
+    background: rgba(0, 212, 255, 0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+}
+
+.tweets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.tweet-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+    transition: all 0.3s ease;
+}
+
+.tweet-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(0, 212, 255, 0.3);
+}
+
+.tweet-content {
+    font-size: 0.9rem;
+    line-height: 1.4;
+    margin-bottom: 0.5rem;
+    color: var(--sentinel-text-primary);
+}
+
+.tweet-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--sentinel-text-muted);
+}
+
+.tweet-author {
+    font-weight: 500;
+    color: var(--sentinel-primary);
+}
+
+.tweets-more {
+    text-align: center;
+    padding: 1rem 0;
+    color: var(--sentinel-text-muted);
+    font-size: 0.85rem;
+}
+
+.no-tweets, .error-message {
+    text-align: center;
+    padding: 2rem;
+    color: var(--sentinel-text-muted);
+}
+
+.no-tweets i, .error-message i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: var(--sentinel-text-muted);
+}
+
+.error-message {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 8px;
+}
+
+.error-message i {
+    color: #ffc107;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .sentinel-results-wrapper {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .sentinel-results-wrapper {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        padding: 0.5rem;
+    }
+    
+    .sentinel-card-header,
+    .sentinel-card-content {
+        padding: 1rem;
+    }
+    
+    .token-identity {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.75rem;
+    }
+    
+    .price-section {
+        text-align: center;
+    }
+    
+    .current-price {
+        font-size: 1.5rem;
+    }
+    
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .timeframe-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .trading-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .liquidity-changes {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .sniper-metrics {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .pair-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .timeframe-grid,
+    .liquidity-changes,
+    .sniper-metrics {
+        grid-template-columns: 1fr;
+    }
+    
+    .token-logo {
+        width: 48px;
+        height: 48px;
+    }
+    
+    .token-name {
+        font-size: 1.25rem;
+    }
+    
+    .current-price {
+        font-size: 1.25rem;
+    }
+}
