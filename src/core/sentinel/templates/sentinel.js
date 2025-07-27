@@ -474,9 +474,91 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    /**
+     * Shows an overlay prompting the user to connect their wallet
+     * This function creates and displays a wallet connection message overlay
+     * in the results section or specified container
+     * @returns {void}
+     */
+    function showWalletConnectionOverlay() {
+        try {
+            console.log('Showing wallet connection overlay');
+            
+            // Ensure results section exists
+            if (!resultsSection) {
+                console.error('Results section not found for wallet overlay');
+                return;
+            }
+            
+            // Clear existing content with fade effect
+            resultsSection.classList.add('fade-out');
+            
+            setTimeout(() => {
+                // Clear and remove fade-out
+                resultsSection.innerHTML = '';
+                resultsSection.classList.remove('fade-out');
+                
+                // Create wallet connection overlay
+                const walletOverlay = document.createElement('div');
+                walletOverlay.className = 'sentinel-wallet-overlay fade-in';
+                walletOverlay.innerHTML = `
+                    <div class="sentinel-wallet-message">
+                        <div class="sentinel-wallet-icon">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                        <h3>Wallet Connection Required</h3>
+                        <p>Please connect your wallet to access SENTINEL features.</p>
+                        <p class="subtext">SENTINEL requires a connected wallet for verification and personalized results.</p>
+                        <button id="connectWalletBtn" class="sentinel-connect-btn">
+                            <i class="fas fa-plug"></i> Connect Wallet
+                        </button>
+                    </div>
+                `;
+                
+                // Add to results section
+                resultsSection.appendChild(walletOverlay);
+                
+                // Add event listener to the connect button
+                const connectBtn = document.getElementById('connectWalletBtn');
+                if (connectBtn) {
+                    connectBtn.addEventListener('click', () => {
+                        // Use our well-defined handleConnectWalletClick function
+                        handleConnectWalletClick();
+                        
+                        // Clear the wallet connection overlay
+                        resultsSection.classList.add('fade-out');
+                        setTimeout(() => {
+                            resultsSection.innerHTML = '';
+                            resultsSection.classList.remove('fade-out');
+                        }, 300);
+                    });
+                }
+                
+                console.log('Wallet connection overlay displayed');
+            }, 300); // Wait for fade-out
+        } catch (error) {
+            console.error('Error showing wallet connection overlay:', error);
+            showNotification('Could not display wallet connection message', 'error');
+        }
+    }
+
     // Handle search with animated results processing
     async function handleSearch() {
         try {
+            console.log('🔍 Search initiated - checking wallet connection...');
+            console.log('Wallet connected:', walletConnected);
+            console.log('Wallet address:', walletAddress);
+            
+            // Check if wallet is connected first
+            if (!walletConnected || !walletAddress) {
+                console.warn('🚫 Search blocked: Wallet not connected');
+                showNotification('🔒 Wallet Required: Please connect your wallet to use SENTINEL', 'warning');
+                showWalletConnectionOverlay();
+                return;
+            }
+            
+            console.log('✅ Wallet check passed - proceeding with search...');
+            
             // Validate input
             if (!searchInput) {
                 console.error('Search input element not found');
@@ -492,14 +574,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // Validate search type
             if (!searchTypeSelect) {
                 console.error('Search type select element not found');
-                return;
-            }
-            
-            // Check if wallet is connected first
-            if (!walletConnected || !walletAddress) {
-                showNotification('Please connect your wallet to use SENTINEL', 'warning');
-                // Show static wallet connection overlay
-                showWalletConnectionOverlay();
                 return;
             }
             
@@ -557,8 +631,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     walletAddress // Include wallet address in all searches
                 };
                 
-                // Make API call to the backend
-                const response = await fetch('/api/sentinel/search', {
+                // Make API call to the backend (correct endpoint)
+                const response = await fetch('/sentinel/search', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -737,8 +811,8 @@ document.addEventListener('DOMContentLoaded', function() {
             await new Promise(resolve => setTimeout(resolve, config.pollingInterval));
             
             try {
-                // Make API request to check status
-                const response = await fetch(`/api/sentinel/status?id=${searchId}`);
+                // Make API request to check status (correct endpoint)
+                const response = await fetch(`/sentinel/status?id=${searchId}`);
                 
                 if (!response.ok) {
                     console.warn(`Status check returned ${response.status} for search ${searchId}`);
@@ -1189,15 +1263,163 @@ document.addEventListener('DOMContentLoaded', function() {
                 statElements[1].textContent = formatCurrency(tokenInfo.volume24h);
                 statElements[2].textContent = formatCurrency(tokenInfo.liquidity);
             } else {
-                console.warn('Not enough stat elements found in template');
+                console.warn('Not enough stat elements found in token info template');
             }
             
-            // Append the template content to our card element
-            cardElement.appendChild(template);
+            // Properly handle template content (clone nodes from fragment to element)
+            while (template.firstChild) {
+                cardElement.appendChild(template.firstChild);
+            }
+            
+            console.log('Token info card created successfully', cardElement);
             return cardElement;
         } catch (error) {
             console.error('Error creating token info card:', error);
-            return createErrorCard('Token Info', 'Failed to create token card');
+            return createErrorCard('Token Information', 'Failed to create token info card');
+        }
+    }
+    
+    /**
+     * Creates a card displaying social data like tweets and mentions
+     * @param {Object|Array} socialData - Social data object or array of social items
+     * @returns {HTMLElement} - The created card element or an error card if creation failed
+     */
+    function createSocialCard(socialData) {
+        // Configuration for social card creation
+        const config = {
+            templateId: 'socialDataTemplate',
+            cardClass: 'sentinel-result-card social-card',
+            selectors: {
+                tweetsList: '.sentinel-tweets-list',
+                mentionCount: '.sentinel-mention-count',
+                sentimentIndicator: '.sentinel-sentiment-indicator',
+                sentimentValue: '.sentinel-sentiment-value'
+            },
+            classes: {
+                tweetItem: 'sentinel-tweet-item',
+                tweetAuthor: 'sentinel-tweet-author',
+                tweetContent: 'sentinel-tweet-content',
+                tweetDate: 'sentinel-tweet-date',
+                tweetMetrics: 'sentinel-tweet-metrics',
+                noData: 'sentinel-no-data',
+                sentimentPositive: 'positive',
+                sentimentNeutral: 'neutral',
+                sentimentNegative: 'negative'
+            },
+            maxTweetsToShow: 5,
+            sentimentThresholds: {
+                positive: 0.6,
+                negative: 0.4
+            }
+        };
+        
+        try {
+            // Validate input
+            if (!socialData || (Array.isArray(socialData) && socialData.length === 0) || 
+                (!Array.isArray(socialData) && Object.keys(socialData).length === 0)) {
+                console.error('Invalid social data provided to createSocialCard');
+                return createErrorCard('Social Data', 'No social information available');
+            }
+            
+            // Check if template exists
+            const templateElement = document.getElementById(config.templateId);
+            if (!templateElement) {
+                console.error(`Template not found: ${config.templateId}`);
+                return createErrorCard('Social Data', 'Template not available');
+            }
+            
+            const template = templateElement.content.cloneNode(true);
+            
+            // Create wrapper element to convert DocumentFragment to a proper DOM element
+            const cardElement = document.createElement('div');
+            cardElement.className = config.cardClass;
+            
+            // Parse the data - we support both object format and array format
+            const tweets = Array.isArray(socialData) ? socialData : (socialData.tweets || []);
+            const mentionCount = !Array.isArray(socialData) ? (socialData.mentionCount || tweets.length) : tweets.length;
+            const sentiment = !Array.isArray(socialData) ? (socialData.sentiment || 0.5) : 0.5; // Default neutral
+            
+            // Update mention count
+            const mentionCountElement = template.querySelector(config.selectors.mentionCount);
+            if (mentionCountElement) {
+                mentionCountElement.textContent = mentionCount.toString();
+            }
+            
+            // Update sentiment indicator
+            const sentimentIndicator = template.querySelector(config.selectors.sentimentIndicator);
+            const sentimentValue = template.querySelector(config.selectors.sentimentValue);
+            
+            if (sentimentIndicator && sentimentValue) {
+                // Determine sentiment class and text
+                let sentimentClass, sentimentText;
+                
+                if (sentiment >= config.sentimentThresholds.positive) {
+                    sentimentClass = config.classes.sentimentPositive;
+                    sentimentText = 'Positive';
+                } else if (sentiment <= config.sentimentThresholds.negative) {
+                    sentimentClass = config.classes.sentimentNegative;
+                    sentimentText = 'Negative';
+                } else {
+                    sentimentClass = config.classes.sentimentNeutral;
+                    sentimentText = 'Neutral';
+                }
+                
+                sentimentIndicator.className = `${config.selectors.sentimentIndicator.substring(1)} ${sentimentClass}`;
+                sentimentValue.textContent = sentimentText;
+                sentimentValue.className = `${config.selectors.sentimentValue.substring(1)} ${sentimentClass}`;
+            }
+            
+            // Add tweets
+            const tweetsList = template.querySelector(config.selectors.tweetsList);
+            if (tweetsList) {
+                if (tweets && tweets.length > 0) {
+                    try {
+                        const tweetItems = tweets
+                            .slice(0, config.maxTweetsToShow)
+                            .map(tweet => {
+                                // Validate tweet object with defaults
+                                const author = tweet?.author || 'Unknown';
+                                const content = tweet?.content || 'No content';
+                                const date = tweet?.date ? formatDate(new Date(tweet.date)) : 'Unknown date';
+                                const likes = tweet?.metrics?.likes || 0;
+                                const retweets = tweet?.metrics?.retweets || 0;
+                                
+                                return `
+                                    <div class="${config.classes.tweetItem}">
+                                        <div class="${config.classes.tweetAuthor}">${author}</div>
+                                        <div class="${config.classes.tweetContent}">${content}</div>
+                                        <div class="${config.classes.tweetMetrics}">
+                                            <span class="${config.classes.tweetDate}">${date}</span>
+                                            <span><i class="fas fa-heart"></i> ${likes}</span>
+                                            <span><i class="fas fa-retweet"></i> ${retweets}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            })
+                            .join('');
+                        
+                        tweetsList.innerHTML = tweetItems;
+                    } catch (tweetError) {
+                        console.error('Error processing tweets data:', tweetError);
+                        tweetsList.innerHTML = `<div class="${config.classes.noData}">Error processing tweets data</div>`;
+                    }
+                } else {
+                    tweetsList.innerHTML = `<div class="${config.classes.noData}">No tweets found</div>`;
+                }
+            } else {
+                console.warn('Tweets list element not found in social template');
+            }
+            
+            // Properly handle template content (clone nodes from fragment to element)
+            while (template.firstChild) {
+                cardElement.appendChild(template.firstChild);
+            }
+            
+            console.log('Social card created successfully', cardElement);
+            return cardElement;
+        } catch (error) {
+            console.error('Error creating social card:', error);
+            return createErrorCard('Social Data', 'Failed to create social card');
         }
     }
     
@@ -1323,8 +1545,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.warn('Snipers list element not found in metadata template');
             }
             
-            // Append the fragment to our element
-            cardElement.appendChild(template);
+            // Properly handle template content (clone nodes from fragment to element)
+            while (template.firstChild) {
+                cardElement.appendChild(template.firstChild);
+            }
+            
+            console.log('Metadata card created successfully', cardElement);
             return cardElement;
         } catch (error) {
             console.error('Error creating metadata card:', error);
@@ -1463,6 +1689,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         riskList.innerHTML = `<li class="${config.classes.noData}">Error processing risk data</li>`;
                     }
                 } else {
+                    
                     riskList.innerHTML = `<li class="${config.classes.noData}">No risk factors detected</li>`;
                 }
             } else {
@@ -1621,6 +1848,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    
     /**
      * Setup event handlers for card expansion and collapse functionality
      * Attaches click handlers to expansion buttons and handles toggling content visibility
@@ -2437,23 +2665,344 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
-     * Handle connect wallet button click
+     * Handle connect wallet button click - Real Solana wallet integration
      */
     async function handleConnectWalletClick() {
         try {
-            // In a real implementation, this would use Phantom, Solflare, etc.
-            // For demo purposes, we'll simulate wallet connection
             if (walletConnected) {
                 // Disconnect wallet if already connected
                 disconnectWallet();
-            } else {
-                // Connect to wallet
-                const simulatedWalletAddress = generateSimulatedWalletAddress();
-                connectWallet(simulatedWalletAddress);
+                return;
             }
+
+            // Show Solana wallet selection modal
+            showSolanaWalletModal();
         } catch (error) {
-            console.error('Error connecting wallet:', error);
+            console.error('Error handling wallet connect click:', error);
             showNotification('Wallet connection failed', 'error');
+        }
+    }
+
+    /**
+     * Show Solana wallet selection modal
+     */
+    function showSolanaWalletModal() {
+        // Create modal overlay
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'solana-wallet-overlay';
+        modalOverlay.innerHTML = `
+            <div class="solana-wallet-modal">
+                <div class="wallet-modal-header">
+                    <h3>Connect Solana Wallet</h3>
+                    <button class="close-wallet-modal" aria-label="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="wallet-modal-content">
+                    <p class="wallet-description">
+                        Connect your Solana wallet to access SENTINEL features. Only Solana wallets are supported.
+                    </p>
+                    <div class="wallet-options">
+                        <button class="wallet-option" data-wallet="phantom">
+                            <div class="wallet-icon">👻</div>
+                            <div class="wallet-info">
+                                <span class="wallet-name">Phantom</span>
+                                <small>Most popular Solana wallet</small>
+                            </div>
+                        </button>
+                        <button class="wallet-option" data-wallet="solflare">
+                            <div class="wallet-icon">🔥</div>
+                            <div class="wallet-info">
+                                <span class="wallet-name">Solflare</span>
+                                <small>Multi-platform Solana wallet</small>
+                            </div>
+                        </button>
+                        <button class="wallet-option" data-wallet="backpack">
+                            <div class="wallet-icon">🎒</div>
+                            <div class="wallet-info">
+                                <span class="wallet-name">Backpack</span>
+                                <small>Modern Solana wallet</small>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="wallet-footer">
+                        <small>⚠️ Only Solana wallets supported. EVM wallets will be rejected.</small>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Add modal styles
+        const modalStyles = document.createElement('style');
+        modalStyles.id = 'solana-wallet-styles';
+        modalStyles.textContent = `
+            .solana-wallet-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.85);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                backdrop-filter: blur(15px);
+            }
+            .solana-wallet-modal {
+                background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
+                border: 1px solid rgba(255,255,255,0.2);
+                border-radius: 24px;
+                max-width: 450px;
+                width: 90%;
+                box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+                backdrop-filter: blur(25px);
+                animation: modalSlideIn 0.4s ease-out;
+            }
+            @keyframes modalSlideIn {
+                from { opacity: 0; transform: translateY(-30px) scale(0.9); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            .wallet-modal-header {
+                padding: 28px 28px 20px;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .wallet-modal-header h3 {
+                margin: 0;
+                color: #fff;
+                font-size: 22px;
+                font-weight: 600;
+            }
+            .close-wallet-modal {
+                background: rgba(255,255,255,0.1);
+                border: 1px solid rgba(255,255,255,0.2);
+                color: rgba(255,255,255,0.8);
+                font-size: 16px;
+                cursor: pointer;
+                padding: 10px;
+                border-radius: 12px;
+                transition: all 0.3s ease;
+                width: 40px;
+                height: 40px;
+            }
+            .close-wallet-modal:hover {
+                background: rgba(255,255,255,0.2);
+                color: #fff;
+            }
+            .wallet-modal-content {
+                padding: 28px;
+            }
+            .wallet-description {
+                color: rgba(255,255,255,0.85);
+                margin: 0 0 28px;
+                line-height: 1.6;
+            }
+            .wallet-options {
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .wallet-option {
+                display: flex;
+                align-items: center;
+                gap: 20px;
+                padding: 20px 24px;
+                background: rgba(255,255,255,0.08);
+                border: 1px solid rgba(255,255,255,0.15);
+                border-radius: 16px;
+                color: #fff;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                width: 100%;
+                text-align: left;
+            }
+            .wallet-option:hover {
+                background: rgba(255,255,255,0.15);
+                border-color: rgba(255,255,255,0.3);
+                transform: translateY(-2px);
+            }
+            .wallet-icon {
+                width: 48px;
+                height: 48px;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+                background: rgba(255,255,255,0.1);
+            }
+            .wallet-info {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .wallet-name {
+                font-size: 18px;
+                font-weight: 600;
+            }
+            .wallet-info small {
+                color: rgba(255,255,255,0.6);
+                font-size: 13px;
+            }
+            .wallet-footer {
+                margin-top: 24px;
+                padding-top: 20px;
+                border-top: 1px solid rgba(255,255,255,0.1);
+                text-align: center;
+            }
+            .wallet-footer small {
+                color: rgba(255,255,255,0.7);
+                font-size: 13px;
+            }
+        `;
+
+        document.head.appendChild(modalStyles);
+        document.body.appendChild(modalOverlay);
+
+        // Set up event listeners
+        const closeBtn = modalOverlay.querySelector('.close-wallet-modal');
+        const walletOptions = modalOverlay.querySelectorAll('.wallet-option');
+
+        function closeWalletModal() {
+            modalOverlay.remove();
+            modalStyles.remove();
+        }
+
+        // Close modal on overlay click
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                closeWalletModal();
+            }
+        });
+
+        // Close modal on close button click
+        closeBtn.addEventListener('click', closeWalletModal);
+
+        // Handle wallet selection
+        walletOptions.forEach(option => {
+            option.addEventListener('click', async () => {
+                const walletType = option.dataset.wallet;
+                closeWalletModal();
+                await connectSolanaWallet(walletType);
+            });
+        });
+    }
+
+    /**
+     * Connect to a Solana wallet with validation
+     */
+    async function connectSolanaWallet(walletType) {
+        try {
+            console.log(`Attempting to connect to ${walletType} wallet...`);
+            showNotification('Connecting to wallet...', 'info');
+            
+            let walletAdapter;
+            
+            // Get the appropriate wallet adapter
+            switch (walletType) {
+                case 'phantom':
+                    if (window.solana && window.solana.isPhantom) {
+                        walletAdapter = window.solana;
+                    } else {
+                        showNotification('Phantom wallet not found. Please install Phantom extension.', 'error');
+                        window.open('https://phantom.app/', '_blank');
+                        return;
+                    }
+                    break;
+                case 'solflare':
+                    if (window.solflare && window.solflare.isSolflare) {
+                        walletAdapter = window.solflare;
+                    } else {
+                        showNotification('Solflare wallet not found. Please install Solflare extension.', 'error');
+                        window.open('https://solflare.com/', '_blank');
+                        return;
+                    }
+                    break;
+                case 'backpack':
+                    if (window.backpack && window.backpack.isBackpack) {
+                        walletAdapter = window.backpack;
+                    } else {
+                        showNotification('Backpack wallet not found. Please install Backpack extension.', 'error');
+                        window.open('https://backpack.app/', '_blank');
+                        return;
+                    }
+                    break;
+                default:
+                    showNotification('Unsupported wallet type', 'error');
+                    return;
+            }
+            
+            // Connect to the wallet
+            const response = await walletAdapter.connect();
+            
+            if (!response || !response.publicKey) {
+                throw new Error('Failed to get wallet public key');
+            }
+            
+            // Validate that this is a Solana address
+            const solanaAddress = response.publicKey.toString();
+            if (!validateSolanaAddress(solanaAddress)) {
+                throw new Error('Invalid Solana address received from wallet');
+            }
+            
+            // Request signature to verify wallet ownership
+            const message = `SENTINEL API Access Request\nTimestamp: ${Date.now()}\nWallet: ${solanaAddress}`;
+            const encodedMessage = new TextEncoder().encode(message);
+            
+            const signature = await walletAdapter.signMessage(encodedMessage);
+            if (!signature) {
+                throw new Error('Wallet signature verification failed');
+            }
+            
+            console.log('✅ Solana wallet connected and verified:', solanaAddress);
+            
+            // Connect the wallet
+            connectWallet(solanaAddress);
+            
+        } catch (error) {
+            console.error('Error connecting Solana wallet:', error);
+            if (error.message.includes('User rejected')) {
+                showNotification('Wallet connection cancelled by user', 'warning');
+            } else {
+                showNotification(`Failed to connect ${walletType}: ${error.message}`, 'error');
+            }
+        }
+    }
+    
+    /**
+     * Validate Solana address format
+     */
+    function validateSolanaAddress(address) {
+        try {
+            // Solana addresses are base58 encoded and typically 32-44 characters
+            if (!address || typeof address !== 'string') {
+                return false;
+            }
+            
+            // Basic length check (Solana addresses are usually 32-44 chars)
+            if (address.length < 32 || address.length > 44) {
+                return false;
+            }
+            
+            // Check for valid base58 characters
+            const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
+            if (!base58Regex.test(address)) {
+                return false;
+            }
+            
+            // Reject common EVM address patterns
+            if (address.startsWith('0x') || address.length === 42) {
+                console.warn('EVM address detected and rejected:', address);
+                return false;
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Error validating Solana address:', error);
+            return false;
         }
     }
 
@@ -2474,7 +3023,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (connectWalletButton) {
             connectWalletButton.classList.remove('connect');
             connectWalletButton.classList.add('connected');
-            connectWalletButton.innerHTML = `<i class="fas fa-wallet"></i> ${truncateWalletAddress(address)}`;
+            connectWalletButton.innerHTML = `<i class="fas fa-wallet"></i> ${truncateAddress(address)}`;
         }
         
         // Enable all SENTINEL features
@@ -2516,24 +3065,72 @@ document.addEventListener('DOMContentLoaded', function() {
      * Enable all SENTINEL features
      */
     function enableSentinelFeatures() {
-        if (searchButton) searchButton.disabled = false;
-        if (searchInput) searchInput.disabled = false;
-        if (searchTypeSelect) searchTypeSelect.disabled = false;
-        if (micButton) micButton.disabled = false;
+        // Console log to help with debugging
+        console.log('Enabling SENTINEL features');
+        
+        if (searchButton) {
+            searchButton.disabled = false;
+            console.log('Search button enabled');
+        }
+        if (searchInput) {
+            searchInput.disabled = false;
+            console.log('Search input enabled');
+        }
+        if (searchTypeSelect) {
+            searchTypeSelect.disabled = false;
+            console.log('Search type selector enabled');
+        }
+        if (micButton) {
+            micButton.disabled = false;
+            console.log('Mic button enabled');
+        }
         
         // Show any wallet-specific UI elements
         const walletElements = document.querySelectorAll('.wallet-required');
         walletElements.forEach(el => el.classList.remove('hidden'));
+        
+        // Hide the wallet connection overlay if it's visible
+        hideWalletConnectionOverlay();
+        
+        // Clear any dynamic wallet overlay from the results section
+        if (resultsSection && resultsSection.querySelector('.sentinel-wallet-overlay')) {
+            resultsSection.classList.add('fade-out');
+            setTimeout(() => {
+                resultsSection.innerHTML = '';
+                resultsSection.classList.remove('fade-out');
+            }, 300);
+        }
     }
 
     /**
      * Disable all SENTINEL features until wallet is connected
      */
     function disableSentinelFeatures() {
-        if (searchButton) searchButton.disabled = true;
-        if (searchInput) searchInput.disabled = true;
-        if (searchTypeSelect) searchTypeSelect.disabled = true;
-        if (micButton) micButton.disabled = true;
+        console.log('Disabling SENTINEL features until wallet is connected');
+        
+        if (searchButton) {
+            searchButton.disabled = true;
+            console.log('Search button disabled');
+        }
+        if (searchInput) {
+            searchInput.disabled = true;
+            console.log('Search input disabled');
+        }
+        if (searchTypeSelect) {
+            searchTypeSelect.disabled = true;
+            console.log('Search type selector disabled');
+        }
+        if (micButton) {
+            micButton.disabled = true;
+            console.log('Mic button disabled');
+        }
+        
+        // IMPORTANT: Never disable the wallet connection button!
+        // Users need to be able to connect their wallet
+        if (connectWalletButton) {
+            connectWalletButton.disabled = false;
+            console.log('Wallet connection button kept enabled');
+        }
         
         // Hide any wallet-specific UI elements
         const walletElements = document.querySelectorAll('.wallet-required');
@@ -2579,50 +3176,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    /**
-     * Handle wallet connect button click
-     */
-    function handleConnectWalletClick() {
-        try {
-            // For demo purposes, simulate wallet connection
-            walletAddress = generateWalletAddress();
-            walletConnected = true;
-            
-            // Update UI to show connected state
-            if (connectWalletButton) {
-                connectWalletButton.classList.remove('connect');
-                connectWalletButton.classList.add('connected');
-                connectWalletButton.innerHTML = `<i class="fas fa-wallet"></i> ${truncateAddress(walletAddress)}`;
-            }
-            
-            // Enable SENTINEL features
-            enableSentinelFeatures();
-            
-            // Show success notification
-            showNotification('Wallet connected successfully', 'success');
-            console.log('Wallet connected:', walletAddress);
-        } catch (error) {
-            console.error('Error connecting wallet:', error);
-            showNotification('Failed to connect wallet', 'error');
-        }
-    }
+    // This duplicate handleConnectWalletClick function has been removed
+    // The implementation at line ~2524 is now the single source of truth
     
-    /**
-     * Enable all SENTINEL features after wallet connection
-     */
-    function enableSentinelFeatures() {
-        if (searchButton) searchButton.disabled = false;
-        if (searchInput) searchInput.disabled = false;
-        if (searchTypeSelect) searchTypeSelect.disabled = false;
-        if (micButton) micButton.disabled = false;
-        
-        // Show any wallet-specific UI elements
-        const walletElements = document.querySelectorAll('.wallet-required');
-        walletElements.forEach(el => el.classList.remove('hidden'));
-        
-        // Hide the wallet connection overlay if it's visible
-        hideWalletConnectionOverlay();
-    }
+    // This duplicate enableSentinelFeatures function has been removed
+    // The implementation at line ~2600 is now the single source of truth
     
     /**
      * Disable SENTINEL features until wallet is connected
@@ -2720,6 +3278,20 @@ document.addEventListener('DOMContentLoaded', function() {
      * Starts or stops recording based on current state
      */
     function toggleRecording() {
+        console.log('🎤 Voice recording toggle initiated - checking wallet connection...');
+        console.log('Wallet connected:', walletConnected);
+        console.log('Wallet address:', walletAddress);
+        
+        // Check if wallet is connected first
+        if (!walletConnected || !walletAddress) {
+            console.warn('🚫 Voice recording blocked: Wallet not connected');
+            showNotification('🔒 Wallet Required: Please connect your wallet to use voice features', 'warning');
+            showWalletConnectionOverlay();
+            return;
+        }
+        
+        console.log('✅ Wallet check passed - proceeding with voice recording...');
+        
         if (isRecording) {
             stopRecording();
         } else {
@@ -2942,10 +3514,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Clear history button listener attached');
             }
             
+            // Set up search type dropdown listener with wallet enforcement
+            if (searchTypeSelect) {
+                searchTypeSelect.addEventListener('change', function() {
+                    console.log('🔽 Search type changed - checking wallet connection...');
+                    console.log('Wallet connected:', walletConnected);
+                    
+                    if (!walletConnected || !walletAddress) {
+                        console.warn('🚫 Search type change blocked: Wallet not connected');
+                        showNotification('🔒 Wallet Required: Please connect your wallet to use SENTINEL', 'warning');
+                        // Reset to default option
+                        this.value = 'auto';
+                        return;
+                    }
+                    
+                    console.log('✅ Search type change allowed:', this.value);
+                });
+                console.log('Search type dropdown listener attached');
+            }
+            
             // Set up suggestion chip listeners
             if (suggestionChips && suggestionChips.length > 0) {
                 suggestionChips.forEach(chip => {
                     chip.addEventListener('click', function() {
+                        console.log('💡 Suggestion chip clicked - checking wallet connection...');
+                        
+                        if (!walletConnected || !walletAddress) {
+                            console.warn('🚫 Suggestion chip blocked: Wallet not connected');
+                            showNotification('🔒 Wallet Required: Please connect your wallet to use SENTINEL', 'warning');
+                            showWalletConnectionOverlay();
+                            return;
+                        }
+                        
+                        console.log('✅ Suggestion chip allowed - filling search input');
                         if (searchInput) {
                             searchInput.value = this.textContent.trim();
                         }
@@ -2982,6 +3583,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Initialize voice recording capabilities
             initializeVoiceRecording();
+            
+            // Initialize wallet connection functionality
+            initializeWalletConnection();
             
             // Disable SENTINEL features until wallet is connected
             // Will be enabled when wallet is connected

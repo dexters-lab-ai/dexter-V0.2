@@ -1003,6 +1003,7 @@ body {
   overflow: hidden;
   margin-top: 20px;
   transition: all 0.3s ease;
+  display: none !important;
 }
 
 .sentinel-summary-header {
