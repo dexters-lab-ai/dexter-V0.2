@@ -27,6 +27,7 @@ import { pumpFunService } from './services/pumpfun/PumpFunService.js';
 import { startMonitoringDashboard } from './core/monitoring/Dashboard.js'; 
 import { intentProcessor } from './services/ai/processors/IntentProcessor.js';
 import { unifiedMessenger } from './core/UnifiedMessageHandler.js';
+import { WebSocketManager } from './services/solanaPay/WebSocketManager.js';
 
 import dashboardRouter from './core/monitoring/Dashboard.js';
 import apiRoutes from './core/monitoring/api/routes.js';
@@ -42,6 +43,7 @@ class ServerManager {
     this.httpServer = null;
     this.__dirname = path.dirname(fileURLToPath(import.meta.url));
     this.wss = null;
+    this.wsManager = new WebSocketManager();
     this.isShuttingDown = false;
     this.httpRetryCount = 0;
     this.MAX_RETRIES = 10;
@@ -128,31 +130,39 @@ class ServerManager {
       this.startMetricsUpdater();
   
       // Return a promise that resolves when the server is listening
-      return new Promise((resolve, reject) => {
-        this.httpServer.listen(port, () => {
+      return new Promise(async (resolve, reject) => {
+        this.httpServer.listen(port, async () => {
           console.log(`🚀 HTTP Server running on port ${port}`);
-          this.httpRetryCount = 0; // Reset retry count on success
-          resolve(this.httpServer);
+          
+          try {
+            // Initialize WebSocket Manager with voice streaming support
+            await this.wsManager.initialize(this.httpServer);
+            console.log('✅ WebSocket services initialized (Solana Pay + Voice Streaming)');
+            
+            this.httpRetryCount = 0; // Reset retry count on success
+            resolve(this.httpServer);
+          } catch (error) {
+            console.error('Failed to initialize WebSocket services:', error);
+            reject(error);
+          }
         });
         
         this.httpServer.on('error', (error) => {
-          console.error('HTTP server error:', error);
+          console.error(`HTTP Server error on port ${port}:`, error);
           
-          if (this.isShuttingDown) {
-            reject(error);
-            return;
-          }
-          
-          if (this.httpRetryCount < this.MAX_RETRIES) {
-            this.httpRetryCount++;
-            console.log(`🔄 Retrying HTTP server start (${this.httpRetryCount}/${this.MAX_RETRIES})...`);
-            setTimeout(() => {
-              this.startHttpServer(port)
-                .then(resolve)
-                .catch(reject);
-            }, this.RETRY_DELAY);
+          if (error.code === 'EADDRINUSE') {
+            console.log(`Port ${port} is in use, retrying in ${this.RETRY_DELAY}ms...`);
+            
+            if (this.httpRetryCount < this.MAX_RETRIES) {
+              this.httpRetryCount++;
+              setTimeout(() => {
+                this.startHttpServer(port).then(resolve).catch(reject);
+              }, this.RETRY_DELAY);
+            } else {
+              console.error(`Max retries (${this.MAX_RETRIES}) reached for port ${port}`);
+              reject(error);
+            }
           } else {
-            console.error(`❌ Failed to start HTTP server after ${this.MAX_RETRIES} attempts`);
             reject(error);
           }
         });

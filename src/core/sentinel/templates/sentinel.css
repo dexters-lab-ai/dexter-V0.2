@@ -42,7 +42,8 @@ body {
     "header header"
     "search search"
     "results timeline"
-    "summary timeline";
+    "summary timeline"
+    "footer footer";
   gap: 20px;
 }
 
@@ -65,6 +66,14 @@ body {
 
 .sentinel-ai-summary {
   grid-area: summary;
+}
+
+.sentinel-footer {
+  grid-area: footer;
+  text-align: center;
+  padding: 2rem 0;
+  border-top: 1px solid var(--glass-border);
+  margin-top: 2rem;
 }
 
 /* Header styles */
@@ -331,43 +340,62 @@ body {
   flex-direction: row;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(0, 212, 255, 0.3);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(0, 212, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.sentinel-search-container:hover {
+  border-color: rgba(0, 212, 255, 0.5);
+  box-shadow: 0 6px 25px rgba(0, 212, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .sentinel-input-wrapper {
-  flex-grow: 1;
   display: flex;
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 8px;
+  flex-grow: 1;
+  background: transparent;
+  border-radius: 10px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.2);
   transition: all 0.3s ease;
 }
 
 .sentinel-input-wrapper:focus-within {
-  box-shadow: 0 0 0 2px var(--sentinel-glow);
+  border-color: var(--sentinel-primary);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .sentinel-search-input {
   flex-grow: 1;
   background: transparent;
   border: none;
-  padding: 12px 16px;
-  color: var(--sentinel-text);
-  font-size: 1rem;
+  padding: 14px 18px;
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 500;
+  max-height: 250px;
+  max-width: 1000px;
+  letter-spacing: 0.3px;
 }
 
 .sentinel-search-input:focus {
   outline: none;
+  color: #ffffff;
 }
 
 .sentinel-search-input::placeholder {
-  color: var(--sentinel-text-muted);
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 400;
 }
 
 /* Mic button styles */
 .sentinel-mic-button {
   background: none;
   border: none;
+  border-radius: 10px;
   color: var(--sentinel-text-muted);
   font-size: 1.2rem;
   padding: 0 12px;
@@ -436,21 +464,25 @@ body {
 /* Search type dropdown removed - AI handles tool selection automatically */
 
 .sentinel-search-button {
-  background: var(--metallic-gradient);
-  color: var(--sentinel-text);
-  border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
+  background: linear-gradient(135deg, var(--sentinel-primary), var(--sentinel-secondary));
+  color: #ffffff;
+  border: 2px solid rgb(0, 0, 0);
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-weight: 500;
+  font-size: 1.05rem;
   cursor: pointer;
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.15);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 20px rgba(0, 212, 255, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.2);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  letter-spacing: 0.5px;
+  min-width: 120px;
+  justify-content: center;
 }
 
 .sentinel-search-button::before {
@@ -469,8 +501,10 @@ body {
 }
 
 .sentinel-search-button:hover {
-  box-shadow: 0 0 15px var(--sentinel-glow);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  border-color: rgba(0, 212, 255, 0.7);
+  box-shadow: 0 8px 25px rgba(0, 212, 255, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  background: linear-gradient(135deg, #00d4ff, #0099cc);
 }
 
 .sentinel-search-button:active {
@@ -1346,22 +1380,70 @@ body {
   box-shadow: var(--glass-shadow);
 }
 
-.sentinel-wallet-button.connect {
-  background: linear-gradient(135deg, #303540, #1a1f2c);
+/* Microphone button states */
+.sentinel-mic-button.idle {
+    background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+    border: unset;
+    color: var(--sentinel-text-secondary);
+    transition: all 0.3s ease;
 }
 
-.sentinel-wallet-button.connect:hover {
-  background: linear-gradient(135deg, #3a414c, #232836);
-  border-color: var(--sentinel-primary);
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+.sentinel-mic-button.connecting {
+    background: linear-gradient(135deg, rgba(0,123,255,0.8), rgba(0,123,255,0.4));
+    border: 1px solid rgba(0,123,255,0.6);
+    color: white;
+    animation: pulse 1s infinite;
+    box-shadow: 0 0 15px rgba(0,123,255,0.3);
 }
 
-.sentinel-wallet-button.connected {
-  background: linear-gradient(135deg, #0a3948, #0a2735);
-  border-color: var(--sentinel-primary);
+.sentinel-mic-button.listening {
+    background: linear-gradient(135deg, var(--sentinel-accent), rgba(0,255,150,0.3));
+    border: 1px solid var(--sentinel-accent);
+    color: white;
+    animation: breathe 2s ease-in-out infinite;
+    box-shadow: 0 0 20px rgba(0,255,150,0.4);
 }
 
-.sentinel-wallet-button.connected:hover {
+.sentinel-mic-button.streaming {
+    background: linear-gradient(135deg, rgba(255,69,0,0.9), rgba(255,140,0,0.6));
+    border: 1px solid rgba(255,69,0,0.8);
+    color: white;
+    animation: recording-pulse 0.8s ease-in-out infinite;
+    box-shadow: 0 0 25px rgba(255,69,0,0.5);
+}
+
+.sentinel-mic-button.thinking {
+    background: linear-gradient(135deg, rgba(138,43,226,0.8), rgba(75,0,130,0.6));
+    border: 1px solid rgba(138,43,226,0.6);
+    color: white;
+    animation: thinking-pulse 1.2s ease-in-out infinite;
+    box-shadow: 0 0 20px rgba(138,43,226,0.4);
+}
+
+.sentinel-mic-button.speaking {
+    background: linear-gradient(135deg, rgba(0,191,255,0.9), rgba(30,144,255,0.6));
+    border: 1px solid rgba(0,191,255,0.8);
+    color: white;
+    animation: speaking-wave 0.6s ease-in-out infinite;
+    box-shadow: 0 0 30px rgba(0,191,255,0.5);
+}
+
+.sentinel-mic-button.processing {
+    background: linear-gradient(135deg, var(--sentinel-warning), rgba(255,193,7,0.3));
+    border: 1px solid var(--sentinel-warning);
+    color: white;
+    animation: spin 1s linear infinite;
+}
+
+.sentinel-mic-button.disconnecting {
+    background: linear-gradient(135deg, rgba(220,20,60,0.8), rgba(178,34,34,0.4));
+    border: 1px solid rgba(220,20,60,0.6);
+    color: white;
+    animation: fade-out 1s ease-in-out infinite;
+    box-shadow: 0 0 15px rgba(220,20,60,0.3);
+}
+
+.sentinel-mic-button:hover {
   background: linear-gradient(135deg, #0d4559, #0d3040);
   box-shadow: 0 0 15px rgba(0, 212, 255, 0.4);
 }
@@ -1403,8 +1485,34 @@ body {
   padding: 2rem;
   max-width: 500px;
   text-align: center;
+  position: relative;
   box-shadow: var(--glass-shadow);
   animation: pulse-glow 2s infinite;
+}
+
+.sentinel-wallet-close-btn {
+  position: absolute;
+  top: 15px;
+  right: 50%;
+  transform: translateX(50%);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  width: 35px;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sentinel-text);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.sentinel-wallet-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateX(50%) scale(1.1);
 }
 
 .sentinel-wallet-message h2 {
@@ -1450,7 +1558,8 @@ body {
       "header"
       "search"
       "results"
-      "summary";
+      "summary"
+      "footer";
     gap: 15px;
   }
 
