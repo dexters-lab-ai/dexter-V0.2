@@ -558,7 +558,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
                 
                 // Make API call to the backend
-                const response = await fetch('/sentinel/search', {
+                const response = await fetch('/api/sentinel/search', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -738,7 +738,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             try {
                 // Make API request to check status
-                const response = await fetch(`/sentinel/status?id=${searchId}`);
+                const response = await fetch(`/api/sentinel/status?id=${searchId}`);
                 
                 if (!response.ok) {
                     console.warn(`Status check returned ${response.status} for search ${searchId}`);
