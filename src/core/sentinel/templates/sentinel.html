@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENTINEL API | Crypto & Token Intelligence</title>
+    <link rel="icon" href="/assets/images/sentinel-api.png" type="image/png">
+    <!-- SENTINEL_CSS_PLACEHOLDER -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="sentinel-container">
+        <header class="sentinel-header">
+            <div class="sentinel-logo-container">
+                <div class="sentinel-logo-animation">
+                    <!-- Logo Image -->
+                    <div class="sentinel-logo" id="sentinelBrain">
+                        <img src="/assets/images/sentinel-api.png" alt="SENTINEL API Logo" class="sentinel-logo-img">
+                        <div class="sentinel-logo-glow"></div>
+                    </div>
+                    <div class="sentinel-connections">
+                        <!-- Connection lines between nodes -->
+                        <div class="sentinel-connection c1"></div>
+                        <div class="sentinel-connection c2"></div>
+                        <div class="sentinel-connection c3"></div>
+                        <div class="sentinel-connection c4"></div>
+                        <div class="sentinel-connection c5"></div>
+                        
+                        <!-- Bubble nodes -->
+                        <div class="sentinel-node n1"></div>
+                        <div class="sentinel-node n2"></div>
+                        <div class="sentinel-node n3"></div>
+                        <div class="sentinel-node n4"></div>
+                        <div class="sentinel-node n5"></div>
+                        <div class="sentinel-node n6"></div>
+                        <div class="sentinel-node n7"></div>
+                        <div class="sentinel-node n8"></div>
+                    </div>
+                </div>
+                <h1 class="sentinel-title">SENTINEL<span>API</span></h1>
+            </div>
+            <p class="sentinel-subtitle">Advanced Crypto Intelligence & Token Analysis</p>
+        </header>
+
+        <section class="sentinel-search-section">
+            <div class="sentinel-search-container">
+                <div class="sentinel-input-wrapper">
+                    <input type="text" id="sentinelSearch" class="sentinel-search-input" 
+                           placeholder="Enter text query, contract address, or URL...">
+                    <div class="sentinel-search-type">
+                        <select id="searchType" class="sentinel-select">
+                            <option value="auto">Auto Detect</option>
+                            <option value="text">Text Query</option>
+                            <option value="contract">Contract Address</option>
+                            <option value="url">URL</option>
+                        </select>
+                    </div>
+                </div>
+                <button id="searchButton" class="sentinel-search-button">
+                    <i class="fas fa-search"></i> Search
+                </button>
+            </div>
+
+            <div class="sentinel-suggestions">
+                <p>Try searching for:</p>
+                <div class="sentinel-suggestion-chips">
+                    <span class="sentinel-suggestion-chip">Token price for BONK</span>
+                    <span class="sentinel-suggestion-chip">Contract safety analysis</span>
+                    <span class="sentinel-suggestion-chip">Latest tweets about $SOL</span>
+                    <span class="sentinel-suggestion-chip">Token holder distribution</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="sentinel-results-section" id="resultsSection">
+            <!-- Results will be injected here -->
+            <div class="sentinel-placeholder">
+                <div class="sentinel-placeholder-icon">
+                    <i class="fas fa-search"></i>
+                </div>
+                <p>Enter a search query to analyze tokens, contracts, or websites</p>
+            </div>
+        </section>
+
+        <div class="sentinel-loading" id="loadingOverlay">
+            <div class="sentinel-loading-content">
+                <div class="sentinel-loading-animation">
+                    <div class="sentinel-loading-circle c1"></div>
+                    <div class="sentinel-loading-circle c2"></div>
+                    <div class="sentinel-loading-circle c3"></div>
+                    <div class="sentinel-loading-circle c4"></div>
+                </div>
+                <p class="sentinel-loading-text">Processing your request across multiple data sources...</p>
+                <div class="sentinel-tool-statuses">
+                    <div class="sentinel-tool-status" id="tool1Status">
+                        <span class="sentinel-tool-name">Token Info</span>
+                        <span class="sentinel-tool-indicator pending"></span>
+                    </div>
+                    <div class="sentinel-tool-status" id="tool2Status">
+                        <span class="sentinel-tool-name">Token Metadata</span>
+                        <span class="sentinel-tool-indicator pending"></span>
+                    </div>
+                    <div class="sentinel-tool-status" id="tool3Status">
+                        <span class="sentinel-tool-name">Security Analysis</span>
+                        <span class="sentinel-tool-indicator pending"></span>
+                    </div>
+                    <div class="sentinel-tool-status" id="tool4Status">
+                        <span class="sentinel-tool-name">Social Data</span>
+                        <span class="sentinel-tool-indicator pending"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <template id="tokenInfoTemplate">
+            <div class="sentinel-result-card token-info-card">
+                <div class="sentinel-result-header">
+                    <h3>Token Information</h3>
+                    <div class="sentinel-result-actions">
+                        <button class="sentinel-expand-btn"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+                </div>
+                <div class="sentinel-result-content">
+                    <div class="sentinel-token-basic">
+                        <div class="sentinel-token-icon">
+                            <img src="{{tokenIcon}}" alt="{{tokenSymbol}}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0IiBmaWxsPSJub25lIj48Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSIzMCIgZmlsbD0iIzMzMzMzMyIgLz48dGV4dCB4PSIzMiIgeT0iMzgiIGZvbnQtc2l6ZT0iMzAiIGZpbGw9IiNmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPj88L3RleHQ+PC9zdmc+Cg=='">
+                        </div>
+                        <div class="sentinel-token-details">
+                            <h4>{{tokenName}} ({{tokenSymbol}})</h4>
+                            <p class="sentinel-token-price">{{tokenPrice}}</p>
+                            <div class="sentinel-token-change {{priceChangeClass}}">
+                                <i class="fas {{priceChangeIcon}}"></i> {{priceChange}}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sentinel-token-stats">
+                        <div class="sentinel-stat">
+                            <span class="sentinel-stat-label">Market Cap</span>
+                            <span class="sentinel-stat-value">{{marketCap}}</span>
+                        </div>
+                        <div class="sentinel-stat">
+                            <span class="sentinel-stat-label">24h Volume</span>
+                            <span class="sentinel-stat-value">{{volume24h}}</span>
+                        </div>
+                        <div class="sentinel-stat">
+                            <span class="sentinel-stat-label">Liquidity</span>
+                            <span class="sentinel-stat-value">{{liquidity}}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="tokenMetadataTemplate">
+            <div class="sentinel-result-card token-metadata-card">
+                <div class="sentinel-result-header">
+                    <h3>Token Metadata</h3>
+                    <div class="sentinel-result-actions">
+                        <button class="sentinel-expand-btn"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+                </div>
+                <div class="sentinel-result-content">
+                    <div class="sentinel-metadata-section">
+                        <h4>Holder Distribution</h4>
+                        <div class="sentinel-chart-container">
+                            <canvas class="sentinel-holder-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="sentinel-metadata-section">
+                        <h4>Initial Snipers</h4>
+                        <div class="sentinel-snipers-list">
+                            <!-- Snipers data will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="securityAnalysisTemplate">
+            <div class="sentinel-result-card security-analysis-card">
+                <div class="sentinel-result-header">
+                    <h3>Security Analysis</h3>
+                    <div class="sentinel-result-actions">
+                        <button class="sentinel-expand-btn"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+                </div>
+                <div class="sentinel-result-content">
+                    <div class="sentinel-security-score">
+                        <div class="sentinel-security-gauge">
+                            <svg viewBox="0 0 120 120" class="sentinel-gauge">
+                                <circle class="sentinel-gauge-background" cx="60" cy="60" r="54" stroke-width="12" />
+                                <circle class="sentinel-gauge-progress" cx="60" cy="60" r="54" stroke-dasharray="339.292" stroke-dashoffset="0" stroke-width="12" />
+                                <text class="sentinel-gauge-text" x="60" y="65" text-anchor="middle">0%</text>
+                            </svg>
+                        </div>
+                        <div class="sentinel-security-rating">
+                            <h4 class="sentinel-security-label">Security Score</h4>
+                            <p class="sentinel-security-value">Not Available</p>
+                        </div>
+                    </div>
+                    <div class="sentinel-security-risks">
+                        <h4>Risk Factors</h4>
+                        <ul class="sentinel-risk-list">
+                            <!-- Risk factors will be inserted here -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="socialDataTemplate">
+            <div class="sentinel-result-card social-data-card">
+                <div class="sentinel-result-header">
+                    <h3>Social Media Data</h3>
+                    <div class="sentinel-result-actions">
+                        <button class="sentinel-expand-btn"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+                </div>
+                <div class="sentinel-result-content">
+                    <div class="sentinel-tweet-stats">
+                        <div class="sentinel-stat">
+                            <span class="sentinel-stat-label">Total Tweets</span>
+                            <span class="sentinel-stat-value">{{tweetCount}}</span>
+                        </div>
+                        <div class="sentinel-stat">
+                            <span class="sentinel-stat-label">Engagement</span>
+                            <span class="sentinel-stat-value">{{engagement}}</span>
+                        </div>
+                        <div class="sentinel-stat">
+                            <span class="sentinel-stat-label">Sentiment</span>
+                            <span class="sentinel-stat-value sentinel-sentiment {{sentimentClass}}">{{sentiment}}</span>
+                        </div>
+                    </div>
+                    <div class="sentinel-tweets-container">
+                        <h4>Recent Tweets</h4>
+                        <div class="sentinel-tweets-list">
+                            <!-- Tweets will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <div class="sentinel-actions" id="resultActions" style="display: none;">
+            <button id="viewRawDataBtn" class="sentinel-action-btn">
+                <i class="fas fa-code"></i> View Raw Data
+            </button>
+            <button id="saveResultsBtn" class="sentinel-action-btn">
+                <i class="fas fa-save"></i> Save Results
+            </button>
+        </div>
+
+        <div class="sentinel-raw-data-modal" id="rawDataModal">
+            <div class="sentinel-modal-content">
+                <div class="sentinel-modal-header">
+                    <h3>Raw Data</h3>
+                    <button class="sentinel-modal-close">&times;</button>
+                </div>
+                <div class="sentinel-modal-body">
+                    <pre id="rawDataContent"></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="sentinel-save-modal" id="saveModal">
+            <div class="sentinel-modal-content">
+                <div class="sentinel-modal-header">
+                    <h3>Save Search Results</h3>
+                    <button class="sentinel-modal-close">&times;</button>
+                </div>
+                <div class="sentinel-modal-body">
+                    <div class="sentinel-save-form">
+                        <div class="sentinel-form-group">
+                            <label for="saveNotes">Notes (optional):</label>
+                            <textarea id="saveNotes" class="sentinel-textarea" rows="4"></textarea>
+                        </div>
+                        <button id="confirmSaveBtn" class="sentinel-action-btn">
+                            <i class="fas fa-save"></i> Save
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="sentinel-footer">
+            <p>&copy; 2025 SENTINEL API | Powered by KATZ!life</p>
+        </footer>
+    </div>
+
+    <!-- SENTINEL_JS_PLACEHOLDER -->
+</body>
+</html>

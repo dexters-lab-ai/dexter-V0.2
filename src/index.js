@@ -32,6 +32,7 @@ import dashboardRouter from './core/monitoring/Dashboard.js';
 import apiRoutes from './core/monitoring/api/routes.js';
 import googleRoutes from './routes/googleRoutes.js';
 import merchantRoutes from './routes/merchantRoutes.js';
+import sentinelRoutes from './routes/sentinelRoutes.js';
 
 import Moralis from 'moralis';
 
@@ -66,6 +67,9 @@ class ServerManager {
   
     // Mount dashboard routes
     this.app.use('/dashboard', dashboardRouter);
+    
+    // Mount SENTINEL routes
+    this.app.use('/sentinel', sentinelRoutes);
   
     // Health check endpoint
     this.app.get('/health', (req, res) => {
