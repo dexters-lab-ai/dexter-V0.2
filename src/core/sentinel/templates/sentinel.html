@@ -11,6 +11,12 @@
 <body>
     <div class="sentinel-container">
         <header class="sentinel-header">
+            <!-- Wallet connection button in top right -->
+            <div class="sentinel-wallet-container">
+                <button id="connectWalletButton" class="sentinel-wallet-button connect">
+                    <i class="fas fa-wallet"></i> Connect Wallet
+                </button>
+            </div>
             <div class="sentinel-logo-container">
                 <div class="sentinel-logo-animation">
                     <!-- Logo Image -->
@@ -47,6 +53,9 @@
                 <div class="sentinel-input-wrapper">
                     <input type="text" id="sentinelSearch" class="sentinel-search-input" 
                            placeholder="Enter text query, contract address, or URL...">
+                    <button id="sentinelMicButton" class="sentinel-mic-button idle">
+                        <i class="fas fa-microphone"></i>
+                    </button>
                     <div class="sentinel-search-type">
                         <select id="searchType" class="sentinel-select">
                             <option value="auto">Auto Detect</option>
@@ -315,6 +324,17 @@
         </footer>
     </div>
 
-    <!-- SENTINEL_JS_PLACEHOLDER -->
+    <!-- Wallet Connection Overlay -->
+    <div id="walletConnectionOverlay" class="sentinel-wallet-overlay">
+        <div class="sentinel-wallet-message">
+            <h2><i class="fas fa-wallet"></i> Wallet Connection Required</h2>
+            <p>Please connect your wallet to access SENTINEL API features. All searches are saved and linked to your wallet for future reference.</p>
+            <button id="walletConnectBtn" class="sentinel-wallet-connect-btn">
+                <i class="fas fa-wallet"></i> Connect Wallet
+            </button>
+        </div>
+    </div>
+    
+    <!-- SENTINEL_JAVASCRIPT_PLACEHOLDER -->
 </body>
 </html>

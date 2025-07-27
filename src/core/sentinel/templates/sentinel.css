@@ -70,9 +70,11 @@ body {
 /* Header styles */
 .sentinel-header {
   text-align: center;
-  padding-bottom: 2rem;
-  margin-bottom: 2rem;
+  padding: 2rem 1rem;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .sentinel-logo-container {
@@ -355,6 +357,75 @@ body {
 
 .sentinel-search-input::placeholder {
   color: var(--sentinel-text-muted);
+}
+
+/* Mic button styles */
+.sentinel-mic-button {
+  background: none;
+  border: none;
+  color: var(--sentinel-text-muted);
+  font-size: 1.2rem;
+  padding: 0 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  position: relative;
+  outline: none;
+}
+
+.sentinel-mic-button::before {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: var(--sentinel-primary);
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: -1;
+}
+
+/* Mic button states */
+.sentinel-mic-button.idle:hover {
+  color: var(--sentinel-primary);
+}
+
+.sentinel-mic-button.listening {
+  color: var(--sentinel-primary);
+}
+
+.sentinel-mic-button.listening::before {
+  width: 36px;
+  height: 36px;
+  opacity: 0.2;
+  animation: mic-pulse 1.5s infinite;
+}
+
+.sentinel-mic-button.processing {
+  color: var(--sentinel-secondary);
+  animation: mic-spin 1.2s infinite linear;
+}
+
+@keyframes mic-pulse {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.2;
+  }
+}
+
+@keyframes mic-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .sentinel-search-type {
@@ -1263,4 +1334,122 @@ body {
   .sentinel-tool-statuses {
     grid-template-columns: 1fr;
   }
+}
+
+/* Wallet connection styling */
+.sentinel-wallet-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+}
+
+.sentinel-wallet-button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--metallic-gradient);
+  color: var(--sentinel-text);
+  font-weight: 500;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: var(--glass-shadow);
+}
+
+.sentinel-wallet-button.connect {
+  background: linear-gradient(135deg, #303540, #1a1f2c);
+}
+
+.sentinel-wallet-button.connect:hover {
+  background: linear-gradient(135deg, #3a414c, #232836);
+  border-color: var(--sentinel-primary);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+}
+
+.sentinel-wallet-button.connected {
+  background: linear-gradient(135deg, #0a3948, #0a2735);
+  border-color: var(--sentinel-primary);
+}
+
+.sentinel-wallet-button.connected:hover {
+  background: linear-gradient(135deg, #0d4559, #0d3040);
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.4);
+}
+
+/* Wallet-required elements styling */
+.wallet-required.hidden {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Wallet connection overlay */
+.sentinel-wallet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(7, 10, 22, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.sentinel-wallet-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sentinel-wallet-message {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 500px;
+  text-align: center;
+  box-shadow: var(--glass-shadow);
+  animation: pulse-glow 2s infinite;
+}
+
+.sentinel-wallet-message h2 {
+  color: var(--sentinel-primary);
+  margin-bottom: 1rem;
+}
+
+.sentinel-wallet-message p {
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+.sentinel-wallet-connect-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--sentinel-primary), var(--sentinel-secondary));
+  color: white;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 auto;
+}
+
+.sentinel-wallet-connect-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 212, 255, 0.4);
 }

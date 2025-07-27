@@ -1,5 +1,5 @@
 import express from 'express';
-import { renderSentinelPage, searchSentinel, getSearchStatus, saveSearchResult, getSavedResult } from '../core/sentinel/SentinelAPI.js';
+import { renderSentinelPage, searchSentinel, getSearchStatus, saveSearchResult, getSavedResult, processVoiceInput, getUserSearchHistory } from '../core/sentinel/SentinelAPI.js';
 
 const router = express.Router();
 
@@ -79,13 +79,20 @@ router.get('/raw/:id', async (req, res) => {
 
 /**
  * Endpoint for saving search results
+ * Requires wallet address for user identification
  */
 router.post('/save', async (req, res) => {
   try {
-    const { id, notes } = req.body;
+    const { id, notes, walletAddress } = req.body;
     
     if (!id) {
       return res.status(400).json({ error: 'Search ID is required' });
+    }
+    
+    if (!walletAddress) {
+      return res.status(401).json({ 
+        error: 'Wallet address is required. Please connect your wallet to use SENTINEL.' 
+      });
     }
     
     // Get the search data from the cache or search history
@@ -95,14 +102,15 @@ router.post('/save', async (req, res) => {
       return res.status(404).json({ error: 'Search results not found' });
     }
     
-    // Add notes to the search data if provided
+    // Add notes and wallet address to the search data
     const dataToSave = {
       ...searchResults,
-      notes: notes || ''
+      notes: notes || '',
+      walletAddress
     };
     
-    // Save the search results with optional user notes
-    const savedResult = await saveSearchResult(id, dataToSave);
+    // Save the search results with user's wallet address
+    const savedResult = await saveSearchResult(id, dataToSave, walletAddress);
     res.status(200).json(savedResult);
   } catch (error) {
     console.error('Error saving SENTINEL results:', error);
@@ -134,25 +142,97 @@ router.get('/status', async (req, res) => {
 /**
  * Retrieve endpoint to get saved search results by ID
  * Used by the frontend to display past searches from history
+ * Requires wallet address for user identification
  */
 router.get('/retrieve/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { walletAddress } = req.query;
     
     if (!id) {
       return res.status(400).json({ error: 'Search ID is required' });
     }
     
-    // Get the saved results from the database
-    const results = await getSavedResult(id);
+    if (!walletAddress) {
+      return res.status(401).json({ 
+        error: 'Wallet address is required. Please connect your wallet to use SENTINEL.' 
+      });
+    }
+    
+    // Get the saved results from the database for this specific wallet address
+    const results = await getSavedResult(id, walletAddress);
     
     if (!results) {
-      return res.status(404).json({ error: 'Search results not found' });
+      return res.status(404).json({ error: 'Search results not found for your wallet' });
     }
     
     res.status(200).json(results);
   } catch (error) {
     console.error('Error retrieving saved SENTINEL results:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Voice endpoint to process audio data from the frontend
+ * Uses Gemini API for speech-to-text processing
+ */
+router.post('/voice', async (req, res) => {
+  try {
+    const { audio } = req.body;
+    
+    if (!audio) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Audio data is required' 
+      });
+    }
+    
+    // Process audio data with Gemini
+    const result = await processVoiceInput(audio);
+    
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to process audio'
+      });
+    }
+    
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error processing voice input:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * History endpoint to get all search history for a user by wallet address
+ * Enforces wallet connection requirement and respects history limit
+ */
+router.get('/history', async (req, res) => {
+  try {
+    const { walletAddress } = req.query;
+    
+    if (!walletAddress) {
+      return res.status(401).json({ 
+        error: 'Wallet address is required. Please connect your wallet to use SENTINEL.' 
+      });
+    }
+    
+    // Get all search history for this wallet address
+    const history = await getUserSearchHistory(walletAddress);
+    
+    // Return the search history (will be empty array if none found)
+    res.status(200).json({
+      walletAddress,
+      history,
+      count: history.length
+    });
+  } catch (error) {
+    console.error('Error retrieving SENTINEL search history:', error);
     res.status(500).json({ error: error.message });
   }
 });

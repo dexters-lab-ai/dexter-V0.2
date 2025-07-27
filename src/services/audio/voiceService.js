@@ -10,6 +10,9 @@ import OpenAI from "openai";
 import textToSpeech from "@google-cloud/text-to-speech";
 import { aiMetricsService } from "../../services/aiMetricsService.js";
 
+// Base64 encoded credentials for Google Speech-to-Text
+const STT_CREDENTIALS_BASE64 = fs.readFileSync('./stt-credentials-base64.txt', 'utf8').trim();
+
 const openai = new OpenAI();
 
 export class VoiceService {
@@ -19,22 +22,22 @@ export class VoiceService {
       apiKey: config.elevenLabsApiKey,
     });
     
-    // Initialize Google clients with the key file from config
+    // Initialize Google clients with base64 encoded credentials
     try {
-      // Try to find the key file in multiple possible locations
-      const keyFilePath = this.findCredentialsFile(config.googleApiKeyFile);
+      // Use base64 encoded credentials directly
+      const credentials = JSON.parse(Buffer.from(STT_CREDENTIALS_BASE64, 'base64').toString());
       
-      console.log(`✅ Using Google credentials from: ${keyFilePath}`);
+      console.log(`✅ Using Google credentials from base64 encoded string`);
       
-      // Initialize with the resolved path
+      // Initialize with the credentials object
       this.speechClient = new SpeechClient({
-        keyFilename: keyFilePath
+        credentials
       });
       this.ttsClient = new textToSpeech.TextToSpeechClient({
-        keyFilename: keyFilePath
+        credentials
       });
       
-      console.log(`✅ Successfully initialized Google clients with: ${keyFilePath}`);
+      console.log(`✅ Successfully initialized Google clients with base64 credentials`);
     } catch (error) {
       console.error("❌ Failed to initialize Google clients:", error.message);
       // Still create the services, they'll throw more specific errors when used

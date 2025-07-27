@@ -12,6 +12,7 @@ import { dexscreener } from '../../services/dexscreener/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { detectQueryIntent, extractTokens, isContractAddress, isUrl } from './utils/nlpHelper.js';
 import { scrapeUrl } from './utils/urlScraper.js';
+import { geminiService } from '../../services/ai/geminiService.js';
 
 // Path handling for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -21,28 +22,62 @@ const __dirname = path.dirname(__filename);
 const searchCache = new Map();
 
 // Saved results storage (persistent storage for search history)
-const savedResults = new Map();
+// Changed from Map to Object of Maps to support multi-user wallet-based storage
+const savedResults = {
+  // Format: { [walletAddress]: Map<searchId, searchData> }
+};
+
+// User message history limit
+const USER_MESSAGE_HISTORY_LIMIT = 100;
 
 /**
  * Save search result to persistent storage
  * @param {string} id - Search ID
  * @param {Object} data - Search data including results and query info
+ * @param {string} walletAddress - User's wallet address
  */
-export async function saveSearchResult(id, data) {
+export async function saveSearchResult(id, data, walletAddress) {
   try {
-    // Store results with timestamp
+    if (!walletAddress) {
+      throw new Error('Wallet address is required to save search results');
+    }
+
+    // Store results with timestamp and wallet address
     const savedData = {
       id,
       results: data.results,
       query: data.query,
       type: data.type,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      walletAddress
     };
     
-    savedResults.set(id, savedData);
+    // Initialize user's storage if it doesn't exist
+    if (!savedResults[walletAddress]) {
+      savedResults[walletAddress] = new Map();
+    }
     
-    logger.info(`Saved search result with ID: ${id}`);
-    return { success: true, id };
+    // Get the user's map and add the new search result
+    const userResults = savedResults[walletAddress];
+    userResults.set(id, savedData);
+    
+    // Prune history if it exceeds the limit
+    if (userResults.size > USER_MESSAGE_HISTORY_LIMIT) {
+      // Get oldest entries and remove them
+      const entries = Array.from(userResults.entries());
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+      
+      // Remove oldest entries until we're under the limit
+      const entriesToRemove = entries.slice(0, entries.length - USER_MESSAGE_HISTORY_LIMIT);
+      for (const [entryId] of entriesToRemove) {
+        userResults.delete(entryId);
+      }
+      
+      logger.info(`Pruned ${entriesToRemove.length} old search entries for wallet ${walletAddress}`);
+    }
+    
+    logger.info(`Saved search result with ID: ${id} for wallet: ${walletAddress}`);
+    return { success: true, id, walletAddress };
   } catch (error) {
     logger.error(`Error saving search result: ${error.message}`);
     throw error;
@@ -52,20 +87,70 @@ export async function saveSearchResult(id, data) {
 /**
  * Retrieve a saved search result by ID
  * @param {string} id - Search ID
+ * @param {string} walletAddress - User's wallet address
  * @returns {Object|null} - The saved search data or null if not found
  */
-export async function getSavedResult(id) {
+export async function getSavedResult(id, walletAddress) {
   try {
-    if (!savedResults.has(id)) {
-      logger.warn(`Search result not found for ID: ${id}`);
+    if (!walletAddress) {
+      throw new Error('Wallet address is required to retrieve search results');
+    }
+    
+    // Check if the user has any saved results
+    if (!savedResults[walletAddress]) {
+      logger.warn(`No search history found for wallet: ${walletAddress}`);
       return null;
     }
     
-    const savedData = savedResults.get(id);
-    logger.info(`Retrieved saved search result with ID: ${id}`);
+    // Get the user's map of search results
+    const userResults = savedResults[walletAddress];
+    
+    // Check if the specific search ID exists for this user
+    if (!userResults.has(id)) {
+      logger.warn(`Search result not found for ID: ${id} and wallet: ${walletAddress}`);
+      return null;
+    }
+    
+    const savedData = userResults.get(id);
+    logger.info(`Retrieved saved search result with ID: ${id} for wallet: ${walletAddress}`);
     return savedData;
   } catch (error) {
     logger.error(`Error retrieving saved search result: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Get all search history for a specific wallet address
+ * @param {string} walletAddress - User's wallet address
+ * @returns {Array} - Array of search results, sorted by timestamp (newest first)
+ */
+export async function getUserSearchHistory(walletAddress) {
+  try {
+    if (!walletAddress) {
+      throw new Error('Wallet address is required to retrieve search history');
+    }
+    
+    // Check if the user has any saved results
+    if (!savedResults[walletAddress] || savedResults[walletAddress].size === 0) {
+      logger.info(`No search history found for wallet: ${walletAddress}`);
+      return [];
+    }
+    
+    // Get all search results for this user and convert to array
+    const userResults = savedResults[walletAddress];
+    const resultsArray = Array.from(userResults.values());
+    
+    // Sort by timestamp (newest first)
+    resultsArray.sort((a, b) => b.timestamp - a.timestamp);
+    
+    // Only return the most recent results up to the limit
+    const limitedResults = resultsArray.slice(0, USER_MESSAGE_HISTORY_LIMIT);
+    
+    logger.info(`Retrieved ${limitedResults.length} search history items for wallet: ${walletAddress}`);
+    return limitedResults;
+  } catch (error) {
+    logger.error(`Error retrieving search history: ${error.message}`);
     throw error;
   }
 }
@@ -642,5 +727,52 @@ export async function getSearchStatus(searchId) {
   } catch (error) {
     logger.error(`Error getting search status: ${error.message}`);
     throw error;
+  }
+}
+
+/**
+ * Process voice input using Gemini API
+ * @param {string} audioBase64 - Base64 encoded audio data
+ * @returns {Object} - Processed voice data including transcribed text
+ */
+export async function processVoiceInput(audioBase64) {
+  try {
+    logger.info('Processing voice input with Gemini API');
+    
+    if (!audioBase64) {
+      throw new Error('No audio data provided');
+    }
+    
+    // Convert base64 to buffer
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    
+    // Track response chunks for debugging
+    let transcribedText = '';
+    
+    // Process with Gemini audio model
+    await geminiService.processAudioStream(
+      audioBuffer,
+      // Text chunk handler
+      (textChunk) => {
+        logger.debug(`Received text chunk: ${textChunk}`);
+        transcribedText += textChunk;
+      },
+      // Audio chunk handler (we don't need to handle audio response here)
+      null
+    );
+    
+    logger.info(`Voice transcription complete: "${transcribedText}"`);
+    
+    return {
+      success: true,
+      text: transcribedText.trim(),
+      timestamp: Date.now()
+    };
+  } catch (error) {
+    logger.error(`Error processing voice input: ${error.message}`);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 }

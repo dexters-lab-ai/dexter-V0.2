@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('sentinelSearch');
     const searchTypeSelect = document.getElementById('searchType');
     const searchButton = document.getElementById('searchButton');
+    const micButton = document.getElementById('sentinelMicButton');
+    const connectWalletButton = document.getElementById('connectWalletButton');
     const resultsSection = document.getElementById('resultsSection');
     const loadingOverlay = document.getElementById('loadingOverlay');
     const suggestionChips = document.querySelectorAll('.sentinel-suggestion-chip');
@@ -28,6 +30,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Search history in memory (will be saved to localStorage)
     let searchHistory = [];
+    
+    // Voice recording state
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+    let recordingTimeout = null;
+    
+    // Wallet connection state
+    let walletConnected = false;
+    let walletAddress = null;
 
     // AI Result Summarization
     function generateResultSummary(results) {
@@ -530,16 +542,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Simulate the AI thinking about which tools to use
                 await simulateAiToolSelection();
                 
+                // Prepare search data with wallet address
+                const searchData = {
+                    query,
+                    type: searchType,
+                    walletAddress // Include wallet address in all searches
+                };
+                
                 // Make API call to the backend
                 const response = await fetch('/sentinel/search', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        query,
-                        type: searchType
-                    })
+                    body: JSON.stringify(searchData)
                 });
                 
                 if (!response.ok) {
@@ -2383,6 +2399,446 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
+     * Initialize wallet connection functionality
+     * Sets up wallet connection and user identification
+     */
+    function initializeWalletConnection() {
+        try {
+            if (!connectWalletButton) {
+                console.error('Connect wallet button element not found');
+                return;
+            }
+
+            // Check for previously connected wallet in local storage
+            const savedWallet = localStorage.getItem('sentinelWalletAddress');
+            if (savedWallet) {
+                // Auto-connect with saved wallet if available
+                connectWallet(savedWallet);
+            } else {
+                // Disable SENTINEL features until wallet is connected
+                disableSentinelFeatures();
+            }
+
+            // Set up connect wallet button event listener
+            connectWalletButton.addEventListener('click', handleConnectWalletClick);
+            console.log('Wallet button listener attached');
+        } catch (error) {
+            console.error('Error initializing wallet connection:', error);
+            showNotification('Wallet connection initialization failed', 'error');
+        }
+    }
+
+    /**
+     * Handle connect wallet button click
+     */
+    async function handleConnectWalletClick() {
+        try {
+            // In a real implementation, this would use Phantom, Solflare, etc.
+            // For demo purposes, we'll simulate wallet connection
+            if (walletConnected) {
+                // Disconnect wallet if already connected
+                disconnectWallet();
+            } else {
+                // Connect to wallet
+                const simulatedWalletAddress = generateSimulatedWalletAddress();
+                connectWallet(simulatedWalletAddress);
+            }
+        } catch (error) {
+            console.error('Error connecting wallet:', error);
+            showNotification('Wallet connection failed', 'error');
+        }
+    }
+
+    /**
+     * Connect wallet and enable SENTINEL features
+     * @param {string} address - Wallet address
+     */
+    function connectWallet(address) {
+        if (!address) return;
+        
+        walletAddress = address;
+        walletConnected = true;
+        
+        // Save to local storage for persistent connection
+        localStorage.setItem('sentinelWalletAddress', address);
+        
+        // Update UI to show connected state
+        if (connectWalletButton) {
+            connectWalletButton.classList.remove('connect');
+            connectWalletButton.classList.add('connected');
+            connectWalletButton.innerHTML = `<i class="fas fa-wallet"></i> ${truncateWalletAddress(address)}`;
+        }
+        
+        // Enable all SENTINEL features
+        enableSentinelFeatures();
+        
+        // Load user's search history
+        loadSearchHistoryFromWallet(address);
+        
+        showNotification('Wallet connected successfully', 'success');
+    }
+
+    /**
+     * Disconnect wallet and disable SENTINEL features
+     */
+    function disconnectWallet() {
+        walletAddress = null;
+        walletConnected = false;
+        
+        // Remove from local storage
+        localStorage.removeItem('sentinelWalletAddress');
+        
+        // Update UI to show disconnected state
+        if (connectWalletButton) {
+            connectWalletButton.classList.remove('connected');
+            connectWalletButton.classList.add('connect');
+            connectWalletButton.innerHTML = '<i class="fas fa-wallet"></i> Connect Wallet';
+        }
+        
+        // Disable SENTINEL features until wallet is connected
+        disableSentinelFeatures();
+        
+        // Clear search history display
+        clearSearchHistory();
+        
+        showNotification('Wallet disconnected', 'info');
+    }
+
+    /**
+     * Enable all SENTINEL features
+     */
+    function enableSentinelFeatures() {
+        if (searchButton) searchButton.disabled = false;
+        if (searchInput) searchInput.disabled = false;
+        if (searchTypeSelect) searchTypeSelect.disabled = false;
+        if (micButton) micButton.disabled = false;
+        
+        // Show any wallet-specific UI elements
+        const walletElements = document.querySelectorAll('.wallet-required');
+        walletElements.forEach(el => el.classList.remove('hidden'));
+    }
+
+    /**
+     * Disable all SENTINEL features until wallet is connected
+     */
+    function disableSentinelFeatures() {
+        if (searchButton) searchButton.disabled = true;
+        if (searchInput) searchInput.disabled = true;
+        if (searchTypeSelect) searchTypeSelect.disabled = true;
+        if (micButton) micButton.disabled = true;
+        
+        // Hide any wallet-specific UI elements
+        const walletElements = document.querySelectorAll('.wallet-required');
+        walletElements.forEach(el => el.classList.add('hidden'));
+        
+        // Show wallet connection required message
+        showNotification('Connect your wallet to use SENTINEL', 'warning', 5000);
+    }
+    
+    /**
+     * Show wallet connection overlay with static message
+     */
+    function showWalletConnectionOverlay() {
+        const overlay = document.getElementById('walletConnectionOverlay');
+        if (overlay) {
+            overlay.classList.add('visible');
+            
+            // Set up the connect wallet button in the overlay
+            const connectBtn = document.getElementById('walletConnectBtn');
+            if (connectBtn) {
+                // Remove previous listeners to avoid duplicates
+                const newConnectBtn = connectBtn.cloneNode(true);
+                connectBtn.parentNode.replaceChild(newConnectBtn, connectBtn);
+                
+                // Add click handler
+                newConnectBtn.addEventListener('click', () => {
+                    // Simulate wallet connection
+                    handleConnectWalletClick();
+                    // Hide overlay after connecting
+                    hideWalletConnectionOverlay();
+                });
+            }
+        }
+    }
+    
+    /**
+     * Hide wallet connection overlay
+     */
+    function hideWalletConnectionOverlay() {
+        const overlay = document.getElementById('walletConnectionOverlay');
+        if (overlay) {
+            overlay.classList.remove('visible');
+        }
+    }
+
+    /**
+     * Generate a simulated wallet address for demo purposes
+     * @returns {string} - Simulated Solana wallet address
+     */
+    function generateSimulatedWalletAddress() {
+        // Generate a random Solana-like address for demo purposes
+        const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+        let address = '';
+        for (let i = 0; i < 44; i++) {
+            address += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return address;
+    }
+
+    /**
+     * Truncate wallet address for display
+     * @param {string} address - Full wallet address
+     * @returns {string} - Truncated address for display
+     */
+    function truncateWalletAddress(address) {
+        if (!address) return '';
+        return `${address.substring(0, 4)}...${address.substring(address.length - 4)}`;
+    }
+
+    /**
+     * Load search history for a specific wallet address
+     * @param {string} address - Wallet address
+     */
+    async function loadSearchHistoryFromWallet(address) {
+        try {
+            // Fetch search history from backend
+            const response = await fetch(`/api/sentinel/history?walletAddress=${encodeURIComponent(address)}`);
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.history && Array.isArray(data.history)) {
+                // Update search history array
+                searchHistory = data.history;
+                
+                // Update UI with search history
+                updateSearchHistoryUI(searchHistory);
+                
+                console.log(`Loaded ${data.count} search history items for wallet: ${address}`);
+            }
+        } catch (error) {
+            console.error('Error loading search history:', error);
+            // Don't show notification to avoid confusion - this is a background operation
+        }
+    }
+
+    /**
+     * Initialize microphone recording functionality
+     * Sets up voice recording and integrates with Gemini API
+     */
+    function initializeVoiceRecording() {
+        try {
+            if (!micButton) {
+                console.error('Mic button element not found');
+                return;
+            }
+
+            // Set up mic button event listeners
+            micButton.addEventListener('click', toggleRecording);
+            console.log('Mic button listener attached');
+        } catch (error) {
+            console.error('Error initializing voice recording:', error);
+            showNotification('Voice recording initialization failed', 'error');
+        }
+    }
+
+    /**
+     * Toggle voice recording state
+     * Starts or stops recording based on current state
+     */
+    function toggleRecording() {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    }
+
+    /**
+     * Start audio recording from microphone
+     */
+    async function startRecording() {
+        try {
+            // Request microphone access
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioChunks = [];
+
+            // Set up MediaRecorder
+            mediaRecorder = new MediaRecorder(stream);
+
+            // Update UI to show recording state
+            micButton.classList.remove('idle');
+            micButton.classList.add('listening');
+            micButton.innerHTML = '<i class="fas fa-microphone-alt"></i>';
+            isRecording = true;
+
+            // Set a timeout to automatically stop recording after 30 seconds
+            recordingTimeout = setTimeout(() => {
+                if (isRecording) {
+                    stopRecording();
+                }
+            }, 30000); // 30 seconds max recording
+
+            // Handle data available events
+            mediaRecorder.addEventListener('dataavailable', event => {
+                audioChunks.push(event.data);
+            });
+
+            // Handle recording stop event
+            mediaRecorder.addEventListener('stop', processRecording);
+
+            // Start recording
+            mediaRecorder.start();
+            console.log('Recording started');
+            showNotification('Recording... speak now', 'info');
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            showNotification('Could not access microphone', 'error');
+            resetMicButton();
+        }
+    }
+
+    /**
+     * Stop the current recording
+     */
+    function stopRecording() {
+        if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+            resetMicButton();
+            return;
+        }
+
+        try {
+            // Clear the timeout
+            if (recordingTimeout) {
+                clearTimeout(recordingTimeout);
+                recordingTimeout = null;
+            }
+
+            // Stop recording
+            mediaRecorder.stop();
+
+            // Update UI to show processing state
+            micButton.classList.remove('listening');
+            micButton.classList.add('processing');
+            micButton.innerHTML = '<i class="fas fa-cog"></i>';
+            
+            console.log('Recording stopped, processing audio...');
+        } catch (error) {
+            console.error('Error stopping recording:', error);
+            showNotification('Error processing recording', 'error');
+            resetMicButton();
+        }
+    }
+
+    /**
+     * Process the recorded audio
+     * Converts audio to base64 and sends to Gemini API
+     */
+    async function processRecording() {
+        try {
+            if (audioChunks.length === 0) {
+                console.warn('No audio recorded');
+                showNotification('No audio detected', 'warning');
+                resetMicButton();
+                return;
+            }
+
+            // Show processing notification
+            showNotification('Processing audio...', 'info');
+
+            // Create audio blob from recorded chunks
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            
+            // Convert to base64
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            
+            reader.onloadend = async function() {
+                try {
+                    const base64Audio = reader.result.split(',')[1]; // Remove data URL prefix
+                    await processAudioWithGemini(base64Audio);
+                } catch (error) {
+                    console.error('Error processing audio data:', error);
+                    showNotification('Failed to process audio', 'error');
+                    resetMicButton();
+                }
+            };
+
+            reader.onerror = function() {
+                console.error('Error reading audio file');
+                showNotification('Error reading audio data', 'error');
+                resetMicButton();
+            };
+
+        } catch (error) {
+            console.error('Error processing recording:', error);
+            showNotification('Error processing recording', 'error');
+            resetMicButton();
+        }
+    }
+
+    /**
+     * Send audio to Gemini API for processing
+     * @param {string} base64Audio - Base64 encoded audio data
+     */
+    async function processAudioWithGemini(base64Audio) {
+        try {
+            // Send to backend API
+            const response = await fetch('/api/sentinel/voice', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    audio: base64Audio
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            if (data.text) {
+                // Fill search input with transcribed text
+                searchInput.value = data.text;
+                
+                // Automatically trigger search
+                handleSearch();
+
+                showNotification('Voice query processed', 'success');
+            } else {
+                showNotification('Could not understand audio', 'warning');
+            }
+        } catch (error) {
+            console.error('Error processing audio with Gemini:', error);
+            showNotification('Voice processing failed', 'error');
+        } finally {
+            resetMicButton();
+        }
+    }
+
+    /**
+     * Reset microphone button to idle state
+     */
+    function resetMicButton() {
+        micButton.classList.remove('listening', 'processing');
+        micButton.classList.add('idle');
+        micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+        isRecording = false;
+        
+        // Release media stream if it exists
+        if (mediaRecorder && mediaRecorder.stream) {
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+        mediaRecorder = null;
+    }
+
+    /**
      * Initialize all components and set up event listeners
      * This is the main initialization function that runs when the page loads
      */
@@ -2436,7 +2892,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
             
-            // Initialize modals
+            // Set up modals
             setupModals();
             
             // Set up tool indicators
@@ -2447,6 +2903,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Clear any summary content
             clearSummary();
+            
+            // Initialize voice recording capabilities
+            initializeVoiceRecording();
             
             console.log('SENTINEL API initialized successfully');
         } catch (error) {
