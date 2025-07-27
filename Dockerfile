@@ -60,16 +60,20 @@ COPY --from=builder /prod_deps/node_modules/ ./node_modules/
 # Copy the config directory including the key file
 COPY --from=builder /usr/src/app/config/ ./config/
 
-# Copy the project files
-COPY --from=builder /usr/src/app/config/katz-speech-to-text-key.json /usr/src/app/config/
-
-# Set file permissions and verify the file exists
-RUN chmod 644 /usr/src/app/config/katz-speech-to-text-key.json && \
+# Create empty credential files if they don't exist
+RUN mkdir -p /usr/src/app/config && \
+    touch /usr/src/app/config/katz-speech-to-text-key.json && \
+    touch /usr/src/app/config/katz-text-to-speech-key.json && \
+    chmod 644 /usr/src/app/config/katz-speech-to-text-key.json /usr/src/app/config/katz-text-to-speech-key.json && \
     ls -la /usr/src/app/config/ && \
-    echo "✅ Google TTS key file copied and secured successfully"
+    echo "✅ Placeholder credential files created successfully"
 
-# Set the environment variable for Google API key file
+# Set environment variables for credential files
 ENV GOOGLE_API_KEY_FILE=config/katz-speech-to-text-key.json
+ENV GOOGLE_TTS_KEY_FILE=config/katz-text-to-speech-key.json
+
+# Add environment variable to indicate these are placeholder files
+ENV CREDENTIALS_PLACEHOLDER=true
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
@@ -86,6 +90,7 @@ ENV NODE_OPTIONS=--max_old_space_size=4096
 ENV BASE_URL=http://localhost:3000
 ENV GOOGLE_CLIENT_REDIRECT=http://localhost:3000
 ENV GOOGLE_API_KEY_FILE=/usr/src/app/config/katz-speech-to-text-key.json
+ENV GOOGLE_TTS_KEY_FILE=/usr/src/app/config/katz-text-to-speech-key.json
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
