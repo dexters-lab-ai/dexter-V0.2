@@ -714,8 +714,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             try {
                 // Make API request to check status
-                // Fix: Use correct API path with /api prefix
-                const response = await fetch(`/api/sentinel/status?id=${searchId}`);
+                const response = await fetch(`/sentinel/status?id=${searchId}`);
                 
                 if (!response.ok) {
                     console.warn(`Status check returned ${response.status} for search ${searchId}`);
