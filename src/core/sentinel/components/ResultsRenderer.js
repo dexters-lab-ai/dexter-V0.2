@@ -438,15 +438,29 @@ function renderSocialData(socialData, container) {
             <div class="sentinel-card-content">
                 ${tweets.length > 0 ? `
                     <div class="tweets-list">
-                        ${tweets.slice(0, 5).map(tweet => `
-                            <div class="tweet-item">
-                                <div class="tweet-content">${tweet.text || tweet.content}</div>
-                                <div class="tweet-meta">
-                                    <span class="tweet-author">@${tweet.author || 'Unknown'}</span>
-                                    <span class="tweet-date">${tweet.created_at || tweet.date}</span>
+                        ${tweets.slice(0, 5).map(tweet => {
+                            // Extract username from URL (e.g., https://x.com/1558ducky/status/... -> @1558ducky)
+                            let username = 'Unknown';
+                            if (tweet.url) {
+                                const urlMatch = tweet.url.match(/x\.com\/([^/]+)\/status/);
+                                if (urlMatch && urlMatch[1]) {
+                                    username = urlMatch[1];
+                                }
+                            }
+                            
+                            // Get sentiment value, default to 'Neutral' if 'NA' or missing
+                            const sentiment = tweet.sentiment && tweet.sentiment !== 'NA' ? tweet.sentiment : 'Neutral';
+                            
+                            return `
+                                <div class="tweet-item">
+                                    <div class="tweet-content">${tweet.text || tweet.content}</div>
+                                    <div class="tweet-meta">
+                                        <span class="tweet-author">@${username}</span>
+                                        <span class="tweet-sentiment sentiment-${sentiment.toLowerCase()}">${sentiment}</span>
+                                    </div>
                                 </div>
-                            </div>
-                        `).join('')}
+                            `;
+                        }).join('')}
                     </div>
                     ${tweets.length > 5 ? `
                         <div class="tweets-more">

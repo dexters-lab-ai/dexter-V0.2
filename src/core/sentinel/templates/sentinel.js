@@ -538,179 +538,376 @@ import { renderSearchResults } from '/sentinel/static/components/ResultsRenderer
     }
 
     // Handle search with animated results processing
-    async function handleSearch() {
+    // Handles simple chat queries to the backend with tool call support
+    async function handleChat(query) {
+        if (!walletConnected) {
+            showNotification('Please connect your wallet to chat with the AI.', 'error');
+            return;
+        }
+
+        clearResults();
+        showLoading('AI is thinking...');
+
         try {
-            console.log('🔍 Search initiated - checking wallet connection...');
-            console.log('Wallet connected:', walletConnected);
-            console.log('Wallet address:', walletAddress);
-            
-            // Check if wallet is connected first
-            if (!walletConnected || !walletAddress) {
-                console.warn('🚫 Search blocked: Wallet not connected');
-                showNotification('🔒 Wallet Required: Please connect your wallet to use SENTINEL', 'warning');
-                showWalletConnectionOverlay();
-                return;
+            const response = await fetch('/sentinel/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    query: query,
+                    history: [],
+                    walletAddress: walletAddress
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to get response from AI');
             }
+
+            // Since it's a streaming response, we'll use the existing AI stream handling logic
+            // but adapted for a simpler chat response.
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let aiResponseText = '';
+
+            // Create a container for the chat response with sections for tools
+            resultsSection.innerHTML = `
+                <div id="chatResponseContainer" class="chat-response-container">
+                    <div id="aiResponseContent" class="ai-response-content"></div>
+                    <div id="toolResultsContainer" class="tool-results-container"></div>
+                </div>
+            `;
+            const aiResponseContent = document.getElementById('aiResponseContent');
+            const toolResultsContainer = document.getElementById('toolResultsContainer');
             
-            console.log('✅ Wallet check passed - proceeding with search...');
-            
-            // Validate input
-            if (!searchInput) {
-                console.error('Search input element not found');
-                return;
-            }
-            
-            const query = searchInput.value.trim();
-            if (!query) {
-                showNotification('Please enter a search query', 'warning');
-                return;
-            }
-            
-            // Validate search type
-            if (!searchTypeSelect) {
-                console.error('Search type select element not found');
-                return;
-            }
-            
-            let searchType = searchTypeSelect.value;
-            const validTypes = ['text', 'contract', 'url', 'auto']; // Add all valid types here
-            
-            // If type is 'auto', default to 'text' and let the AI backend decide
-            if (searchType === 'auto') {
-                console.log('Auto search type selected - defaulting to text for AI processing');
-                searchType = 'text';
-            }
-            
-            if (!validTypes.includes(searchType)) {
-                console.error(`Invalid search type: ${searchType}`);
-                showNotification('Invalid search type selected', 'error');
-                return;
-            }
-            
-            console.log(`Initiating search: "${query}" (type: ${searchType})`);
-            
-            // Show loading with AI animation effect
-            showLoading(true);
-            resetToolStatuses();
-            
-            // Clear previous results with fade-out effect
-            if (resultsSection && resultsSection.children.length > 0) {
-                resultsSection.classList.add('fade-out');
-                setTimeout(() => {
+            // Keep track of active tools
+            const activeTools = new Set();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n\n').filter(line => line.startsWith('data:'));
+
+                for (const line of lines) {
                     try {
-                        resultsSection.innerHTML = '';
-                        resultsSection.classList.remove('fade-out');
-                    } catch (animError) {
-                        console.error('Error clearing previous results:', animError);
+                        const jsonStr = line.replace('data: ', '');
+                        const data = JSON.parse(jsonStr);
+
+                        switch (data.type) {
+                            case 'chunk':
+                                aiResponseText += data.content;
+                                aiResponseContent.innerHTML = formatAIResponse(aiResponseText);
+                                aiResponseContent.scrollTop = aiResponseContent.scrollHeight; // Auto-scroll
+                                break;
+                                
+                            case 'tool_start':
+                                // Add visual indicator that a tool is being used
+                                const toolId = `tool-${data.tool}-${Date.now()}`;
+                                activeTools.add(toolId);
+                                
+                                // Create a tool result section with loading indicator
+                                const toolSection = document.createElement('div');
+                                toolSection.id = toolId;
+                                toolSection.className = 'tool-result-section';
+                                toolSection.innerHTML = `
+                                    <div class="tool-header">
+                                        <span class="tool-icon"><i class="fas fa-tools"></i></span>
+                                        <span class="tool-name">${data.tool}</span>
+                                        <span class="tool-status">Working...</span>
+                                    </div>
+                                    <div class="tool-content">
+                                        <div class="tool-loading">
+                                            <div class="loading-spinner"></div>
+                                            <div class="loading-text">Processing ${data.tool}...</div>
+                                        </div>
+                                    </div>
+                                `;
+                                toolResultsContainer.appendChild(toolSection);
+                                toolResultsContainer.scrollTop = toolResultsContainer.scrollHeight;
+                                break;
+                                
+                            case 'tool_result':
+                                // Find the tool section and update it with the results
+                                const toolSections = document.querySelectorAll('.tool-result-section');
+                                for (const section of toolSections) {
+                                    if (section.querySelector('.tool-name').textContent === data.tool) {
+                                        // Update tool status
+                                        section.querySelector('.tool-status').textContent = 'Completed';
+                                        section.querySelector('.tool-status').classList.add('success');
+                                        
+                                        // Replace loading indicator with results
+                                        const toolContent = section.querySelector('.tool-content');
+                                        toolContent.innerHTML = `<div class="tool-result">${formatToolResult(data.tool, data.result)}</div>`;
+                                        break;
+                                    }
+                                }
+                                break;
+                                
+                            case 'tool_error':
+                                // Find the tool section and update it with error
+                                const errorToolSections = document.querySelectorAll('.tool-result-section');
+                                for (const section of errorToolSections) {
+                                    if (section.querySelector('.tool-name').textContent === data.tool) {
+                                        // Update tool status
+                                        section.querySelector('.tool-status').textContent = 'Failed';
+                                        section.querySelector('.tool-status').classList.add('error');
+                                        
+                                        // Replace loading indicator with error message
+                                        const toolContent = section.querySelector('.tool-content');
+                                        toolContent.innerHTML = `
+                                            <div class="tool-error">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                                <p>${data.error}</p>
+                                            </div>
+                                        `;
+                                        break;
+                                    }
+                                }
+                                break;
+                                
+                            case 'status':
+                                // Display status updates
+                                console.log('Status update:', data.message);
+                                break;
+                                
+                            case 'complete':
+                                console.log('Chat stream complete.', data);
+                                // Save the summary if available
+                                if (data.summary) {
+                                    // If we have a current search ID, update its summary
+                                    if (currentSearchId) {
+                                        updateSearchHistorySummary(currentSearchId, data.summary);
+                                    }
+                                }
+                                break;
+                                
+                            case 'error':
+                                throw new Error(data.message);
+                        }
+                    } catch (e) {
+                        console.error('Error processing chat stream chunk:', e);
                     }
-                }, 300);
+                }
+            }
+
+        } catch (error) {
+            console.error('Chat error:', error);
+            showNotification(error.message, 'error');
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // Format tool results based on tool type
+    function formatToolResult(toolName, result) {
+        if (!result) return '<p>No results available</p>';
+        
+        // Add special formatting for specific tools
+        if (toolName === 'google_search') {
+            return formatGoogleSearchResults(result);
+        } else if (toolName === 'sentinel_search') {
+            return formatSentinelSearchResults(result);
+        } else {
+            // Generic formatting for other tools
+            return `<pre class="tool-result-code">${result}</pre>`;
+        }
+    }
+
+    // Format Google search results
+    function formatGoogleSearchResults(result) {
+        // Simple formatting for demo purposes
+        return result.split('\n').map(line => `<p>${line}</p>`).join('');
+    }
+
+    // Format SENTINEL search results
+    function formatSentinelSearchResults(result) {
+        // Simple formatting for demo purposes
+        return result.split('\n').map(line => `<p>${line}</p>`).join('');
+    }
+
+    // V2 IMPLEMENTATION - KEEPS MODES AND RENDERS TO CORRECT CONTAINERS
+    async function handleSearch() {
+        if (!walletConnected || !walletAddress) {
+            showNotification('🔒 Please connect your wallet to use SENTINEL.', 'warning');
+            showWalletConnectionOverlay();
+            return;
+        }
+
+        const query = searchInput.value.trim();
+        if (!query) return;
+
+        let searchMode = 'auto';
+        try {
+            const modeSelect = document.getElementById('searchTypeSelect');
+            if (modeSelect) searchMode = modeSelect.value;
+        } catch (e) { console.warn('Could not find search type dropdown, using auto mode'); }
+
+        console.log(`[V2] Initiating search for: "${query}" with mode: ${searchMode}`);
+
+        if (searchMode === 'auto') {
+            return handleChat(query);
+        }
+
+        showLoading(true);
+        resetToolStatuses();
+        clearResults();
+        clearSummary();
+        const sentinelBrain = document.getElementById('sentinelBrain');
+        if (sentinelBrain) sentinelBrain.classList.add('pulse');
+
+        try {
+            const response = await fetch('/sentinel/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, type: searchMode, walletAddress }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => 'Failed to get error details.');
+                throw new Error(`Server error (${response.status}): ${errorText}`);
+            }
+
+            const { searchId } = await response.json();
+            if (!searchId) throw new Error('Did not receive a valid search ID from the server.');
+
+            console.log(`[V2] Search initiated. Polling for results with ID: ${searchId}`);
+            pollForResults(searchId, query);
+
+        } catch (error) {
+            console.error('[V2] Error initiating search:', error);
+            showNotification(`Search failed: ${error.message}`, 'error');
+            if (sentinelBrain) sentinelBrain.classList.remove('pulse');
+            showLoading(false);
+        }
+    }
+
+    async function pollForResults(searchId, query) {
+        const pollingInterval = 2000;
+        const maxAttempts = 30;
+        let attempts = 0;
+        const sentinelBrain = document.getElementById('sentinelBrain');
+
+        // Create the container for tool results immediately
+        const toolResultsContainer = document.createElement('div');
+        toolResultsContainer.id = 'toolResultsContainer';
+        toolResultsContainer.className = 'tool-results-container';
+        if(resultsSection) resultsSection.appendChild(toolResultsContainer);
+
+        const intervalId = setInterval(async () => {
+            if (attempts++ >= maxAttempts) {
+                clearInterval(intervalId);
+                showNotification('Search timed out.', 'error');
+                if (sentinelBrain) sentinelBrain.classList.remove('pulse');
+                showLoading(false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/sentinel/status/${searchId}`);
+                if (!response.ok) {
+                    throw new Error(`Error fetching status: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Rich, progressive tool rendering
+                if (data.toolCalls && data.toolCalls.length > 0) {
+                    renderToolStatuses(data.toolCalls, toolResultsContainer);
+                }
+
+                if (data.status === 'complete') {
+                    clearInterval(intervalId);
+                    console.log('[V2] Search complete. Received final data:', data);
+                    if (sentinelBrain) sentinelBrain.classList.remove('pulse');
+                    showLoading(false);
+                    
+                    // Final display of all results, replacing any temporary tool cards
+                    displayResultsWithAnimation(data.results);
+                    if (data.summary) updateSummaryUI(data.summary);
+                    addToSearchHistory({ id: searchId, query, summary: data.summary, timestamp: new Date().toISOString() });
+
+                } else if (data.status === 'error') {
+                    throw new Error(data.error || 'Search failed on backend.');
+                }
+            } catch (error) {
+                console.error('[V2] Error during polling:', error);
+                clearInterval(intervalId);
+                showNotification(error.message, 'error');
+                if (sentinelBrain) sentinelBrain.classList.remove('pulse');
+                showLoading(false);
+            }
+        }, pollingInterval);
+    }
+
+    function renderToolStatuses(toolCalls, container) {
+        if (!container) return;
+
+        toolCalls.forEach(tool => {
+            const toolId = `tool-card-${tool.name.replace(/\s+/g, '-')}`;
+            let toolCard = document.getElementById(toolId);
+
+            if (!toolCard) {
+                toolCard = document.createElement('div');
+                toolCard.id = toolId;
+                toolCard.className = 'tool-result-section';
+                container.appendChild(toolCard);
+            }
+
+            let statusClass = 'working';
+            let statusIcon = 'fas fa-cogs';
+            if (tool.status === 'complete') {
+                statusClass = 'success';
+                statusIcon = 'fas fa-check-circle';
+            } else if (tool.status === 'error') {
+                statusClass = 'error';
+                statusIcon = 'fas fa-exclamation-triangle';
+            }
+
+            toolCard.innerHTML = `
+                <div class="tool-header">
+                    <span class="tool-icon"><i class="${statusIcon}"></i></span>
+                    <span class="tool-name">${tool.name}</span>
+                    <span class="tool-status ${statusClass}">${tool.status}...</span>
+                </div>
+                <div class="tool-content">
+                    ${tool.status === 'processing' ? '<div class="tool-loading"><div class="loading-spinner"></div></div>' : ''}
+                    ${tool.status === 'error' ? `<div class="tool-error"><p>${tool.error || 'An unknown error occurred.'}</p></div>` : ''}
+                </div>
+            `;
+        });
+    }
+
+    /**
+     * Clear all results from the results section
+     */
+    function clearResults() {
+        try {
+            // Clear main results section
+            if (resultsSection) {
+                resultsSection.innerHTML = '';
+                resultsSection.classList.remove('fade-out');
             }
             
-            // Clear previous summary
+            // Clear AI stream container
+            const aiStreamContainer = document.querySelector('.ai-stream');
+            if (aiStreamContainer) {
+                aiStreamContainer.innerHTML = '';
+                aiStreamContainer.style.display = 'none';
+            }
+            
+            // Clear summary section
             clearSummary();
             
-            // Show the AI thinking animation
-            const sentinelBrain = document.getElementById('sentinelBrain');
-            if (sentinelBrain) {
-                sentinelBrain.classList.add('pulse');
-            }
+            // Reset tool statuses
+            resetToolStatuses();
             
-            try {
-                // Simulate the AI thinking about which tools to use
-                await simulateAiToolSelection();
-                
-                console.log(`Initiating search for: "${query}"`);
-
-                // Prepare search data with wallet address
-                const searchData = {
-                    query,
-                    walletAddress // Include wallet address in all searches
-                };
-                
-                // Make API call to the backend (correct endpoint)
-                const response = await fetch('/sentinel/search', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(searchData)
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text().catch(() => 'No error details');
-                    
-                    // Check if we got HTML instead of a proper JSON error (common with 404s)
-                    if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
-                        console.error(`Got HTML error response (${response.status})`);
-                        throw new Error(`Server error: API endpoint not found (${response.status}). Please check server configuration.`);
-                    }
-                    
-                    throw new Error(`Server error (${response.status}): ${errorText}`);
-                }
-                
-                const data = await response.json().catch(e => {
-                    throw new Error(`Invalid JSON response: ${e.message}`);
-                });
-                
-                if (!data) {
-                    throw new Error('Empty response received');
-                }
-                
-                if (data.error) {
-                    showNotification(data.error, 'error');
-                    return;
-                }
-                
-                if (!data.id) {
-                    throw new Error('Response missing search ID');
-                }
-                
-                // Save results and search ID
-                currentSearchId = data.id;
-                currentResults = data;
-                
-                // Poll for tool status updates if results are still processing
-                if (data.status === 'processing') {
-                    await pollForResults(data.id);
-                } else if (data.results) {
-                    // Display results immediately if available
-                    if (resultActions) {
-                        resultActions.style.display = 'flex';
-                        resultActions.classList.add('fade-in');
-                    }
-                    
-                    // Display results with new modular renderer
-                    console.log('Displaying search results with animation:', data.results);
-                    renderSearchResults(data.results, resultsSection);
-                    
-                    // Generate AI summary of results
-                    generateResultSummary(data.results);
-                    
-                    // Add to search history
-                    const searchItem = {
-                        id: data.id,
-                        query: query,
-                        timestamp: Date.now(),
-                        summary: null // Will be updated when summary is generated
-                    };
-                    addToSearchHistory(searchItem);
-                } else {
-                    throw new Error('No results in response and status not processing');
-                }
-            } catch (apiError) {
-                console.error('API request failed:', apiError);
-                showNotification(`Search failed: ${apiError.message}`, 'error');
-            }
+            console.log('✅ Results cleared successfully');
         } catch (error) {
-            console.error('Search handler error:', error);
-            showNotification('Search failed. Please try again.', 'error');
-        } finally {
-            // Stop AI thinking animation
-            const sentinelBrain = document.getElementById('sentinelBrain');
-            if (sentinelBrain) {
-                sentinelBrain.classList.remove('pulse');
-            }
-            showLoading(false);
+            console.error('Error clearing results:', error);
         }
     }
     
@@ -765,106 +962,7 @@ import { renderSearchResults } from '/sentinel/static/components/ResultsRenderer
             return Promise.resolve(false);
         }
     }
-    
-    // Poll for results if they're being processed asynchronously
-    async function pollForResults(searchId) {
-        // Validate input parameter
-        if (!searchId) {
-            console.error('Invalid searchId provided to pollForResults');
-            showNotification('Error tracking search progress', 'error');
-            return;
-        }
 
-        // Polling configuration
-        const config = {
-            pollingInterval: 1000,   // Time between polling attempts in ms
-            maxAttempts: 20,         // Maximum number of polling attempts
-            statusMessages: [        // Rotating messages to show during polling
-                'Processing data...',
-                'Analyzing results...',
-                'Retrieving information...',
-                'Correlating data sources...'
-            ]
-        };
-        
-        // Initialize tracking variables
-        let attempts = 0;
-        let statusMessageIndex = 0;
-        const statusElement = document.getElementById('loadingStatus');
-        
-        console.log(`Starting to poll for results: ${searchId}`);
-        
-        // Main polling loop
-        while (attempts < config.maxAttempts) {
-            // Update the status message to show progress
-            if (statusElement && attempts % 2 === 0) {
-                const message = config.statusMessages[statusMessageIndex];
-                statusElement.textContent = message;
-                statusMessageIndex = (statusMessageIndex + 1) % config.statusMessages.length;
-            }
-            
-            // Wait before the next poll attempt
-            await new Promise(resolve => setTimeout(resolve, config.pollingInterval));
-            
-            try {
-                // Make API request to check status (correct endpoint)
-                const response = await fetch(`/sentinel/status?id=${searchId}`);
-                
-                if (!response.ok) {
-                    console.warn(`Status check returned ${response.status} for search ${searchId}`);
-                    throw new Error(`Server returned status ${response.status} when checking search status`);
-                }
-                
-                // Parse response data
-                const data = await response.json().catch(e => {
-                    throw new Error(`Failed to parse status response: ${e.message}`);
-                });
-                
-                if (!data) {
-                    throw new Error('Empty response received from status endpoint');
-                }
-                
-                console.log(`Poll attempt ${attempts + 1}: Status = ${data.status || 'unknown'}`);
-                
-                // Update tool statuses based on progress if available
-                if (data.toolStatus) {
-                    updateProgressiveToolStatus(data.toolStatus);
-                }
-                
-                // If processing is complete, display results and exit polling
-                if (data.status === 'complete' && data.results) {
-                    console.log('Search processing complete, displaying results');
-                    updateToolStatuses(data.results);
-                    
-                    // Show result actions if available
-                    if (resultActions) {
-                        resultActions.style.display = 'flex';
-                        resultActions.classList.add('fade-in');
-                    }
-                    
-                    await displayResultsWithAnimation(data.results);
-                    return true; // Successfully completed
-                } else if (data.status === 'error') {
-                    throw new Error(data.error || 'An error occurred during search processing');
-                }
-                
-                attempts++;
-            } catch (error) {
-                console.error(`Error during poll attempt ${attempts + 1}:`, error);
-                attempts++;
-                
-                // Only show error notification on certain failures to avoid spamming the user
-                if (attempts % 3 === 0) { 
-                    showNotification('Having trouble retrieving results', 'warning');
-                }
-            }
-        }
-        
-        // If we reach here, polling has timed out
-        console.warn(`Polling timed out after ${config.maxAttempts} attempts`);
-        showNotification('Search is taking longer than expected. Results will appear when ready.', 'warning');
-        return false; // Timed out
-    }
 
     /**
      * Display search results with staggered animation
@@ -1401,14 +1499,14 @@ import { renderSearchResults } from '/sentinel/static/components/ResultsRenderer
                 sentimentValue.className = `${config.selectors.sentimentValue.substring(1)} ${sentimentClass}`;
             }
             
-            // Add tweets
+            // Add tweets with expandable functionality
             const tweetsList = template.querySelector(config.selectors.tweetsList);
             if (tweetsList) {
                 if (tweets && tweets.length > 0) {
                     try {
-                        const tweetItems = tweets
-                            .slice(0, config.maxTweetsToShow)
-                            .map(tweet => {
+                        // Create a function to render tweets
+                        const renderTweets = (tweetsToRender, showAll = false) => {
+                            return tweetsToRender.map(tweet => {
                                 // Validate tweet object with defaults
                                 const author = tweet?.author || 'Unknown';
                                 const content = tweet?.content || 'No content';
@@ -1427,10 +1525,70 @@ import { renderSearchResults } from '/sentinel/static/components/ResultsRenderer
                                         </div>
                                     </div>
                                 `;
-                            })
-                            .join('');
+                            }).join('');
+                        };
                         
-                        tweetsList.innerHTML = tweetItems;
+                        // Initially show limited tweets
+                        const initialTweets = tweets.slice(0, config.maxTweetsToShow);
+                        const remainingTweets = tweets.slice(config.maxTweetsToShow);
+                        
+                        let tweetItemsHTML = renderTweets(initialTweets);
+                        
+                        // Add "Show More" button if there are more tweets
+                        if (remainingTweets.length > 0) {
+                            tweetItemsHTML += `
+                                <div class="tweet-show-more-container">
+                                    <button class="tweet-show-more-btn" data-total-tweets="${tweets.length}">
+                                        <span class="show-more-text">Show More</span>
+                                        <span class="tweet-count-indicator">Showing ${config.maxTweetsToShow} of ${tweets.length} tweets</span>
+                                        <i class="fas fa-chevron-down show-more-icon"></i>
+                                    </button>
+                                </div>
+                                <div class="hidden-tweets" style="display: none;">
+                                    ${renderTweets(remainingTweets)}
+                                </div>
+                            `;
+                        }
+                        
+                        tweetsList.innerHTML = tweetItemsHTML;
+                        
+                        // Add click handler for "Show More" button
+                        const showMoreBtn = tweetsList.querySelector('.tweet-show-more-btn');
+                        if (showMoreBtn) {
+                            showMoreBtn.addEventListener('click', function() {
+                                const hiddenTweets = tweetsList.querySelector('.hidden-tweets');
+                                const showMoreContainer = tweetsList.querySelector('.tweet-show-more-container');
+                                const icon = this.querySelector('.show-more-icon');
+                                const text = this.querySelector('.show-more-text');
+                                const countIndicator = this.querySelector('.tweet-count-indicator');
+                                
+                                if (hiddenTweets.style.display === 'none') {
+                                    // Show all tweets
+                                    hiddenTweets.style.display = 'block';
+                                    text.textContent = 'Show Less';
+                                    countIndicator.textContent = `Showing all ${tweets.length} tweets`;
+                                    icon.classList.remove('fa-chevron-down');
+                                    icon.classList.add('fa-chevron-up');
+                                    
+                                    // Smooth scroll animation
+                                    hiddenTweets.style.opacity = '0';
+                                    hiddenTweets.style.transform = 'translateY(-10px)';
+                                    setTimeout(() => {
+                                        hiddenTweets.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                                        hiddenTweets.style.opacity = '1';
+                                        hiddenTweets.style.transform = 'translateY(0)';
+                                    }, 10);
+                                } else {
+                                    // Hide extra tweets
+                                    hiddenTweets.style.display = 'none';
+                                    text.textContent = 'Show More';
+                                    countIndicator.textContent = `Showing ${config.maxTweetsToShow} of ${tweets.length} tweets`;
+                                    icon.classList.remove('fa-chevron-up');
+                                    icon.classList.add('fa-chevron-down');
+                                }
+                            });
+                        }
+                        
                     } catch (tweetError) {
                         console.error('Error processing tweets data:', tweetError);
                         tweetsList.innerHTML = `<div class="${config.classes.noData}">Error processing tweets data</div>`;
@@ -3351,30 +3509,16 @@ import { renderSearchResults } from '/sentinel/static/components/ResultsRenderer
             
             // Set up event listeners
             if (searchButton) {
-                searchButton.addEventListener('click', function() {
-                    console.log('🔍 Search button clicked - checking wallet connection...');
-                    
-                    if (!walletConnected || !walletAddress) {
-                        console.warn('🚫 Search blocked: Wallet not connected');
-                        showNotification('🔒 Wallet Required: Please connect your wallet to use SENTINEL', 'warning');
-                        showWalletConnectionOverlay();
-                        return;
-                    }
-                    
-                    console.log('✅ Search allowed - proceeding with search');
-                    handleSearch();
-                });
-                console.log('Search button listener attached with wallet enforcement');
+                searchButton.addEventListener('click', handleSearch);
             }
             
-            // Set up wallet connection button
             if (connectWalletButton) {
                 connectWalletButton.addEventListener('click', handleConnectWalletClick);
                 console.log('Wallet connect button listener attached');
             }
             
             if (searchInput) {
-                searchInput.addEventListener('keypress', function(e) {
+                searchInput.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') {
                         handleSearch();
                     }
@@ -3456,5 +3600,201 @@ import { renderSearchResults } from '/sentinel/static/components/ResultsRenderer
     
 
     
+    // AI Streaming Functions
+    function showAIStream() {
+        const suggestionsContainer = document.querySelector('.sentinel-suggestions');
+        const aiStreamContainer = document.getElementById('aiStreamContainer');
+        
+        if (suggestionsContainer) {
+            suggestionsContainer.style.display = 'none';
+        }
+        
+        if (aiStreamContainer) {
+            aiStreamContainer.style.display = 'block';
+            
+            // Reset AI stream content
+            const aiStreamContent = document.getElementById('aiStreamContent');
+            if (aiStreamContent) {
+                aiStreamContent.innerHTML = '';
+            }
+            
+            // Update status
+            const aiStatusText = aiStreamContainer.querySelector('.ai-status-text');
+            if (aiStatusText) {
+                aiStatusText.textContent = 'AI is analyzing...';
+            }
+        }
+    }
+    
+    function hideAIStream() {
+        const suggestionsContainer = document.querySelector('.sentinel-suggestions');
+        const aiStreamContainer = document.getElementById('aiStreamContainer');
+        
+        if (aiStreamContainer) {
+            aiStreamContainer.style.display = 'none';
+        }
+        
+        if (suggestionsContainer) {
+            suggestionsContainer.style.display = 'block';
+        }
+    }
+    
+    async function startAIStreaming(query, results) {
+        try {
+            if (!walletAddress) {
+                console.error('Wallet address required for AI streaming');
+                return;
+            }
+            
+            console.log('Starting AI streaming for query:', query);
+            showAIStream();
+            
+            const response = await fetch('/sentinel/ai-stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    query: query,
+                    results: results,
+                    walletAddress: walletAddress
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`AI streaming failed: ${response.status}`);
+            }
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            const aiStreamContent = document.getElementById('aiStreamContent');
+            const aiStatusText = document.querySelector('.ai-status-text');
+            
+            let aiResponseText = '';
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                    console.log('AI streaming completed');
+                    break;
+                }
+                
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            
+                            switch (data.type) {
+                                case 'status':
+                                    if (aiStatusText) {
+                                        aiStatusText.textContent = data.message;
+                                    }
+                                    break;
+                                    
+                                case 'chunk':
+                                    aiResponseText += data.content;
+                                    if (aiStreamContent) {
+                                        aiStreamContent.innerHTML = formatAIResponse(aiResponseText);
+                                    }
+                                    if (aiStatusText) {
+                                        aiStatusText.textContent = 'AI is responding...';
+                                    }
+                                    break;
+                                    
+                                case 'complete':
+                                    if (aiStatusText) {
+                                        aiStatusText.textContent = 'Analysis complete';
+                                    }
+                                    
+                                    // Hide typing indicator
+                                    const typingIndicator = document.querySelector('.ai-typing-indicator');
+                                    if (typingIndicator) {
+                                        typingIndicator.style.display = 'none';
+                                    }
+                                    
+                                    // Save AI summary to current results
+                                    if (currentResults) {
+                                        currentResults.aiSummary = {
+                                            summary: data.summary || aiResponseText,
+                                            timestamp: new Date().toISOString()
+                                        };
+                                    }
+                                    
+                                    // Update search history with AI summary
+                                    if (currentSearchId) {
+                                        updateSearchHistorySummary(currentSearchId, data.summary || aiResponseText);
+                                    }
+                                    
+                                    console.log('AI analysis completed successfully');
+                                    return;
+                                    
+                                case 'error':
+                                    console.error('AI streaming error:', data.message);
+                                    if (aiStreamContent) {
+                                        aiStreamContent.innerHTML = `
+                                            <div class="ai-error">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                                <p>${data.message}</p>
+                                            </div>
+                                        `;
+                                    }
+                                    if (aiStatusText) {
+                                        aiStatusText.textContent = 'Analysis failed';
+                                    }
+                                    return;
+                            }
+                        } catch (parseError) {
+                            console.error('Error parsing AI stream data:', parseError);
+                        }
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.error('Error in AI streaming:', error);
+            
+            const aiStreamContent = document.getElementById('aiStreamContent');
+            if (aiStreamContent) {
+                aiStreamContent.innerHTML = `
+                    <div class="ai-error">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Unable to generate AI analysis at this time</p>
+                    </div>
+                `;
+            }
+            
+            const aiStatusText = document.querySelector('.ai-status-text');
+            if (aiStatusText) {
+                aiStatusText.textContent = 'Analysis failed';
+            }
+        }
+    }
+    
+    function formatAIResponse(text) {
+        // Format AI response with proper HTML structure
+        return text
+            .split('\n')
+            .map(line => {
+                line = line.trim();
+                if (!line) return '';
+                
+                // Highlight important terms
+                line = line.replace(/\$([A-Z0-9]+)/g, '<span class="ai-highlight">$$$1</span>');
+                line = line.replace(/\b(bullish|bearish|buy|sell|hold|risk|opportunity)\b/gi, '<span class="ai-highlight">$1</span>');
+                
+                return `<p>${line}</p>`;
+            })
+            .join('');
+    }
+    
     // Initialize the application
     init();
+    
+    // Export functions for global access
+    window.startAIStreaming = startAIStreaming;
+    window.showAIStream = showAIStream;
+    window.hideAIStream = hideAIStream;

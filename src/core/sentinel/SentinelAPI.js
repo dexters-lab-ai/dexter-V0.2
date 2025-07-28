@@ -1,18 +1,16 @@
-import { dextools } from '../../services/dextools/index.js';
+import { dextools, getTokenInfo } from '../../services/dextools/index.js';
 import { getTokenPrice, getTokenSnipers, getTokenHolders, getTokenPairAddress } from '../../services/tokens/MoralisTokenService.js';
 import { twitterService } from '../../services/twitter/index.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { logger } from '../../utils/logger.js';
-import { getTokenInfo } from '../../services/dextools/index.js';
 import { dexscreener } from '../../services/dexscreener/index.js';
-// MoralisTokenService functions already imported above
-// twitterService already imported above
 import { v4 as uuidv4 } from 'uuid';
 import { detectQueryIntent, extractTokens, isContractAddress, isUrl } from './utils/nlpHelper.js';
 import { scrapeUrl } from './utils/urlScraper.js';
 import { geminiService } from '../../services/ai/geminiService.js';
+import { networkScraper } from '../../services/fireCrawl/fireCrawl.js';
 
 // Path handling for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -190,44 +188,45 @@ export async function renderSentinelPage() {
  * Handles different input types and distributes to appropriate handlers
  */
 export async function searchSentinel(query, type = 'auto') {
+  const searchId = `search_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+
   try {
-    // Generate a unique search ID
-    const searchId = `search_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    
-    // Determine the query type if auto
-    if (type === 'auto') {
-      type = determineQueryType(query);
-    }
-    
-    // Start search process based on type
-    let results;
-    switch (type) {
-      case 'text':
-        results = await handleTextQuery(query);
-        break;
-      case 'contract':
-        results = await handleContractQuery(query);
-        break;
-      case 'url':
-        results = await handleUrlQuery(query);
-        break;
-      default:
-        throw new Error('Invalid query type');
-    }
-    
-    // Cache the results
-    const searchResult = {
+    // 1. Set initial status in cache for frontend polling
+    searchCache.set(searchId, {
       id: searchId,
-      timestamp: new Date().toISOString(),
       query,
-      type,
-      results
-    };
-    
-    searchCache.set(searchId, searchResult);
-    return searchResult;
+      status: 'processing',
+      results: {},
+      summary: 'AI is analyzing your query...',
+      timestamp: new Date().toISOString(),
+    });
+
+    // 2. Asynchronously trigger the AI orchestrator. We don't await this.
+    // The frontend will poll getSearchStatus for completion.
+    handleTextQuery(query, searchId).catch(err => {
+      logger.error(`Unhandled exception in handleTextQuery for searchId ${searchId}:`, err);
+      // Update cache to reflect the critical failure
+      searchCache.set(searchId, {
+        id: searchId,
+        query,
+        status: 'error',
+        error: 'A critical error occurred in the AI handler.'
+      });
+    });
+
+    // 3. Return the searchId immediately to the client.
+    return { searchId };
+
   } catch (error) {
-    console.error('Error in searchSentinel:', error);
+    logger.error(`Critical error during search initiation for query "${query}":`, error);
+    // Attempt to update cache with error, though it might fail if searchId wasn't set
+    searchCache.set(searchId, {
+        id: searchId,
+        query,
+        status: 'error',
+        error: 'Failed to initiate the search process.'
+    });
+    // Re-throw to be handled by the route controller
     throw error;
   }
 }
@@ -254,220 +253,157 @@ function determineQueryType(query) {
  * Handle natural language text queries
  * Analyzes the text and determines which tools to use
  */
-async function handleTextQuery(query) {
-  try {
-    // Use our NLP utility to detect intent and extract entities
-    const { intents, entities } = detectQueryIntent(query);
-    logger.debug(`Detected intents: ${JSON.stringify(intents)}, entities: ${JSON.stringify(entities)}`);
-    
-    // Extract token symbols from the query
-    const tokenSymbols = entities.tokens.length > 0 ? entities.tokens : extractTokens(query);
-    const token = tokenSymbols[0] || ''; // Use first token if available
-    
-    if (!token) {
-      throw new Error('Could not identify a token in the query');
-    }
-    
-    // Execute tool calls based on detected intents
-    const results = {};
-    
-    // Always fetch basic token info
-    try {
-      results.tokenInfo = await fetchTokenInfo(token, 'solana');
-    } catch (error) {
-      logger.error(`Error fetching token info: ${error.message}`);
-    }
-    
-    // Always fetch comprehensive token data for better user experience
-    try {
-      results.tokenMetadata = await fetchTokenMetadata(token, 'solana');
-    } catch (error) {
-      logger.error(`Error fetching token metadata: ${error.message}`);
-    }
-    
-    // Always fetch social data for tokens (especially important for cashtags/hashtags)
-    try {
-      results.socialData = await fetchTokenTweets(token);
-    } catch (error) {
-      logger.error(`Error fetching social data: ${error.message}`);
-    }
-    
-    // Fetch security analysis if specifically requested
-    if (intents.includes('SECURITY')) {
-      try {
-        results.securityAnalysis = await fetchTokenSecurity(token, 'solana');
-      } catch (error) {
-        logger.error(`Error fetching security analysis: ${error.message}`);
-      }
-    }
-    
-    return results;
-  } catch (error) {
-    logger.error(`Error processing text query: ${error.message}`);
-    throw error;
-  }
-}
+async function handleTextQuery(query, searchId) {
+  logger.info(`[AI] Handling text query for searchId: ${searchId}`);
+  const aggregatedResults = {};
 
-/**
- * Analyze a natural language query to determine intents
- * This is a simple implementation that could be replaced with an AI model
- */
-function analyzeQuery(query) {
-  const lowercaseQuery = query.toLowerCase();
-  const intents = {
-    tokenInfo: false,
-    tokenMetadata: false,
-    tokenSecurity: false,
-    tokenTweets: false,
-    token: null
+  // 1. Define the Tool-Call Handler
+  const onToolCall = async (toolName, args) => {
+    logger.info(`[AI] Gemini requested tool: ${toolName}`, args);
+    switch (toolName) {
+      case 'sentinel_search':
+        // For sentinel_search, we can reuse handleContractQuery's logic.
+        // We'll call it and merge the results.
+        const tokenData = await handleContractQuery(args.token, searchId, true);
+        Object.assign(aggregatedResults, tokenData);
+        return tokenData; // Return result to Gemini
+
+      case 'sentinel_url_analyzer':
+        const urlData = await handleUrlQuery(args.url, searchId, true);
+        Object.assign(aggregatedResults, urlData);
+        return urlData;
+
+      case 'google_search':
+        // Implement a simple handler for Google search using our scraper
+        try {
+          const searchResult = await networkScraper.scrapeUrl(`https://www.google.com/search?q=${encodeURIComponent(args.query)}`);
+          const googleResult = { google_search: searchResult.data.content };
+          Object.assign(aggregatedResults, googleResult);
+          return googleResult;
+        } catch (e) {
+          logger.error(`[AI] Google Search tool failed: ${e.message}`);
+          return { error: e.message };
+        }
+
+      default:
+        logger.warn(`[AI] Unknown tool requested: ${toolName}`);
+        return { error: `Tool ${toolName} not found.` };
+    }
   };
-  
-  // Simple keyword matching
-  if (lowercaseQuery.includes('price') || lowercaseQuery.includes('info') || lowercaseQuery.includes('token')) {
-    intents.tokenInfo = true;
-  }
-  
-  if (lowercaseQuery.includes('metadata') || lowercaseQuery.includes('holders') || lowercaseQuery.includes('snipers')) {
-    intents.tokenMetadata = true;
-  }
-  
-  if (lowercaseQuery.includes('security') || lowercaseQuery.includes('safety') || lowercaseQuery.includes('risk')) {
-    intents.tokenSecurity = true;
-  }
-  
-  if (lowercaseQuery.includes('tweet') || lowercaseQuery.includes('twitter') || lowercaseQuery.includes('social')) {
-    intents.tokenTweets = true;
-  }
-  
-  // Extract potential token from query (simplified)
-  const tokenMatch = lowercaseQuery.match(/\b[a-z0-9]{2,10}\b/);
-  if (tokenMatch) {
-    intents.token = tokenMatch[0];
-  }
-  
-  // If no specific intents found, return all
-  if (!intents.tokenInfo && !intents.tokenMetadata && !intents.tokenSecurity && !intents.tokenTweets) {
-    intents.tokenInfo = true;
-    intents.tokenMetadata = true;
-    intents.tokenSecurity = true;
-    intents.tokenTweets = true;
-  }
-  
-  return intents;
-}
 
-/**
- * Handle contract address queries
- * Fetches comprehensive information about the token using multiple tools
- */
-async function handleContractQuery(contractAddress) {
+  // 2. Call Gemini with Streaming and Tool Handling
   try {
-    logger.debug(`Processing contract query: ${contractAddress}`);
-    
-    // Initialize results object
-    const results = {};
-    
-    // Fetch basic token info
-    try {
-      results.tokenInfo = await fetchTokenInfo(contractAddress, 'solana');
-    } catch (error) {
-      logger.error(`Error fetching token info: ${error.message}`);
-    }
-    
-    // Fetch token metadata (price, holders, pair data)
-    try {
-      results.tokenMetadata = await fetchTokenMetadata(contractAddress, 'solana');
-    } catch (error) {
-      logger.error(`Error fetching token metadata: ${error.message}`);
-    }
-    
-    // Fetch security analysis
-    try {
-      results.securityAnalysis = await fetchTokenSecurity(contractAddress, 'solana');
-    } catch (error) {
-      logger.error(`Error fetching security analysis: ${error.message}`);
-    }
-    
-    // Fetch social data if we have a token symbol from the token info
-    if (results.tokenInfo && results.tokenInfo.symbol) {
-      try {
-        results.socialData = await fetchTokenTweets(results.tokenInfo.symbol);
-      } catch (error) {
-        logger.error(`Error fetching social data: ${error.message}`);
-      }
-    }
-    
-    return results;
-  } catch (error) {
-    console.error('Error handling contract query:', error);
-    throw error;
-  }
-}
+    const finalResponse = await geminiService.streamTextContent(query, [], null, onToolCall);
 
-/**
- * Handle URL queries
- * Fetches and scrapes website data using our URL scraper
- */
-async function handleUrlQuery(url) {
-  try {
-    logger.debug(`Processing URL query: ${url}`);
-    
-    // Use our URL scraper to extract content
-    const scrapedData = await scrapeUrl(url);
-    logger.debug(`Scraped data from URL: ${JSON.stringify(scrapedData)}`);
-    
-    const results = {
-      url,
-      content: scrapedData.content,
-      tokens: [],
-      contracts: []
+    // 3. Finalize and Cache Results
+    const finalData = {
+      id: searchId,
+      query,
+      status: 'complete',
+      results: aggregatedResults,
+      summary: finalResponse.text, // The final summary from the AI
+      toolCalls: finalResponse.toolCalls
     };
-    
-    // Extract tokens and contract addresses
-    if (scrapedData.tokens && scrapedData.tokens.length > 0) {
-      results.tokens = scrapedData.tokens;
-      
-      // Get token info for the first token found
-      const token = scrapedData.tokens[0];
+
+    searchCache.set(searchId, finalData);
+    logger.info(`[AI] Search complete and cached for searchId: ${searchId}`);
+
+  } catch (error) {
+    logger.error(`[AI] Error in handleTextQuery during Gemini interaction: ${error.message}`);
+    searchCache.set(searchId, {
+      id: searchId,
+      query,
+      status: 'error',
+      error: 'Failed to process AI query.'
+    });
+  }
+}
+
+async function handleContractQuery(contractAddress, searchId, isAiTriggered = false) {
+  const results = {}; // Use a clean object for results
+  try {
+    logger.debug(`Processing contract query for: ${contractAddress}`);
+    const toolPromises = [];
+
+    // Run all tool fetches in parallel for speed
+    toolPromises.push(fetchTokenInfo(contractAddress, 'solana').catch(e => ({ error: 'tokenInfo', message: e.message })));
+    toolPromises.push(fetchTokenMetadata(contractAddress, 'solana').catch(e => ({ error: 'tokenMetadata', message: e.message })));
+    toolPromises.push(fetchTokenSecurity(contractAddress, 'solana').catch(e => ({ error: 'securityAnalysis', message: e.message })));
+
+    const [tokenInfo, tokenMetadata, securityAnalysis] = await Promise.all(toolPromises);
+
+    results.tokenInfo = tokenInfo;
+    results.tokenMetadata = tokenMetadata;
+    results.securityAnalysis = securityAnalysis;
+
+    // Fetch social data only if we have a valid token symbol
+    if (tokenInfo && tokenInfo.symbol) {
       try {
-        results.tokenInfo = await fetchTokenInfo(token, 'solana');
-      } catch (error) {
-        logger.error(`Error fetching token info: ${error.message}`);
+        const symbol = String(tokenInfo.symbol);
+        results.socialData = await fetchTokenTweets(symbol).catch(e => ({ error: 'socialData', message: e.message }));
+      } catch (e) {
+        results.socialData = { error: 'socialData', message: 'Invalid token symbol for social fetch.' };
       }
     }
-    
-    if (scrapedData.contractAddresses && scrapedData.contractAddresses.length > 0) {
-      results.contracts = scrapedData.contractAddresses;
-      
-      // Get contract info for the first contract found
-      const contract = scrapedData.contractAddresses[0];
-      try {
-        results.contractData = await handleContractQuery(contract);
-      } catch (error) {
-        logger.error(`Error fetching contract data: ${error.message}`);
-      }
-      
-      // Get token security data for the first contract found
-      try {
-        results.securityAnalysis = await fetchTokenSecurity(contract, 'solana');
-      } catch (error) {
-        logger.error(`Error fetching security analysis: ${error.message}`);
-      }
+
+    // If this is a direct, non-AI call, manage the cache and return the full object.
+    if (!isAiTriggered) {
+      const finalData = { id: searchId, query: contractAddress, status: 'complete', results };
+      searchCache.set(searchId, finalData);
     }
-    
-    // Get social sentiment for detected tokens
-    if (results.tokens.length > 0) {
-      try {
-        results.socialData = await fetchTokenTweets(results.tokens[0]);
-      } catch (error) {
-        logger.error(`Error fetching social data: ${error.message}`);
-      }
-    }
-    
+
+    // Return just the results data. The AI orchestrator will handle the rest.
     return results;
+
+  } catch (error) {
+    logger.error(`Error handling contract query: ${error.message}`);
+    const errorResult = { error: 'Failed to process contract query.' };
+
+    // If it's a direct call, update the cache with the error status.
+    if (!isAiTriggered) {
+      searchCache.set(searchId, { id: searchId, query: contractAddress, status: 'error', ...errorResult });
+    }
+    
+    return errorResult;
+  }
+}
+
+async function handleUrlQuery(url, searchId, isAiTriggered = false) {
+  const results = {}; // Clean object for results
+  try {
+    logger.info(`Scraping URL: ${url}`);
+    const scrapedData = await networkScraper.scrapeProvidedUrl(url);
+
+    if (scrapedData && scrapedData.content) {
+      results.scrapedContent = scrapedData;
+    } else {
+      results.error = 'Failed to scrape content from the URL.';
+      if (isAiTriggered) {
+        return results;
+      }
+    }
+
+    // If this is a direct, non-AI call, manage the cache and summarize.
+    if (!isAiTriggered) {
+      if (results.scrapedContent) {
+        results.summary = await geminiService.generateContent(`Please summarize the following content: ${results.scrapedContent.content}`);
+      }
+      const finalData = { id: searchId, query: url, status: 'complete', results };
+      searchCache.set(searchId, finalData);
+    }
+
+    // Return just the results data. The AI orchestrator will handle the rest.
+    return results;
+
   } catch (error) {
     logger.error(`Error handling URL query: ${error.message}`);
-    throw error;
+    const errorResult = { error: `Error processing URL: ${error.message}` };
+
+    if (!isAiTriggered) {
+      searchCache.set(searchId, { id: searchId, query: url, status: 'error', ...errorResult });
+    }
+
+    return errorResult;
   }
 }
 
@@ -698,27 +634,106 @@ async function fetchTokenSecurity(tokenIdentifier, network) {
 }
 
 /**
+ * Generate AI summary of search results
+ */
+async function generateAISummary(query, results) {
+  try {
+
+    
+    // Prepare context for AI analysis
+    const context = {
+      query: query,
+      hasTokenInfo: !!results.tokenInfo && !results.tokenInfo.error,
+      hasTokenMetadata: !!results.tokenMetadata,
+      hasSocialData: !!results.socialData && !results.socialData.error,
+      hasSecurityAnalysis: !!results.securityAnalysis
+    };
+    
+    // Build summary data for AI analysis (not full results)
+    let summaryData = `User Query: "${query}"\n\n`;
+    
+    if (context.hasTokenMetadata) {
+      const { holders, price } = results.tokenMetadata;
+      if (holders && price?.data) {
+        summaryData += `Token: ${holders.tokenName} (${holders.tokenSymbol})\n`;
+        summaryData += `Price: $${price.data.usdPrice || holders.currentUsdPrice}\n`;
+        summaryData += `24h Change: ${price.data.usdPrice24hrPercentChange || holders.pricePercentChange?.['24h']}%\n`;
+        summaryData += `Holders: ${holders.totalHolders}\n`;
+        summaryData += `Market Cap: $${holders.marketCap}\n\n`;
+      }
+    }
+    
+    if (context.hasSocialData && results.socialData.tweets?.length > 0) {
+      summaryData += `Social Activity: Found ${results.socialData.tweets.length} recent tweets\n`;
+      const sentiments = results.socialData.tweets.map(t => t.sentiment).filter(s => s && s !== 'NA');
+      if (sentiments.length > 0) {
+        const sentimentCounts = sentiments.reduce((acc, s) => {
+          acc[s] = (acc[s] || 0) + 1;
+          return acc;
+        }, {});
+        summaryData += `Sentiment Analysis: ${JSON.stringify(sentimentCounts)}\n\n`;
+      }
+    }
+    
+    if (context.hasSecurityAnalysis) {
+      summaryData += `Security Analysis: Available\n\n`;
+    }
+    
+    // AI prompt for analysis
+    const prompt = `You are SENTINEL AI, an expert DeFi analyst. Analyze the following token data and provide a concise, insightful summary for a crypto investor.
+
+${summaryData}
+
+Provide a brief analysis covering:
+1. Token overview and key metrics
+2. Price performance and trends
+3. Social sentiment (if available)
+4. Investment considerations or risks
+5. Overall verdict/recommendation
+
+Keep your response under 300 words and focus on actionable insights.`;
+    
+    const aiResponse = await geminiService.generateText(prompt);
+    
+    return {
+      summary: aiResponse,
+      context: context,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    logger.error('Error generating AI summary:', error);
+    throw error;
+  }
+}
+
+/**
  * Fetch token-related tweets
  */
 async function fetchTokenTweets(tokenIdentifier) {
   try {
-    let symbol = tokenIdentifier;
+    // Validate that tokenIdentifier is a string or convert it
+    if (tokenIdentifier === null || tokenIdentifier === undefined) {
+      throw new Error('Token identifier is null or undefined');
+    }
     
-    // If token identifier is a Solana contract address, try to get the symbol from DexScreener
-    if (tokenIdentifier.length > 30) {
+    // Ensure tokenIdentifier is a string
+    const symbolStr = String(tokenIdentifier).trim();
+    if (symbolStr === '') {
+      throw new Error('Token identifier is empty');
+    }
+    
+    logger.info(`Fetching tweets for token: ${symbolStr}`);
+    
+    let symbol = symbolStr;
+    
+    // If this is a contract address, try to get the symbol first
+    if (isContractAddress(symbolStr)) {
       try {
-        const tokenData = await dexscreener.getTokenInfoBySymbol(tokenIdentifier);
-        if (tokenData && tokenData.length > 0) {
-          // Filter for Solana tokens only
-          const solanaToken = tokenData.find(token => 
-            token.chainId === 'solana' || 
-            (token.baseToken && token.baseToken.address === tokenIdentifier)
-          );
-          
-          if (solanaToken && solanaToken.baseToken && solanaToken.baseToken.symbol) {
-            symbol = solanaToken.baseToken.symbol;
-            logger.info(`Resolved contract address ${tokenIdentifier} to symbol: ${symbol}`);
-          }
+        const contractInfo = await dexService.getEvmTokenInfo(symbolStr);
+        if (contractInfo && contractInfo.symbol) {
+          symbol = String(contractInfo.symbol);
+          logger.info(`Resolved contract to symbol: ${symbol}`);
         }
       } catch (error) {
         logger.warn(`Could not resolve contract address to symbol: ${error.message}`);
@@ -826,31 +841,28 @@ export async function saveSentinelResults(searchId, notes = '') {
  */
 export async function getSearchStatus(searchId) {
   try {
-    // Check if the search exists in cache
     const searchData = searchCache.get(searchId);
-    
+
     if (!searchData) {
-      throw new Error('Search data not found');
+      // If no search data is found after a reasonable time, it's an error.
+      return {
+        id: searchId,
+        status: 'error',
+        error: 'Search process not found or timed out. Please try again.',
+      };
     }
-    
-    // In a real production system, this would check an actual job queue or database
-    // For now, we'll simulate the search being complete since we're not doing async processing
-    
+
+    // The cache now holds the complete, real-time status.
+    // Simply return the cached data.
+    return searchData;
+
+  } catch (error) {
+    logger.error(`Critical error in getSearchStatus for searchId ${searchId}:`, error);
     return {
       id: searchId,
-      status: 'complete', // 'processing' or 'complete' or 'error'
-      progress: 100,      // 0-100
-      toolStatus: {
-        tokenInfo: 'complete',
-        tokenMetadata: 'complete', 
-        securityAnalysis: 'complete',
-        socialData: 'complete'
-      },
-      results: searchData.results // Only included when status is 'complete'
+      status: 'error',
+      error: 'A server error occurred while fetching search status.',
     };
-  } catch (error) {
-    logger.error(`Error getting search status: ${error.message}`);
-    throw error;
   }
 }
 

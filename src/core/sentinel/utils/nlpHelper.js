@@ -14,7 +14,7 @@ const INTENT_PATTERNS = {
     /price\s+(?:for|of)\s+([$]?\w+)/i,
     /how\s+much\s+is\s+([$]?\w+)/i,
     /([$]?\w+)\s+price/i,
-    /token\s+info/i,
+    /token\s+(?:info|price)(?:\s+for)?\s+([$]?\w+)?/i,  // Added for "Token price for BONK"
     /info\s+(?:on|about)\s+([$]?\w+)/i,
     /(?:market\s+cap|supply|volume)\s+(?:for|of)\s+([$]?\w+)/i,
     /worth\s+of\s+([$]?\w+)/i
@@ -126,7 +126,30 @@ export function extractTokens(query) {
     }
   }
   
-  // 4. Extract URLs
+  // 4. Extract common token query patterns
+  // This handles phrases like "Token price for BONK"
+  if (tokens.length === 0) {
+    // Token price for X, price of X, etc.
+    const tokenPricePatterns = [
+      /token\s+(?:price|info)\s+(?:for|of)\s+([A-Za-z0-9]{2,10})\b/i,
+      /(?:price|info)\s+(?:for|of|on)\s+([A-Za-z0-9]{2,10})\b/i,
+      /([A-Za-z0-9]{2,10})\s+(?:token|price|info)/i,
+      /(?:about|for|on)\s+([A-Za-z0-9]{2,10})\b/i
+    ];
+    
+    for (const pattern of tokenPricePatterns) {
+      const match = trimmedQuery.match(pattern);
+      if (match && match[1]) {
+        const potentialToken = match[1].toUpperCase();
+        if (potentialToken.length >= 2 && potentialToken.length <= 10 && !isCommonWord(potentialToken)) {
+          tokens.push(potentialToken);
+          break; // Found one token, no need to continue
+        }
+      }
+    }
+  }
+  
+  // 5. Extract URLs
   const urlPattern = /https?:\/\/[^\s]+/g;
   const urlMatches = trimmedQuery.match(urlPattern);
   if (urlMatches) {
@@ -137,16 +160,40 @@ export function extractTokens(query) {
     });
   }
   
-  // 5. If no specific patterns found, try standalone token symbols
+  // 6. If no specific patterns found, try standalone token symbols
   // This handles cases like just "BONK" or "SOL" without prefixes
   if (tokens.length === 0) {
-    const standalonePattern = /^([A-Za-z0-9]{2,10})$/;
-    const match = trimmedQuery.match(standalonePattern);
-    if (match) {
-      const potentialToken = match[1].toUpperCase();
-      // Filter out common words and add length constraints for crypto tokens
+    // First check if the query contains a token-like word
+    const tokenWordPattern = /\b([A-Za-z0-9]{2,10})\b/g;
+    let tokenWordMatch;
+    const potentialTokens = [];
+    
+    while ((tokenWordMatch = tokenWordPattern.exec(trimmedQuery)) !== null) {
+      const potentialToken = tokenWordMatch[1].toUpperCase();
       if (potentialToken.length >= 2 && potentialToken.length <= 10 && !isCommonWord(potentialToken)) {
-        tokens.push(potentialToken);
+        potentialTokens.push(potentialToken);
+      }
+    }
+    
+    // If we found potential tokens within the text, use them
+    if (potentialTokens.length > 0) {
+      potentialTokens.forEach(token => {
+        if (!tokens.includes(token)) {
+          tokens.push(token);
+        }
+      });
+    }
+    
+    // Fallback to checking if the entire query is a single token
+    if (tokens.length === 0) {
+      const standalonePattern = /^([A-Za-z0-9]{2,10})$/;
+      const match = trimmedQuery.match(standalonePattern);
+      if (match) {
+        const potentialToken = match[1].toUpperCase();
+        // Filter out common words and add length constraints for crypto tokens
+        if (potentialToken.length >= 2 && potentialToken.length <= 10 && !isCommonWord(potentialToken)) {
+          tokens.push(potentialToken);
+        }
       }
     }
   }

@@ -25,6 +25,7 @@
     "@google-cloud/storage": "^7.15.0",
     "@google-cloud/text-to-speech": "^5.8.0",
     "@google/genai": "^1.11.0",
+    "@google/generative-ai": "^0.24.1",
     "@jup-ag/api": "^6.0.36",
     "@mendable/firecrawl-js": "^1.19.0",
     "@moralisweb3/common-evm-utils": "^2.27.2",
